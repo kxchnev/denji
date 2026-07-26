@@ -1,36 +1,39 @@
 # power
 
-Библиотека + CLI для диаграмм (аналог mermaid.js) с **управляемым layout**.
-Типы: flowchart и sequence. Стек: TypeScript, вывод в SVG.
-
-## ⚠️ Держи план в синхроне
-
-**`TODO.md` — живой план. Обновляй его при каждом изменении прогресса**: отмечай
-сделанные пункты `[x]`, добавляй новые задачи, правь решения. Не давай ему
-устаревать относительно кода.
+Библиотека + CLI для **архитектурных диаграмм в свободном стиле** (не C4) с
+**управляемым layout**. Фигуры (app / database / queue / rect), контейнеры
+(service / group), связи. Позиционирование — только относительными хинтами.
+Стек: TypeScript, вывод в SVG.
 
 ## Архитектура
 
 Слои (данные текут слева направо):
 
 ```
-DSL → Model (IR + builder) → Layout engine → Renderer → SVG
+DSL (.pwr) → Model (IR + builder) → Layout (relative + контейнеры) → Renderer → SVG
 ```
 
-- `src/model/` — типы (`types.ts`), геометрия (`geometry.ts`), fluent-билдер (`builder.ts`). Это ядро; и API, и DSL сходятся в эту модель.
-- `src/layout/` — раскладка. Движок `layered/` (M2, Sugiyama/dagre-стиль): `graph` → `rank` → `order` → `position`, оркестрация в `layered/index.ts`. Ортогональный роутинг рёбер — `route.ts`. Замер узлов — `measure.ts`.
-- `src/render/` — SVG-рендер без внешних зависимостей.
-- `src/dsl/` — парсер `.pwr` DSL (M3): `parse.ts` — построчный two-pass парсер (mermaid-подобные формы/рёбра + @-директивы хинтов) → модель через билдер; `DiagramParseError` с позицией.
-- `src/cli.ts` — CLI.
+- `src/model/` — `geometry.ts` (Rect/Point), `arch.ts` (типы: Shape/Container/
+  Connection/PlaceHint/ArchDiagram), `arch-builder.ts` (fluent `architecture()`).
+  И API, и DSL сходятся в эту модель.
+- `src/layout/arch/` — раскладка: `relative.ts` (relative-solver: X из rightOf/
+  leftOf, Y из above/below, топосорт), `index.ts` (пост-обход контейнеров,
+  bottom-up sizing, нормализация), `route.ts` (ортогональные связи), `measure.ts`.
+- `src/render/arch-svg.ts` — SVG-рендер без внешних зависимостей (цилиндры БД/
+  очереди, контейнеры, z-order).
+- `src/dsl/` — `arch-parse.ts` (парсер `.pwr`: фигуры, контейнеры через `{}`,
+  связи, @-хинты), `error.ts` (`DiagramParseError` с позицией).
+- `src/cli.ts` — CLI (`power render <in.pwr>`).
 
 ## Команды
 
 - `npm run typecheck` — проверка типов
 - `npm run build` — сборка в `dist/`
 - `npm test` — тесты (vitest)
-- `npx tsx examples/basic.ts` — прогнать пример, сгенерить SVG
+- `npx tsx examples/arch-basic.ts` — прогнать пример, сгенерить SVG
 
 ## Конвенции
 
 - ESM, `NodeNext`. Импорты локальных модулей — с расширением `.js`.
 - `strict` + `noUncheckedIndexedAccess` включены.
+- Раскладка детерминирована (в среде нет `Math.random`/`Date.now`).

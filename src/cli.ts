@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
-import { parseFlowchart, DiagramParseError } from "./dsl/index.js";
+import { parseArchitecture } from "./dsl/arch-parse.js";
+import { DiagramParseError } from "./dsl/error.js";
 import { toSvg } from "./index.js";
 
 const program = new Command();
 
 program
   .name("power")
-  .description("Diagrams with controllable layout — a mermaid alternative")
+  .description("Architecture diagrams with controllable, relative layout")
   .version("0.0.1");
 
 program
   .command("render")
-  .description("Render a .pwr diagram file to SVG")
+  .description("Render a .pwr architecture diagram to SVG")
   .argument("<input>", "input diagram file (.pwr DSL)")
   .option("-o, --out <file>", "output SVG path (defaults to <input>.svg)")
   .action((input: string, opts: { out?: string }) => {
@@ -27,7 +28,7 @@ program
       return;
     }
     try {
-      const svg = toSvg(parseFlowchart(source));
+      const svg = toSvg(parseArchitecture(source));
       writeFileSync(out, svg);
       console.log(`wrote ${out}`);
     } catch (err) {

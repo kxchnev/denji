@@ -1,14 +1,16 @@
 # power
 
-Библиотека и CLI для диаграмм — альтернатива mermaid.js, в которой **можно
-управлять положением элементов**. Главная боль mermaid (авто-раскладка, которой
-нельзя рулить) решается гибридным layout: авто по умолчанию, но любой узел можно
-прибить пином или задать относительно других.
+Библиотека и CLI для **архитектурных диаграмм в свободном стиле** (не C4).
+Фиксит главную боль mermaid — невозможность управлять раскладкой: здесь
+позиционирование задаётся **относительными хинтами** (`rightOf/below/...`), а
+блоки-контейнеры сами обнимают своё содержимое. Вывод — SVG.
 
-Типы диаграмм: **flowchart** (готов каркас) и **sequence** (в планах).
-Вывод — SVG.
+Базовые фигуры: **приложение** (скруглённый прямоугольник), **база данных**
+(вертикальный цилиндр), **очередь** (горизонтальный цилиндр), плюс простой
+прямоугольник. Группировка: фигуры объединяются в **сервис** (акцентный блок с
+заголовком) или **группу** (простой прямоугольник с названием).
 
-> Статус: ранняя разработка. См. [`TODO.md`](./TODO.md) — план и прогресс.
+> Статус: ранняя разработка.
 
 ## Установка
 
@@ -20,87 +22,98 @@ npm install
 ## Сборка и разработка
 
 ```bash
-npm run typecheck            # проверка типов
-npm run build                # компиляция в dist/
-npm test                     # тесты (vitest)
-npx tsx examples/basic.ts    # прогнать пример → examples/basic.svg
+npm run typecheck               # проверка типов
+npm run build                   # компиляция в dist/
+npm test                        # тесты (vitest)
+npx tsx examples/arch-basic.ts  # пример → examples/arch-basic.svg
 ```
 
 ## Использование (DSL, из текста)
 
-Опиши диаграмму текстом в файле `.pwr` и отрендерь через CLI:
-
 ```
-# examples/basic.pwr
-flowchart TB
-  A([Start])
-  B{Is it ready?}
-  C(Ship it)
-  D(Fix it) @pin(320,240)
-  A -> B
-  B -> C : yes
-  B -.-> D |no|
-  D -.-> B
+# examples/arch-basic.pwr
+architecture
+  app gw "API Gateway"
+
+  service orders "Orders" @below(gw) {
+    app oapi "Orders API"
+    database odb "Postgres" @below(oapi)
+  }
+
+  service pay "Payments" @rightOf(orders) {
+    app papi "Payments API"
+    queue pq "Charges" @below(papi)
+  }
+
+  queue bus "Event Bus" @below(orders)
+
+  gw -> orders : http
+  gw -> pay : http
+  orders -> bus
+  pay -> bus
+  orders -- pay
 ```
 
 ```bash
-power render examples/basic.pwr -o basic.svg
-# или без установки:
-npx tsx src/cli.ts render examples/basic.pwr -o basic.svg
+power render examples/arch-basic.pwr -o arch.svg
+# без установки:
+npx tsx src/cli.ts render examples/arch-basic.pwr -o arch.svg
 ```
 
 ### Синтаксис DSL
 
-- **Заголовок:** `flowchart TB` (или `BT` / `LR` / `RL`; по умолчанию `TB`).
-- **Формы узлов** (mermaid-стиль): `A[rect]` · `A(round)` · `A([stadium])` ·
-  `A{diamond}` · `A((circle))` · `A{{hexagon}}`. Голый `A` — rect с меткой = id.
-- **Рёбра:** `->` / `-->` (стрелка) · `-.->` (пунктир) · `==>` (жирное) ·
-  `---` (линия без стрелки). Метка ребра: `A -> B : label` либо
-  `A -->|label| B`. Концы могут быть инлайн-определением узла
-  (`A[Start] -> B{Check}`).
-- **@-директивы** layout (в строке узла, после формы):
-  `@pin(x,y)` · `@above(id)` · `@below(id)` · `@rightOf(id)` · `@leftOf(id)` ·
-  `@sameRank(id)` · `@gap(n)`.
-- **Комментарии:** строки, начинающиеся с `#` или `%%`.
-
-> Одно ребро на строку (цепочки `A -> B -> C` пиши отдельными строками).
+- **Заголовок:** `architecture` (опционально).
+- **Фигуры:** `<kind> <id> "label" [@hints]`, где kind ∈ `app` · `database` ·
+  `queue` · `rect`.
+- **Контейнеры:** `service|group <id> "label" [@hints] {` … дети … `}` —
+  вложенность блоками (можно вкладывать друг в друга).
+- **Связи:** `<id> <op> <id> [: label]`, где op ∈ `->` (стрелка) · `<-` ·
+  `<->` (обе) · `--` (линия) · `-.->` / `-.-` (пунктир).
+- **@-хинты** раскладки: `@rightOf(id)` · `@leftOf(id)` · `@above(id)` ·
+  `@below(id)` · `@gap(n)` · `@align(start|center|end)`.
+- **Комментарии:** строки на `#` или `%%`.
 
 ## Использование (программный API)
 
 ```ts
-import { flowchart, toSvg } from "power";
+import { architecture, toSvg } from "power";
 import { writeFileSync } from "node:fs";
 
-const chart = flowchart("TB")
-  .node("A", "Start", { shape: "stadium" })
-  .node("B", "Is it ready?", { shape: "diamond" })
-  .node("C", "Ship it", { shape: "round" })
-  // пин: узел встаёт в заданную точку (центр), авто-раскладка обходит его
-  .node("D", "Fix it", { shape: "round", hint: { pin: { x: 320, y: 240 } } })
-  .edge("A", "B")
-  .edge("B", "C", { label: "yes" })
-  .edge("B", "D", { label: "no", style: "dashed" })
+const diagram = architecture()
+  .app("gw", "API Gateway")
+  .app("oapi", "Orders API")
+  .database("odb", "Postgres", { hint: { below: "oapi" } })
+  .container("orders", "Orders", {
+    kind: "service",
+    children: ["oapi", "odb"],
+    hint: { below: "gw" },
+  })
+  .connect("gw", "orders", { label: "http" })
   .build();
 
-writeFileSync("out.svg", toSvg(chart));
+writeFileSync("out.svg", toSvg(diagram));
 ```
 
 ### Управление раскладкой (ядро проекта)
 
-Хинты задаются через `hint` у узла или методом `.place(id, hint)`:
+Позиционирование — **только относительное**: каждый узел ставится относительно
+соседа, контейнеры авто-подгоняются под содержимое.
 
 | Хинт | Что делает |
 |---|---|
-| `pin: {x, y}` | Прибить узел к абсолютной точке (центр). Escape hatch: вне авто-потока. |
-| `above` / `below` | Поместить рангом выше/ниже другого узла |
-| `rightOf` / `leftOf` | Зафиксировать порядок относительно соседа в том же ранге |
-| `sameRank` | Поставить на тот же уровень (ряд/колонку), что и другой узел |
-| `gap` | Доп. отступ вокруг узла при раскладке |
+| `rightOf` / `leftOf` | Разместить справа/слева от узла |
+| `above` / `below` | Разместить выше/ниже узла |
+| `gap` | Доп. отступ до якоря |
+| `align` | Выравнивание по поперечной оси (`start`/`center`/`end`) |
 
-Раскладка — слоистый движок в духе dagre (`src/layout/layered/`): узлы разносятся
-по рангам, внутри ранга минимизируются пересечения, рёбра идут ортогонально.
-Хинты работают как ограничения на соответствующих стадиях. Поддерживаются все
-направления: `TB` / `BT` / `LR` / `RL`.
+Одна ось-связь задаёт и выравнивание по другой оси. Узел без хинтов встаёт
+справа от предыдущего сиблинга.
+
+## Связи
+
+`connect(from, to, { dir })`, где `dir` ∈ `to` (по умолчанию) · `from` · `both`
+· `none`. Стрелка на каждом конце независима. Концом связи может быть и
+контейнер.
 
 ## CLI
 
@@ -108,12 +121,8 @@ writeFileSync("out.svg", toSvg(chart));
 power render <input.pwr> [-o output.svg]
 ```
 
-Читает `.pwr`-файл (DSL, см. выше), раскладывает и пишет SVG (по умолчанию —
-`<input>.svg`). Ошибки парсинга печатаются с номером строки и указателем.
-
-## Формы узлов
-
-`rect` · `round` · `stadium` · `diamond` · `circle` · `hexagon`
+Читает `.pwr`-файл, раскладывает и пишет SVG (по умолчанию — `<input>.svg`).
+Ошибки парсинга печатаются с номером строки и указателем.
 
 ## Лицензия
 

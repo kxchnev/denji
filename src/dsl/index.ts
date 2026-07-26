@@ -1,1 +1,2 @@
-export { parseFlowchart, DiagramParseError } from "./parse.js";
+export { parseArchitecture } from "./arch-parse.js";
+export { DiagramParseError } from "./error.js";

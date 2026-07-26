@@ -1,23 +1,24 @@
 export * from "./model/geometry.js";
-export * from "./model/types.js";
-export * from "./model/builder.js";
-export { layoutFlowchart, type LayoutOptions } from "./layout/layered/index.js";
-export { renderFlowchart, type RenderOptions } from "./render/svg.js";
-export { parseFlowchart, DiagramParseError } from "./dsl/index.js";
+export * from "./model/arch.js";
+export * from "./model/arch-builder.js";
+export { layoutArchitecture, type ArchLayoutOptions } from "./layout/arch/index.js";
+export { renderArchitecture, type ArchRenderOptions } from "./render/arch-svg.js";
+export { parseArchitecture } from "./dsl/arch-parse.js";
+export { DiagramParseError } from "./dsl/error.js";
 
-import type { Flowchart } from "./model/types.js";
-import { layoutFlowchart, type LayoutOptions } from "./layout/layered/index.js";
-import { renderFlowchart, type RenderOptions } from "./render/svg.js";
-import { parseFlowchart } from "./dsl/index.js";
+import type { ArchDiagram } from "./model/arch.js";
+import { layoutArchitecture, type ArchLayoutOptions } from "./layout/arch/index.js";
+import { renderArchitecture, type ArchRenderOptions } from "./render/arch-svg.js";
+import { parseArchitecture } from "./dsl/arch-parse.js";
 
-/** Convenience alias: parse `.pwr` DSL source into a Flowchart model. */
-export const parse = parseFlowchart;
-
-/** Convenience: lay out a flowchart and render it to SVG in one call. */
+/** Convenience: lay out an architecture diagram and render it to SVG. */
 export function toSvg(
-  chart: Flowchart,
-  opts: { layout?: LayoutOptions; render?: RenderOptions } = {},
+  diagram: ArchDiagram,
+  opts: { layout?: ArchLayoutOptions; render?: ArchRenderOptions } = {},
 ): string {
-  layoutFlowchart(chart, opts.layout);
-  return renderFlowchart(chart, opts.render);
+  layoutArchitecture(diagram, opts.layout);
+  return renderArchitecture(diagram, opts.render);
 }
+
+/** Convenience alias: parse `.pwr` architecture DSL into a diagram model. */
+export const parse = parseArchitecture;
