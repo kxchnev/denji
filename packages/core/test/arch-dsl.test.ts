@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseArchitecture } from "../src/dsl/arch-parse.js";
 import { DiagramParseError } from "../src/dsl/error.js";
@@ -101,8 +100,25 @@ describe("architecture DSL", () => {
     expect(bad("architecture\nservice s \"S\" {\napp a").reason).toContain("unclosed");
   });
 
-  it("round-trips the basic.pwr example", () => {
-    const src = readFileSync(new URL("../examples/basic/basic.pwr", import.meta.url), "utf8");
+  it("round-trips a full diagram with services, hints, and connections", () => {
+    const src = `
+      architecture
+      app gw "API Gateway"
+      service orders "Orders" @below(gw) {
+        app oapi "Orders API"
+        database odb "Postgres" @below(oapi)
+      }
+      service pay "Payments" @rightOf(orders) {
+        app papi "Payments API"
+        queue pq "Charges" @below(papi)
+      }
+      queue bus "Event Bus" @below(orders)
+      gw -> orders : http
+      gw -> pay : http
+      orders -> bus
+      pay -> bus
+      orders -- pay
+    `;
     const d = parseArchitecture(src);
     expect(d.nodes).toHaveLength(8);
     expect(d.connections).toHaveLength(5);

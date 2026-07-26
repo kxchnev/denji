@@ -1,39 +1,52 @@
 # power
 
-Библиотека + CLI для **архитектурных диаграмм в свободном стиле** (не C4) с
-**управляемым layout**. Фигуры (app / database / queue / rect), контейнеры
-(service / group), связи. Позиционирование — только относительными хинтами.
-Стек: TypeScript, вывод в SVG.
+Монорепо: библиотека для **архитектурных диаграмм в свободном стиле** (не C4) +
+сайт-документация. Фигуры (app/database/queue/rect), контейнеры (service/group),
+связи. Позиционирование — только относительными хинтами. Стек: TypeScript, SVG.
 
-## Архитектура
+## ⚠️ Документация — часть Definition of Done
 
-Слои (данные текут слева направо):
+**Добавили/изменили функциональность ядра → обновили доку-сайт.** Примеры живут в
+`packages/docs/examples/*.ts` (единый источник: `{ title, description, dsl, api }`).
+Порядок: добавить пример в нужный датасет (elements/arrows/blocks/layout) →
+`npm run -w docs validate` (прогон через ядро) должен быть зелёным → при новой
+категории добавить страницу и пункт в `packages/docs/lib/nav.ts`.
+
+## Структура (npm workspaces)
 
 ```
-DSL (.pwr) → Model (IR + builder) → Layout (relative + контейнеры) → Renderer → SVG
+packages/core/   пакет power — библиотека + CLI
+packages/docs/   Next.js + shadcn дока с живым playground (зависит от power)
+package.json     workspace-root (скрипты-прокси)
 ```
 
-- `src/model/` — `geometry.ts` (Rect/Point), `arch.ts` (типы: Shape/Container/
-  Connection/PlaceHint/ArchDiagram), `arch-builder.ts` (fluent `architecture()`).
-  И API, и DSL сходятся в эту модель.
-- `src/layout/arch/` — раскладка: `relative.ts` (relative-solver: X из rightOf/
-  leftOf, Y из above/below, топосорт), `index.ts` (пост-обход контейнеров,
-  bottom-up sizing, нормализация), `route.ts` (ортогональные связи), `measure.ts`.
-- `src/render/arch-svg.ts` — SVG-рендер без внешних зависимостей (цилиндры БД/
-  очереди, контейнеры, z-order).
-- `src/dsl/` — `arch-parse.ts` (парсер `.pwr`: фигуры, контейнеры через `{}`,
-  связи, @-хинты), `error.ts` (`DiagramParseError` с позицией).
+### packages/core (ядро)
+
+Слои: `DSL (.pwr) → Model → Layout (relative + контейнеры) → Renderer → SVG`.
+
+- `src/model/` — `geometry.ts`, `arch.ts` (типы), `arch-builder.ts` (билдер).
+- `src/layout/arch/` — `relative.ts` (relative-solver), `index.ts` (оркестрация,
+  bottom-up sizing контейнеров), `route.ts` (overlap-роутинг связей), `measure.ts`.
+- `src/render/arch-svg.ts` — SVG-рендер без зависимостей.
+- `src/dsl/` — `arch-parse.ts` (парсер `.pwr`), `error.ts` (`DiagramParseError`).
 - `src/cli.ts` — CLI (`power render <in.pwr>`).
 
-## Команды
+### packages/docs (дока)
 
-- `npm run typecheck` — проверка типов
-- `npm run build` — сборка в `dist/`
-- `npm test` — тесты (vitest)
-- `npx tsx examples/basic/basic.ts` — прогнать пример, сгенерить SVG (примеры — по папкам в `examples/`)
+Next.js App Router + Tailwind + shadcn-компоненты. Ядро подключено как пакет
+`power` (собранный `dist`) и рендерит диаграммы в браузере. Ключевое:
+`components/Diagram.tsx` (parse→layout→render→SVG, pan/zoom), `Example.tsx`
+(превью + табы DSL/API), `examples/*` (датасет), `app/**/page.tsx` (страницы).
+
+## Команды (из корня)
+
+- `npm run build` — собрать ядро (`packages/core/dist`)
+- `npm test` / `npm run typecheck` — тесты/типы ядра
+- `npm run docs` — dev-сервер доки; `npm run docs:build` — статический экспорт
+- `npm run -w docs validate` — прогнать все примеры доки через ядро
 
 ## Конвенции
 
-- ESM, `NodeNext`. Импорты локальных модулей — с расширением `.js`.
-- `strict` + `noUncheckedIndexedAccess` включены.
-- Раскладка детерминирована (в среде нет `Math.random`/`Date.now`).
+- ESM, `NodeNext` в ядре. Импорты локальных модулей ядра — с расширением `.js`.
+- `strict` + `noUncheckedIndexedAccess` в ядре. Раскладка детерминирована.
+- Дока цепляется к **собранному** `power` → после правок ядра `npm run build`.

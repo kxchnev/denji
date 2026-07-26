@@ -1,5 +1,6 @@
 node_modules/
 dist/
-*.svg
-!docs/**/*.svg
+.next/
+out/
+*.tsbuildinfo
 .DS_Store

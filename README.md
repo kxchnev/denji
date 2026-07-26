@@ -1,135 +1,51 @@
-# power
+# power (monorepo)
 
-Библиотека и CLI для **архитектурных диаграмм в свободном стиле** (не C4).
-Фиксит главную боль mermaid — невозможность управлять раскладкой: здесь
-позиционирование задаётся **относительными хинтами** (`rightOf/below/...`), а
-блоки-контейнеры сами обнимают своё содержимое. Вывод — SVG.
+Free-form architecture diagrams (not C4) with controllable, **relative** layout —
+a mermaid alternative where you actually decide where things go. Shapes
+(app / database / queue / rect), nestable container blocks (service / group),
+and connections. Authored via a `.pwr` DSL or a programmatic builder; rendered to
+SVG.
 
-Базовые фигуры: **приложение** (скруглённый прямоугольник), **база данных**
-(вертикальный цилиндр), **очередь** (горизонтальный цилиндр), плюс простой
-прямоугольник. Группировка: фигуры объединяются в **сервис** (акцентный блок с
-заголовком) или **группу** (простой прямоугольник с названием).
+## Packages
 
-> Статус: ранняя разработка.
+| Package | Path | What |
+|---|---|---|
+| `power` | [`packages/core`](./packages/core) | The library + CLI: model, relative layout engine, SVG renderer, DSL parser. |
+| `docs` | [`packages/docs`](./packages/docs) | Next.js + shadcn documentation site with a live playground. |
 
-## Установка
+npm workspaces tie them together (`docs` depends on `power`).
 
-```bash
-git clone <repo> && cd power
-npm install
-```
-
-## Сборка и разработка
+## Getting started
 
 ```bash
-npm run typecheck               # проверка типов
-npm run build                   # компиляция в dist/
-npm test                        # тесты (vitest)
-npx tsx examples/basic/basic.ts # пример → examples/basic/basic.svg
+npm install            # install all workspaces
+npm run build          # build the core library (packages/core → dist)
+npm test               # run core tests
+npm run docs           # run the docs site dev server (http://localhost:3000)
 ```
 
-## Примеры
+Other useful scripts:
 
-- `examples/basic/` — сервисы с приложениями/хранилищами, gateway и шина событий
-- `examples/environments/` — вложенность: окружение (`group`) → сервис (`service`) → фигуры
-- `examples/connections/` — связи только между фигурами (`app→db`, `app→app`), без связей между блоками
+```bash
+npm run typecheck              # typecheck the core
+npm run docs:build             # static-export the docs site (packages/docs/out)
+npm run -w docs validate       # render every documented example through the core
+```
 
-## Использование (DSL, из текста)
+## Quick taste (DSL)
 
 ```
-# examples/basic/basic.pwr
 architecture
-  app gw "API Gateway"
-
-  service orders "Orders" @below(gw) {
-    app oapi "Orders API"
-    database odb "Postgres" @below(oapi)
+  service orders "Orders" {
+    app api "API"
+    database db "Postgres" @below(api)
+    api -> db
   }
-
-  service pay "Payments" @rightOf(orders) {
-    app papi "Payments API"
-    queue pq "Charges" @below(papi)
-  }
-
-  queue bus "Event Bus" @below(orders)
-
-  gw -> orders : http
-  gw -> pay : http
-  orders -> bus
-  pay -> bus
-  orders -- pay
 ```
 
-```bash
-power render examples/basic/basic.pwr -o arch.svg
-# без установки:
-npx tsx src/cli.ts render examples/basic/basic.pwr -o arch.svg
-```
+See [`packages/core/README.md`](./packages/core/README.md) for the full DSL and
+API reference, or run the docs site for live, interactive examples.
 
-### Синтаксис DSL
-
-- **Заголовок:** `architecture` (опционально).
-- **Фигуры:** `<kind> <id> "label" [@hints]`, где kind ∈ `app` · `database` ·
-  `queue` · `rect`.
-- **Контейнеры:** `service|group <id> "label" [@hints] {` … дети … `}` —
-  вложенность блоками (можно вкладывать друг в друга).
-- **Связи:** `<id> <op> <id> [: label]`, где op ∈ `->` (стрелка) · `<-` ·
-  `<->` (обе) · `--` (линия) · `-.->` / `-.-` (пунктир).
-- **@-хинты** раскладки: `@rightOf(id)` · `@leftOf(id)` · `@above(id)` ·
-  `@below(id)` · `@gap(n)` · `@align(start|center|end)`.
-- **Комментарии:** строки на `#` или `%%`.
-
-## Использование (программный API)
-
-```ts
-import { architecture, toSvg } from "power";
-import { writeFileSync } from "node:fs";
-
-const diagram = architecture()
-  .app("gw", "API Gateway")
-  .app("oapi", "Orders API")
-  .database("odb", "Postgres", { hint: { below: "oapi" } })
-  .container("orders", "Orders", {
-    kind: "service",
-    children: ["oapi", "odb"],
-    hint: { below: "gw" },
-  })
-  .connect("gw", "orders", { label: "http" })
-  .build();
-
-writeFileSync("out.svg", toSvg(diagram));
-```
-
-### Управление раскладкой (ядро проекта)
-
-Позиционирование — **только относительное**: каждый узел ставится относительно
-соседа, контейнеры авто-подгоняются под содержимое.
-
-| Хинт | Что делает |
-|---|---|
-| `rightOf` / `leftOf` | Разместить справа/слева от узла |
-| `above` / `below` | Разместить выше/ниже узла |
-| `gap` | Доп. отступ до якоря |
-| `align` | Выравнивание по поперечной оси (`start`/`center`/`end`) |
-
-Одна ось-связь задаёт и выравнивание по другой оси. Узел без хинтов встаёт
-справа от предыдущего сиблинга.
-
-## Связи
-
-`connect(from, to, { dir })`, где `dir` ∈ `to` (по умолчанию) · `from` · `both`
-· `none`. Стрелка на каждом конце независима. Концом связи может быть и
-контейнер.
-
-## CLI
-
-```bash
-power render <input.pwr> [-o output.svg]
-```
-
-Читает `.pwr`-файл, раскладывает и пишет SVG (по умолчанию — `<input>.svg`).
-Ошибки парсинга печатаются с номером строки и указателем.
-
-## Лицензия
+## License
 
 MIT
