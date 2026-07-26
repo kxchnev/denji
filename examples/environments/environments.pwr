@@ -1,16 +1,18 @@
-# Nesting demo: an environment (group) contains a service (service), which
-# contains shapes. Two environments side by side.
+# Nesting demo: a company (group) wraps two environments (group), each holding a
+# service (service), each holding shapes — four levels of nesting.
 architecture
-  group prod "Production" {
-    service orders "Orders" {
-      app oapi "Orders API"
-      database odb "Postgres" @below(oapi)
+  group company "Company" {
+    group prod "Production" {
+      service orders "Orders" {
+        app oapi "Orders API"
+        database odb "Postgres" @below(oapi)
+      }
     }
-  }
 
-  group staging "Staging" @rightOf(prod) {
-    service ordersS "Orders" {
-      app oapiS "Orders API"
-      database odbS "Postgres" @below(oapiS)
+    group staging "Staging" @rightOf(prod) {
+      service ordersS "Orders" {
+        app oapiS "Orders API"
+        database odbS "Postgres" @below(oapiS)
+      }
     }
   }
