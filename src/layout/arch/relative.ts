@@ -44,7 +44,9 @@ export function layoutScope(items: Placeable[], gap: number): ScopeResult {
   for (const id of order) {
     const it = byId.get(id)!;
     const h = it.hint;
-    const align = h?.align ?? "start";
+    // Center on the cross axis by default so connected nodes share an axis and
+    // their connectors stay straight. Override per node with @align(start|end).
+    const align = h?.align ?? "center";
     const g = h?.gap ?? gap;
 
     const hx = h?.rightOf
@@ -67,7 +69,7 @@ export function layoutScope(items: Placeable[], gap: number): ScopeResult {
       const pit = p ? byId.get(p) : undefined;
       if (pa && pit) {
         x = pa.x + pit.width + g;
-        y = pa.y; // align tops
+        y = pa.y + (pit.height - it.height) / 2; // center on the previous sibling
       }
     } else {
       if (hx) {

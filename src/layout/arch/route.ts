@@ -14,14 +14,45 @@ export function routeConnections(diagram: ArchDiagram): void {
     const a = rectOf.get(c.from);
     const b = rectOf.get(c.to);
     if (!a || !b) continue;
-    const ca = center(a);
-    const cb = center(b);
-    const start = borderPoint(a, ca, cb);
-    const end = borderPoint(b, cb, ca);
-    const path = simplify(orthogonal(start, end));
+    const path = simplify(connect(a, b));
     c.path = path;
     c.labelPos = midpoint(path);
   }
+}
+
+const MIN_OVERLAP = 2;
+
+/**
+ * Route between two boxes. If they share a vertical column (x-overlap) the
+ * connector is a straight vertical line down the middle of that column; if they
+ * share a horizontal band (y-overlap) it is a straight horizontal line. Only
+ * genuinely diagonal pairs fall back to an L bend. This keeps aligned nodes'
+ * connectors straight even when their centers differ (different widths, or a
+ * container linked to a child).
+ */
+function connect(a: Rect, b: Rect): Point[] {
+  const ox1 = Math.max(a.x, b.x);
+  const ox2 = Math.min(a.x + a.width, b.x + b.width);
+  const oy1 = Math.max(a.y, b.y);
+  const oy2 = Math.min(a.y + a.height, b.y + b.height);
+
+  if (ox2 - ox1 > MIN_OVERLAP) {
+    const cx = (ox1 + ox2) / 2;
+    const aAbove = a.y + a.height <= b.y;
+    if (aAbove) return [{ x: cx, y: a.y + a.height }, { x: cx, y: b.y }];
+    return [{ x: cx, y: a.y }, { x: cx, y: b.y + b.height }];
+  }
+  if (oy2 - oy1 > MIN_OVERLAP) {
+    const cy = (oy1 + oy2) / 2;
+    const aLeft = a.x + a.width <= b.x;
+    if (aLeft) return [{ x: a.x + a.width, y: cy }, { x: b.x, y: cy }];
+    return [{ x: a.x, y: cy }, { x: b.x + b.width, y: cy }];
+  }
+
+  // Diagonal: L bend between the border points.
+  const ca = center(a);
+  const cb = center(b);
+  return orthogonal(borderPoint(a, ca, cb), borderPoint(b, cb, ca));
 }
 
 /** Axis-aligned connector between two points, bending on the dominant axis. */

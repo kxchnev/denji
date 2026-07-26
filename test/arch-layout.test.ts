@@ -82,6 +82,30 @@ describe("architecture layout", () => {
     expect(start.x).toBeLessThanOrEqual(a.x + a.width + 0.5);
   });
 
+  it("routes a stacked connection as a straight vertical line", () => {
+    const d = architecture()
+      .app("a", "Orders API")
+      .database("b", "DB", { hint: { below: "a" } })
+      .connect("a", "b")
+      .build();
+    layoutArchitecture(d);
+    const path = d.connections[0]!.path!;
+    expect(path).toHaveLength(2); // no bend
+    expect(path[0]!.x).toBeCloseTo(path[1]!.x, 5); // perfectly vertical
+  });
+
+  it("routes a side-by-side connection as a straight horizontal line", () => {
+    const d = architecture()
+      .app("a", "A")
+      .database("b", "Wide Postgres Store", { hint: { rightOf: "a" } })
+      .connect("a", "b")
+      .build();
+    layoutArchitecture(d);
+    const path = d.connections[0]!.path!;
+    expect(path).toHaveLength(2);
+    expect(path[0]!.y).toBeCloseTo(path[1]!.y, 5); // perfectly horizontal
+  });
+
   it("honors connection direction flags", () => {
     const d = architecture()
       .app("a")
