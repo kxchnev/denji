@@ -30,7 +30,7 @@ DSL (.pwr) → Model (IR + builder) → Layout (relative + контейнеры)
 - `npm run typecheck` — проверка типов
 - `npm run build` — сборка в `dist/`
 - `npm test` — тесты (vitest)
-- `npx tsx examples/arch-basic.ts` — прогнать пример, сгенерить SVG
+- `npx tsx examples/basic/basic.ts` — прогнать пример, сгенерить SVG (примеры — по папкам в `examples/`)
 
 ## Конвенции
 

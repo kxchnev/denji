@@ -1,0 +1,16 @@
+# Connections demo: arrows only between shapes — app->database inside each
+# service and app->app across services. No connections between the blocks.
+architecture
+  service orders "Orders" {
+    app oapi "Orders API"
+    database odb "Postgres" @below(oapi)
+    oapi -> odb
+  }
+
+  service pay "Payments" @rightOf(orders) {
+    app papi "Payments API"
+    database pdb "Postgres" @below(papi)
+    papi -> pdb
+  }
+
+  oapi -> papi

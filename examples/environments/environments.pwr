@@ -1,0 +1,16 @@
+# Nesting demo: an environment (group) contains a service (service), which
+# contains shapes. Two environments side by side.
+architecture
+  group prod "Production" {
+    service orders "Orders" {
+      app oapi "Orders API"
+      database odb "Postgres" @below(oapi)
+    }
+  }
+
+  group staging "Staging" @rightOf(prod) {
+    service ordersS "Orders" {
+      app oapiS "Orders API"
+      database odbS "Postgres" @below(oapiS)
+    }
+  }

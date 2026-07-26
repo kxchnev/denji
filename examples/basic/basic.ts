@@ -1,7 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { architecture } from "../src/model/arch-builder.js";
-import { layoutArchitecture } from "../src/layout/arch/index.js";
-import { renderArchitecture } from "../src/render/arch-svg.js";
+import { architecture, toSvg } from "../../src/index.js";
 
 // Free-form architecture: two services (each wrapping an app + a store), an
 // API gateway, and a shared event bus. Placement is relative-only.
@@ -25,6 +23,5 @@ const diagram = architecture()
   .connect("orders", "pay", { dir: "none" })
   .build();
 
-layoutArchitecture(diagram);
-writeFileSync(new URL("./arch-basic.svg", import.meta.url), renderArchitecture(diagram));
-console.log("wrote examples/arch-basic.svg");
+writeFileSync(new URL("./basic.svg", import.meta.url), toSvg(diagram));
+console.log("wrote examples/basic/basic.svg");

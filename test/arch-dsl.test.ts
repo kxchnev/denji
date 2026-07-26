@@ -101,8 +101,8 @@ describe("architecture DSL", () => {
     expect(bad("architecture\nservice s \"S\" {\napp a").reason).toContain("unclosed");
   });
 
-  it("round-trips the arch-basic.pwr example", () => {
-    const src = readFileSync(new URL("../examples/arch-basic.pwr", import.meta.url), "utf8");
+  it("round-trips the basic.pwr example", () => {
+    const src = readFileSync(new URL("../examples/basic/basic.pwr", import.meta.url), "utf8");
     const d = parseArchitecture(src);
     expect(d.nodes).toHaveLength(8);
     expect(d.connections).toHaveLength(5);

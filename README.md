@@ -25,13 +25,19 @@ npm install
 npm run typecheck               # проверка типов
 npm run build                   # компиляция в dist/
 npm test                        # тесты (vitest)
-npx tsx examples/arch-basic.ts  # пример → examples/arch-basic.svg
+npx tsx examples/basic/basic.ts # пример → examples/basic/basic.svg
 ```
+
+## Примеры
+
+- `examples/basic/` — сервисы с приложениями/хранилищами, gateway и шина событий
+- `examples/environments/` — вложенность: окружение (`group`) → сервис (`service`) → фигуры
+- `examples/connections/` — связи только между фигурами (`app→db`, `app→app`), без связей между блоками
 
 ## Использование (DSL, из текста)
 
 ```
-# examples/arch-basic.pwr
+# examples/basic/basic.pwr
 architecture
   app gw "API Gateway"
 
@@ -55,9 +61,9 @@ architecture
 ```
 
 ```bash
-power render examples/arch-basic.pwr -o arch.svg
+power render examples/basic/basic.pwr -o arch.svg
 # без установки:
-npx tsx src/cli.ts render examples/arch-basic.pwr -o arch.svg
+npx tsx src/cli.ts render examples/basic/basic.pwr -o arch.svg
 ```
 
 ### Синтаксис DSL
