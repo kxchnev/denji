@@ -18,7 +18,7 @@ DSL → Model (IR + builder) → Layout engine → Renderer → SVG
 ```
 
 - `src/model/` — типы (`types.ts`), геометрия (`geometry.ts`), fluent-билдер (`builder.ts`). Это ядро; и API, и DSL сходятся в эту модель.
-- `src/layout/` — раскладка. Сейчас `simple.ts` (M1, поддерживает пины); дальше — слоистый движок.
+- `src/layout/` — раскладка. Движок `layered/` (M2, Sugiyama/dagre-стиль): `graph` → `rank` → `order` → `position`, оркестрация в `layered/index.ts`. Ортогональный роутинг рёбер — `route.ts`. Замер узлов — `measure.ts`.
 - `src/render/` — SVG-рендер без внешних зависимостей.
 - `src/dsl/` — парсер DSL (M3, ещё нет).
 - `src/cli.ts` — CLI.
