@@ -1,0 +1,22 @@
+# Same diagram as examples/complex.ts, described in text.
+# Branch + merge + back-edge cycle, with rightOf and sameRank hints.
+flowchart TB
+  Start([Start])
+  Fetch[Fetch data]
+  Valid{Valid?}
+  Transform[Transform]
+  LogErr[Log error] @rightOf(Transform)
+  Save(Save)
+  Metrics[Emit metrics] @sameRank(Save)
+  Retry{Retry?}
+  Done([Done])
+  Start -> Fetch
+  Fetch -> Valid
+  Valid -> Transform : yes
+  Valid -.-> LogErr |no|
+  Transform -> Save
+  LogErr -> Save
+  Save -> Metrics
+  Save -> Retry
+  Retry -.-> Fetch |retry|
+  Retry -> Done : ok

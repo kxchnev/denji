@@ -26,6 +26,45 @@ npm test                     # тесты (vitest)
 npx tsx examples/basic.ts    # прогнать пример → examples/basic.svg
 ```
 
+## Использование (DSL, из текста)
+
+Опиши диаграмму текстом в файле `.pwr` и отрендерь через CLI:
+
+```
+# examples/basic.pwr
+flowchart TB
+  A([Start])
+  B{Is it ready?}
+  C(Ship it)
+  D(Fix it) @pin(320,240)
+  A -> B
+  B -> C : yes
+  B -.-> D |no|
+  D -.-> B
+```
+
+```bash
+power render examples/basic.pwr -o basic.svg
+# или без установки:
+npx tsx src/cli.ts render examples/basic.pwr -o basic.svg
+```
+
+### Синтаксис DSL
+
+- **Заголовок:** `flowchart TB` (или `BT` / `LR` / `RL`; по умолчанию `TB`).
+- **Формы узлов** (mermaid-стиль): `A[rect]` · `A(round)` · `A([stadium])` ·
+  `A{diamond}` · `A((circle))` · `A{{hexagon}}`. Голый `A` — rect с меткой = id.
+- **Рёбра:** `->` / `-->` (стрелка) · `-.->` (пунктир) · `==>` (жирное) ·
+  `---` (линия без стрелки). Метка ребра: `A -> B : label` либо
+  `A -->|label| B`. Концы могут быть инлайн-определением узла
+  (`A[Start] -> B{Check}`).
+- **@-директивы** layout (в строке узла, после формы):
+  `@pin(x,y)` · `@above(id)` · `@below(id)` · `@rightOf(id)` · `@leftOf(id)` ·
+  `@sameRank(id)` · `@gap(n)`.
+- **Комментарии:** строки, начинающиеся с `#` или `%%`.
+
+> Одно ребро на строку (цепочки `A -> B -> C` пиши отдельными строками).
+
 ## Использование (программный API)
 
 ```ts
@@ -66,11 +105,11 @@ writeFileSync("out.svg", toSvg(chart));
 ## CLI
 
 ```bash
-power render diagram.txt -o diagram.svg
+power render <input.pwr> [-o output.svg]
 ```
 
-Парсер DSL появится в M3; сейчас команда подключена, но сообщает, что парсинг
-ещё не реализован — используйте программный API.
+Читает `.pwr`-файл (DSL, см. выше), раскладывает и пишет SVG (по умолчанию —
+`<input>.svg`). Ошибки парсинга печатаются с номером строки и указателем.
 
 ## Формы узлов
 
