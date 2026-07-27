@@ -10,7 +10,7 @@ export function Example({ title, description, dsl, api }: ExampleData) {
       <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
       {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
       <Card className="mt-3 overflow-hidden">
-        <div className="flex min-h-40 items-center justify-center bg-[radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:16px_16px] p-8">
+        <div className="flex min-h-40 items-center justify-center bg-white bg-[radial-gradient(#e4e4e7_1px,transparent_1px)] p-8 [background-size:16px_16px]">
           <Diagram dsl={dsl} />
         </div>
         <Tabs defaultValue="dsl" className="border-t">

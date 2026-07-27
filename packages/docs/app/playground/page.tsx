@@ -37,7 +37,7 @@ export default function Playground() {
           spellCheck={false}
           className="h-[70vh] w-full resize-none rounded-lg border bg-zinc-950 p-4 font-mono text-sm text-zinc-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-zinc-900"
         />
-        <div className="h-[70vh] overflow-hidden rounded-lg border bg-[radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:16px_16px]">
+        <div className="h-[70vh] overflow-hidden rounded-lg border bg-white bg-[radial-gradient(#e4e4e7_1px,transparent_1px)] [background-size:16px_16px]">
           <Diagram dsl={dsl} interactive />
         </div>
       </div>

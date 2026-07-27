@@ -12,7 +12,9 @@ export interface ArchRenderOptions {
 const DEFAULTS = {
   padding: 24,
   fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-  background: "#ffffff",
+  // Transparent by default so the diagram sits on whatever surface hosts it.
+  // Pass a color (e.g. "#ffffff") for a solid backdrop.
+  background: "transparent",
   headerH: 28,
 };
 
@@ -121,7 +123,7 @@ function renderContainer(n: Container, headerH: number): string {
     return (
       `<g>` +
       `<rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="10" ry="10" ` +
-      `fill="rgba(99,102,241,0.05)" stroke="${ACCENT}" stroke-width="1.5"/>` +
+      `fill="#f5f6ff" stroke="${ACCENT}" stroke-width="1.5"/>` +
       header +
       `<text x="${r.x + 12}" y="${r.y + headerH / 2}" dominant-baseline="central" ` +
       `font-size="13" font-weight="600" fill="#ffffff">${esc(n.label)}</text>` +
