@@ -1,36 +1,88 @@
-import type { ArchDiagram } from "../../model/arch.js";
+import type { ArchDiagram, Connection } from "../../model/arch.js";
 import { center, type Point, type Rect } from "../../model/geometry.js";
 
+const MIN_OVERLAP = 2;
+
+type Side = "top" | "bottom" | "left" | "right";
+interface Port {
+  x: number;
+  y: number;
+  side: Side;
+}
+interface Endpoint {
+  port: Port;
+  /** The node this port sits on (its edge extent for distribution). */
+  rect: Rect;
+  /** Center coordinate of the OTHER node along the side's free axis — used to
+   *  order ports so connections don't cross unnecessarily. */
+  sortKey: number;
+}
+
 /**
- * Route every connection as an orthogonal L between the two nodes' borders.
- * Endpoints may be shapes or containers (any node with a rect). Runs after all
- * absolute rects are assigned.
+ * Route every connection orthogonally. Endpoints leave/enter perpendicular to a
+ * node side; when several connections meet the same side they are distributed
+ * along it so their attachment points stay distinct (no merging). Runs after
+ * all absolute rects are assigned.
  */
 export function routeConnections(diagram: ArchDiagram): void {
   const rectOf = new Map<string, Rect>();
   for (const n of diagram.nodes) if (n.rect) rectOf.set(n.id, n.rect);
 
+  // Pass 1: default ports for every connection.
+  interface Wired {
+    c: Connection;
+    a: Rect;
+    b: Rect;
+    start: Port;
+    end: Port;
+  }
+  const wired: Wired[] = [];
+  // Group endpoints by node+side so we can spread them.
+  const groups = new Map<string, Endpoint[]>();
+  const groupKey = (rect: Rect, side: Side) =>
+    `${rect.x},${rect.y},${rect.width},${rect.height}:${side}`;
+  const addToGroup = (rect: Rect, port: Port, other: Rect) => {
+    const key = groupKey(rect, port.side);
+    let list = groups.get(key);
+    if (!list) {
+      list = [];
+      groups.set(key, list);
+    }
+    const oc = center(other);
+    list.push({ port, rect, sortKey: port.side === "left" || port.side === "right" ? oc.y : oc.x });
+  };
+
   for (const c of diagram.connections) {
     const a = rectOf.get(c.from);
     const b = rectOf.get(c.to);
     if (!a || !b) continue;
-    const path = simplify(connect(a, b));
-    c.path = path;
-    c.labelPos = midpoint(path);
+    const { start, end } = defaultPorts(a, b);
+    wired.push({ c, a, b, start, end });
+    addToGroup(a, start, b);
+    addToGroup(b, end, a);
+  }
+
+  // Pass 2: distribute ports that share a side.
+  for (const [key, list] of groups) {
+    if (list.length < 2) continue;
+    const side = key.slice(key.lastIndexOf(":") + 1) as Side;
+    list.sort((p, q) => p.sortKey - q.sortKey);
+    list.forEach((ep, i) => {
+      const frac = (i + 1) / (list.length + 1);
+      spreadPort(ep.port, ep.rect, side, frac);
+    });
+  }
+
+  // Pass 3: build paths from the (possibly redistributed) ports.
+  for (const w of wired) {
+    const path = simplify(buildPath(w.start, w.end));
+    w.c.path = path;
+    w.c.labelPos = midpoint(path);
   }
 }
 
-const MIN_OVERLAP = 2;
-
-/**
- * Route between two boxes. If they share a vertical column (x-overlap) the
- * connector is a straight vertical line down the middle of that column; if they
- * share a horizontal band (y-overlap) it is a straight horizontal line. Only
- * genuinely diagonal pairs fall back to an L bend. This keeps aligned nodes'
- * connectors straight even when their centers differ (different widths, or a
- * container linked to a child).
- */
-function connect(a: Rect, b: Rect): Point[] {
+/** Ports on the two facing sides, at the natural (centered) position. */
+function defaultPorts(a: Rect, b: Rect): { start: Port; end: Port } {
   const ox1 = Math.max(a.x, b.x);
   const ox2 = Math.min(a.x + a.width, b.x + b.width);
   const oy1 = Math.max(a.y, b.y);
@@ -39,38 +91,72 @@ function connect(a: Rect, b: Rect): Point[] {
   if (ox2 - ox1 > MIN_OVERLAP) {
     const cx = (ox1 + ox2) / 2;
     const aAbove = a.y + a.height <= b.y;
-    if (aAbove) return [{ x: cx, y: a.y + a.height }, { x: cx, y: b.y }];
-    return [{ x: cx, y: a.y }, { x: cx, y: b.y + b.height }];
+    return aAbove
+      ? { start: { x: cx, y: a.y + a.height, side: "bottom" }, end: { x: cx, y: b.y, side: "top" } }
+      : { start: { x: cx, y: a.y, side: "top" }, end: { x: cx, y: b.y + b.height, side: "bottom" } };
   }
   if (oy2 - oy1 > MIN_OVERLAP) {
     const cy = (oy1 + oy2) / 2;
     const aLeft = a.x + a.width <= b.x;
-    if (aLeft) return [{ x: a.x + a.width, y: cy }, { x: b.x, y: cy }];
-    return [{ x: a.x, y: cy }, { x: b.x + b.width, y: cy }];
+    return aLeft
+      ? { start: { x: a.x + a.width, y: cy, side: "right" }, end: { x: b.x, y: cy, side: "left" } }
+      : { start: { x: a.x, y: cy, side: "left" }, end: { x: b.x + b.width, y: cy, side: "right" } };
   }
 
-  // Diagonal: L bend between the border points.
+  // Diagonal: pick the dominant axis and exit/enter perpendicular to it.
   const ca = center(a);
   const cb = center(b);
-  return orthogonal(borderPoint(a, ca, cb), borderPoint(b, cb, ca));
+  const dx = cb.x - ca.x;
+  const dy = cb.y - ca.y;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return {
+      start: { x: dx >= 0 ? a.x + a.width : a.x, y: ca.y, side: dx >= 0 ? "right" : "left" },
+      end: { x: dx >= 0 ? b.x : b.x + b.width, y: cb.y, side: dx >= 0 ? "left" : "right" },
+    };
+  }
+  return {
+    start: { x: ca.x, y: dy >= 0 ? a.y + a.height : a.y, side: dy >= 0 ? "bottom" : "top" },
+    end: { x: cb.x, y: dy >= 0 ? b.y : b.y + b.height, side: dy >= 0 ? "top" : "bottom" },
+  };
 }
 
-/** Axis-aligned connector between two points, bending on the dominant axis. */
-function orthogonal(p: Point, q: Point): Point[] {
-  if (p.x === q.x || p.y === q.y) return [p, q];
-  if (Math.abs(q.y - p.y) >= Math.abs(q.x - p.x)) {
-    const midY = (p.y + q.y) / 2;
-    return [p, { x: p.x, y: midY }, { x: q.x, y: midY }, q];
+/** Move a port to fraction `frac` along its side's free axis (the fixed
+ *  on-edge coordinate is left untouched). */
+function spreadPort(port: Port, r: Rect, side: Side, frac: number): void {
+  if (side === "left" || side === "right") {
+    port.y = r.y + r.height * frac;
+  } else {
+    port.x = r.x + r.width * frac;
   }
-  const midX = (p.x + q.x) / 2;
-  return [p, { x: midX, y: p.y }, { x: midX, y: q.y }, q];
+}
+
+/** Orthogonal path between two ports on opposite, same-axis sides. */
+function buildPath(start: Port, end: Port): Point[] {
+  if (start.side === "left" || start.side === "right") {
+    const midX = (start.x + end.x) / 2;
+    return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+  }
+  const midY = (start.y + end.y) / 2;
+  return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
 }
 
 function simplify(points: Point[]): Point[] {
-  const out: Point[] = [];
+  const dedup: Point[] = [];
   for (const p of points) {
-    const last = out[out.length - 1];
-    if (!last || last.x !== p.x || last.y !== p.y) out.push(p);
+    const last = dedup[dedup.length - 1];
+    if (!last || last.x !== p.x || last.y !== p.y) dedup.push({ x: p.x, y: p.y });
+  }
+  const out: Point[] = [];
+  for (let i = 0; i < dedup.length; i++) {
+    const prev = out[out.length - 1];
+    const cur = dedup[i]!;
+    const next = dedup[i + 1];
+    if (prev && next) {
+      const collinearX = prev.x === cur.x && cur.x === next.x;
+      const collinearY = prev.y === cur.y && cur.y === next.y;
+      if (collinearX || collinearY) continue;
+    }
+    out.push(cur);
   }
   return out;
 }
@@ -95,17 +181,4 @@ function midpoint(points: Point[]): Point {
 
 function dist(a: Point, b: Point): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
-}
-
-/** Point where the segment from `from` toward `to` crosses `rect`'s border. */
-export function borderPoint(rect: Rect, from: Point, to: Point): Point {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  if (dx === 0 && dy === 0) return from;
-  const hw = rect.width / 2;
-  const hh = rect.height / 2;
-  const scaleX = dx !== 0 ? hw / Math.abs(dx) : Infinity;
-  const scaleY = dy !== 0 ? hh / Math.abs(dy) : Infinity;
-  const scale = Math.min(scaleX, scaleY);
-  return { x: from.x + dx * scale, y: from.y + dy * scale };
 }

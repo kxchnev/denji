@@ -82,6 +82,50 @@ describe("architecture layout", () => {
     expect(start.x).toBeLessThanOrEqual(a.x + a.width + 0.5);
   });
 
+  it("leaves and enters diagonally-placed nodes perpendicular to their edges", () => {
+    const d = architecture()
+      .app("a", "A")
+      .app("b", "B", { hint: { rightOf: "a", below: "a" } }) // offset on both axes → diagonal
+      .connect("a", "b")
+      .build();
+    layoutArchitecture(d);
+    const path = d.connections[0]!.path!;
+    const a = rectOf(d, "a");
+    const b = rectOf(d, "b");
+    const outside = (p: { x: number; y: number }, r: Rect) =>
+      p.x < r.x - 0.5 || p.x > r.x + r.width + 0.5 || p.y < r.y - 0.5 || p.y > r.y + r.height + 0.5;
+    const axisAligned = (p: { x: number; y: number }, q: { x: number; y: number }) =>
+      Math.abs(p.x - q.x) < 0.5 || Math.abs(p.y - q.y) < 0.5;
+
+    expect(path.length).toBeGreaterThanOrEqual(3);
+    // first segment is a perpendicular stub that leaves A's rect
+    expect(axisAligned(path[0]!, path[1]!)).toBe(true);
+    expect(outside(path[1]!, a)).toBe(true);
+    // last segment is a perpendicular stub that enters B from outside
+    const n = path.length;
+    expect(axisAligned(path[n - 2]!, path[n - 1]!)).toBe(true);
+    expect(outside(path[n - 2]!, b)).toBe(true);
+  });
+
+  it("distributes multiple connections entering the same side", () => {
+    const d = architecture()
+      .app("t", "Target")
+      .app("a", "A", { hint: { leftOf: "t" } })
+      .app("b", "B", { hint: { leftOf: "t", above: "a" } })
+      .connect("a", "t")
+      .connect("b", "t")
+      .build();
+    layoutArchitecture(d);
+    const t = rectOf(d, "t");
+    const end0 = d.connections[0]!.path!.at(-1)!;
+    const end1 = d.connections[1]!.path!.at(-1)!;
+    // both enter T's left edge...
+    expect(end0.x).toBeCloseTo(t.x, 1);
+    expect(end1.x).toBeCloseTo(t.x, 1);
+    // ...but at distinct points, not merged.
+    expect(Math.abs(end0.y - end1.y)).toBeGreaterThan(5);
+  });
+
   it("routes a stacked connection as a straight vertical line", () => {
     const d = architecture()
       .app("a", "Orders API")
