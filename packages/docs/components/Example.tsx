@@ -14,7 +14,7 @@ export function Example({ title, description, dsl, api }: ExampleData) {
           <Diagram dsl={dsl} />
         </div>
         <Tabs defaultValue="dsl" className="border-t">
-          <div className="border-b px-3 pt-2">
+          <div className="border-b px-3 py-2">
             <TabsList>
               <TabsTrigger value="dsl">DSL</TabsTrigger>
               <TabsTrigger value="api">API</TabsTrigger>
