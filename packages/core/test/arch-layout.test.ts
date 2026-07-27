@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { architecture } from "../src/model/arch-builder.js";
 import { layoutArchitecture } from "../src/layout/arch/index.js";
 import { renderArchitecture } from "../src/render/arch-svg.js";
+import { ROUTE_GRID } from "../src/layout/arch/route.js";
 import type { ArchDiagram, ArchNode } from "../src/model/arch.js";
 import type { Rect } from "../src/model/geometry.js";
 
@@ -105,6 +106,18 @@ describe("architecture layout", () => {
     const n = path.length;
     expect(axisAligned(path[n - 2]!, path[n - 1]!)).toBe(true);
     expect(outside(path[n - 2]!, b)).toBe(true);
+  });
+
+  it("snaps connector jogs to the routing grid", () => {
+    const d = architecture()
+      .app("a", "A")
+      .app("b", "B", { hint: { rightOf: "a", below: "a" } }) // diagonal → vertical jog
+      .connect("a", "b")
+      .build();
+    layoutArchitecture(d);
+    const path = d.connections[0]!.path!;
+    const jogX = path[1]!.x; // x of the vertical jog lane
+    expect(jogX % ROUTE_GRID).toBe(0);
   });
 
   it("distributes multiple connections entering the same side", () => {

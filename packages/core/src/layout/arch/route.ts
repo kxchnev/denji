@@ -130,13 +130,19 @@ function spreadPort(port: Port, r: Rect, side: Side, frac: number): void {
   }
 }
 
-/** Orthogonal path between two ports on opposite, same-axis sides. */
+/** Grid the connector jogs snap to, so parallel segments of unrelated edges
+ *  line up on shared lanes instead of scattering. */
+export const ROUTE_GRID = 16;
+const snap = (v: number) => Math.round(v / ROUTE_GRID) * ROUTE_GRID;
+
+/** Orthogonal path between two ports on opposite, same-axis sides. The jog is
+ *  snapped to a grid so nearby edges share the same lane. */
 function buildPath(start: Port, end: Port): Point[] {
   if (start.side === "left" || start.side === "right") {
-    const midX = (start.x + end.x) / 2;
+    const midX = snap((start.x + end.x) / 2);
     return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
   }
-  const midY = (start.y + end.y) / 2;
+  const midY = snap((start.y + end.y) / 2);
   return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
 }
 
