@@ -10,7 +10,7 @@ export type ContainerKind = "service" | "group";
  * Relative-only placement. There are no absolute coordinates — a node is
  * positioned against a sibling. One horizontal relation (rightOf/leftOf) sets
  * X, one vertical relation (above/below) sets Y; the single given relation also
- * decides cross-axis alignment to the anchor (`align`, default "start").
+ * decides cross-axis alignment to the anchor (`align`, default "center").
  */
 export interface PlaceHint {
   rightOf?: string;

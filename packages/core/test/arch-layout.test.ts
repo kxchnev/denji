@@ -3,6 +3,7 @@ import { architecture } from "../src/model/arch-builder.js";
 import { layoutArchitecture } from "../src/layout/arch/index.js";
 import { renderArchitecture } from "../src/render/arch-svg.js";
 import { ROUTE_GRID } from "../src/layout/arch/route.js";
+import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
 import type { ArchDiagram, ArchNode } from "../src/model/arch.js";
 import type { Rect } from "../src/model/geometry.js";
 
@@ -23,6 +24,36 @@ function contains(outer: Rect, inner: Rect): boolean {
     inner.x + inner.width <= outer.x + outer.width &&
     inner.y + inner.height <= outer.y + outer.height
   );
+}
+function overlaps(a: Rect, b: Rect): boolean {
+  return (
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  );
+}
+/** Every pair of siblings, in every scope, must be disjoint. */
+function overlappingSiblings(d: ArchDiagram): string[] {
+  const parent = new Map<string, string>();
+  for (const n of d.nodes) {
+    if (n.type === "container") for (const c of n.children) parent.set(c, n.id);
+  }
+  const scopes = new Map<string, ArchNode[]>();
+  for (const n of d.nodes) {
+    const key = parent.get(n.id) ?? "<top>";
+    const list = scopes.get(key) ?? [];
+    list.push(n);
+    scopes.set(key, list);
+  }
+  const bad: string[] = [];
+  for (const [scope, list] of scopes) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i]!;
+        const b = list[j]!;
+        if (a.rect && b.rect && overlaps(a.rect, b.rect)) bad.push(`${scope}: ${a.id}×${b.id}`);
+      }
+    }
+  }
+  return bad;
 }
 
 describe("architecture layout", () => {
@@ -187,6 +218,144 @@ describe("architecture layout", () => {
     const d2 = layoutArchitecture(make());
     expect(d1.nodes.map((n) => n.rect)).toEqual(d2.nodes.map((n) => n.rect));
     expect(() => renderArchitecture(d1)).not.toThrow();
+  });
+
+  it("flows unhinted siblings left to right", () => {
+    // No hints anywhere: the plain flow must stay exactly as it was.
+    const d = architecture()
+      .app("a", "A")
+      .database("b", "Wide Postgres Store")
+      .app("c", "C")
+      .build();
+    layoutArchitecture(d);
+    const a = rectOf(d, "a");
+    const b = rectOf(d, "b");
+    const c = rectOf(d, "c");
+    expect(b.x).toBeCloseTo(a.x + a.width + 40, 5);
+    expect(c.x).toBeCloseTo(b.x + b.width + 40, 5);
+    // each centers on the previous sibling, whatever its height
+    expect(b.y + b.height / 2).toBeCloseTo(a.y + a.height / 2, 5);
+    expect(c.y + c.height / 2).toBeCloseTo(b.y + b.height / 2, 5);
+  });
+
+  it("parks an unhinted node beside the hinted structure, not on top of it", () => {
+    const d = architecture()
+      .app("a", "A")
+      .app("loose", "Loose") // declared mid-structure, anchored to nothing
+      .app("b", "B", { hint: { rightOf: "a" } })
+      .build();
+    layoutArchitecture(d);
+    const a = rectOf(d, "a");
+    const b = rectOf(d, "b");
+    const loose = rectOf(d, "loose");
+    expect(b.x).toBeCloseTo(a.x + a.width + 40, 5); // the hint still wins
+    expect(overlappingSiblings(d)).toEqual([]);
+    expect(loose.x).toBeGreaterThanOrEqual(b.x + b.width); // parked past the structure
+  });
+
+  it("keeps an unhinted anchor inside the structure it anchors", () => {
+    // `a` has no hint of its own but `b` hangs off it — it must not be parked.
+    const d = architecture()
+      .app("a", "A")
+      .app("b", "B", { hint: { below: "a" } })
+      .app("loose", "Loose")
+      .build();
+    layoutArchitecture(d);
+    const a = rectOf(d, "a");
+    const b = rectOf(d, "b");
+    expect(b.x).toBeCloseTo(a.x, 5); // still centered under its anchor
+    expect(b.y).toBeGreaterThan(a.y + a.height - 1);
+    expect(rectOf(d, "loose").x).toBeGreaterThanOrEqual(Math.max(a.x + a.width, b.x + b.width));
+  });
+
+  it("slides a node clear when its slot is taken", () => {
+    const side = architecture()
+      .app("a", "A")
+      .app("b", "B", { hint: { rightOf: "a" } })
+      .app("c", "C", { hint: { rightOf: "a" } })
+      .build();
+    layoutArchitecture(side);
+    // Same column as b, pushed down onto the next row.
+    expect(rectOf(side, "c").x).toBeCloseTo(rectOf(side, "b").x, 5);
+    expect(rectOf(side, "c").y).toBeGreaterThan(rectOf(side, "b").y + rectOf(side, "b").height - 1);
+    expect(overlappingSiblings(side)).toEqual([]);
+
+    const stacked = architecture()
+      .app("a", "A")
+      .app("b", "B", { hint: { below: "a" } })
+      .app("c", "C", { hint: { below: "a" } })
+      .build();
+    layoutArchitecture(stacked);
+    // Same row as b, pushed right into the next column.
+    expect(rectOf(stacked, "c").y).toBeCloseTo(rectOf(stacked, "b").y, 5);
+    expect(rectOf(stacked, "c").x).toBeGreaterThan(
+      rectOf(stacked, "b").x + rectOf(stacked, "b").width - 1,
+    );
+    expect(overlappingSiblings(stacked)).toEqual([]);
+  });
+
+  it("grows a container around an unhinted child instead of overlapping it", () => {
+    const d = architecture()
+      .app("api", "API")
+      .database("db", "Postgres", { hint: { below: "api" } })
+      .app("helper", "Helper") // no hint, inside the container's scope
+      .container("svc", "Service", { kind: "service", children: ["api", "db", "helper"] })
+      .build();
+    layoutArchitecture(d);
+    const svc = rectOf(d, "svc");
+    for (const id of ["api", "db", "helper"]) expect(contains(svc, rectOf(d, id))).toBe(true);
+    expect(overlappingSiblings(d)).toEqual([]);
+  });
+
+  it("keeps sibling rects disjoint on the reported broken diagram", () => {
+    // Regression: unhinted apps used to render on top of the `pay` service.
+    const d = parse(
+      [
+        "architecture",
+        '  app gw "API Gateway"',
+        '  service orders "Orders" @below(gw) {',
+        '    app oapi "Orders API"',
+        '    database odb "Postgres" @below(oapi)',
+        "  }",
+        '  app f "f"',
+        '  app b "b"',
+        '  service x "x" {',
+        '    app z "z"',
+        "  }",
+        '  service pay "Payments" @rightOf(orders) {',
+        '    app papi "Payments API"',
+        '    queue pq "Charges" @below(papi)',
+        "  }",
+        '  queue bus "Event Bus" @below(orders)',
+        "  gw -> orders : http",
+        "  gw -> pay : http",
+        "  orders -> bus",
+        "  pay -> bus",
+        "  orders -- pay",
+      ].join("\n"),
+    );
+    layoutArchitecture(d);
+    expect(overlappingSiblings(d)).toEqual([]);
+    // the unhinted nodes sit to the right of the hinted structure
+    const payRight = rectOf(d, "pay").x + rectOf(d, "pay").width;
+    for (const id of ["f", "b", "x"]) expect(rectOf(d, id).x).toBeGreaterThanOrEqual(payRight);
+    // ...and the hinted structure itself is untouched
+    expect(rectOf(d, "orders").x).toBeCloseTo(24, 5);
+    expect(rectOf(d, "pay").x).toBeCloseTo(232, 5);
+  });
+
+  it("parks a node whose anchor is not a sibling instead of stacking it at the origin", () => {
+    const d = architecture()
+      .app("outside", "Outside")
+      .app("in1", "In 1")
+      .app("in2", "In 2", { hint: { rightOf: "outside" } }) // not a sibling of in1
+      .container("svc", "Svc", { kind: "service", children: ["in1", "in2"] })
+      .build();
+    layoutArchitecture(d);
+    expect(overlappingSiblings(d)).toEqual([]);
+    const svc = rectOf(d, "svc");
+    expect(contains(svc, rectOf(d, "in1"))).toBe(true);
+    expect(contains(svc, rectOf(d, "in2"))).toBe(true);
   });
 
   it("does not hang on a hint cycle", () => {

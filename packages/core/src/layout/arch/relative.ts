@@ -1,4 +1,5 @@
 import type { PlaceHint } from "../../model/arch.js";
+import { intersects, type Rect } from "../../model/geometry.js";
 
 export interface Placeable {
   id: string;
@@ -16,30 +17,110 @@ export interface ScopeResult {
 /**
  * Resolve a single scope of siblings into local coordinates using relative
  * hints only. X comes from rightOf/leftOf, Y from above/below; the single given
- * relation also aligns the cross axis. A node with no relation defaults to
- * `rightOf` the previous sibling. The result is normalized to origin (0,0).
+ * relation also aligns the cross axis.
+ *
+ * Siblings tied together by hints form one block, solved on its own. A node
+ * with no resolvable hint is its own block, parked `rightOf` the previous one
+ * and centered on it — so it can never land on top of a hinted structure.
+ * Within a block, a node whose slot is already taken slides clear along the
+ * cross axis of the relation that placed it. The result is normalized to
+ * origin (0,0).
  */
 export function layoutScope(items: Placeable[], gap: number): ScopeResult {
   const byId = new Map(items.map((it) => [it.id, it]));
-  const prevOf = new Map<string, string>();
-  for (let i = 1; i < items.length; i++) prevOf.set(items[i]!.id, items[i - 1]!.id);
 
-  const anchorsOf = (it: Placeable): string[] => {
+  /** Anchors that actually resolve to a sibling in this scope. */
+  const anchorIds = (it: Placeable): string[] => {
     const h = it.hint;
     const out: string[] = [];
     const hx = h?.rightOf ?? h?.leftOf;
     const vy = h?.below ?? h?.above;
-    if (hx && byId.has(hx)) out.push(hx);
-    if (vy && byId.has(vy)) out.push(vy);
-    if (out.length === 0) {
-      const p = prevOf.get(it.id);
-      if (p) out.push(p);
-    }
+    if (hx && hx !== it.id && byId.has(hx)) out.push(hx);
+    if (vy && vy !== it.id && byId.has(vy)) out.push(vy);
     return out;
   };
 
-  const order = topoOrder(items, anchorsOf);
   const pos = new Map<string, { x: number; y: number }>();
+  let prev: Rect | undefined;
+  for (const members of buildBlocks(items, anchorIds)) {
+    const local = placeBlock(members, gap, anchorIds);
+    const g = members[0]!.hint?.gap ?? gap;
+    // Blocks occupy strictly increasing, disjoint x-intervals, so nothing from
+    // one block can ever overlap another.
+    const dx = prev ? prev.x + prev.width + g : 0;
+    const dy = prev ? prev.y + (prev.height - local.height) / 2 : 0;
+    for (const it of members) {
+      const p = local.pos.get(it.id)!;
+      pos.set(it.id, { x: p.x + dx, y: p.y + dy });
+    }
+    prev = { x: dx, y: dy, width: local.width, height: local.height };
+  }
+
+  return normalize(items, pos);
+}
+
+/**
+ * Siblings tied together by resolvable hints, as connected components of the
+ * hint graph. Components come in order of first declaration, members in
+ * declaration order. Note an unhinted node that others anchor to still belongs
+ * to their block — only a node nothing references stands alone.
+ */
+function buildBlocks(items: Placeable[], anchorIds: (it: Placeable) => string[]): Placeable[][] {
+  const byId = new Map(items.map((it) => [it.id, it]));
+  const rank = new Map(items.map((it, i) => [it.id, i]));
+  const adj = new Map<string, string[]>(items.map((it) => [it.id, []]));
+  for (const it of items) {
+    for (const a of anchorIds(it)) {
+      adj.get(it.id)!.push(a);
+      adj.get(a)!.push(it.id);
+    }
+  }
+
+  const seen = new Set<string>();
+  const out: Placeable[][] = [];
+  for (const start of items) {
+    if (seen.has(start.id)) continue;
+    seen.add(start.id);
+    const stack = [start.id];
+    const members: Placeable[] = [];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      members.push(byId.get(id)!);
+      for (const n of adj.get(id)!) {
+        if (!seen.has(n)) {
+          seen.add(n);
+          stack.push(n);
+        }
+      }
+    }
+    members.sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+    out.push(members);
+  }
+  return out;
+}
+
+/** Solve one block of hint-connected siblings into local coordinates. */
+function placeBlock(
+  members: Placeable[],
+  gap: number,
+  anchorIds: (it: Placeable) => string[],
+): ScopeResult {
+  const byId = new Map(members.map((it) => [it.id, it]));
+  const prevOf = new Map<string, string>();
+  for (let i = 1; i < members.length; i++) prevOf.set(members[i]!.id, members[i - 1]!.id);
+
+  // Inside a block an unhinted node still follows its predecessor — that is how
+  // the node others anchor to gets a position of its own.
+  const anchorsOf = (it: Placeable): string[] => {
+    const explicit = anchorIds(it);
+    if (explicit.length > 0) return explicit;
+    const p = prevOf.get(it.id);
+    return p ? [p] : [];
+  };
+
+  const order = topoOrder(members, anchorsOf);
+  const pos = new Map<string, { x: number; y: number }>();
+  const placed: Rect[] = [];
 
   for (const id of order) {
     const it = byId.get(id)!;
@@ -90,10 +171,37 @@ export function layoutScope(items: Placeable[], gap: number): ScopeResult {
       }
     }
 
-    pos.set(id, { x, y });
+    // A horizontal relation owns its column, so it keeps x and slides down; a
+    // vertical one owns its row and slides right. The flow keeps flowing right.
+    const rect = slideClear(
+      { x, y, width: it.width, height: it.height },
+      placed,
+      hx ? "down" : "right",
+      g,
+    );
+    pos.set(id, { x: rect.x, y: rect.y });
+    placed.push(rect);
   }
 
-  return normalize(items, pos);
+  return normalize(members, pos);
+}
+
+/**
+ * Move a rect along one axis until it clears everything already placed. Each
+ * step jumps past the far edge of the obstacle it hit, so a given obstacle can
+ * only be hit once and the loop is bounded by `placed.length`.
+ */
+function slideClear(r: Rect, placed: Rect[], dir: "down" | "right", gap: number): Rect {
+  let out = r;
+  for (let guard = 0; guard <= placed.length; guard++) {
+    const hit = placed.find((p) => intersects(out, p));
+    if (!hit) break;
+    out =
+      dir === "down"
+        ? { ...out, y: hit.y + hit.height + gap }
+        : { ...out, x: hit.x + hit.width + gap };
+  }
+  return out;
 }
 
 function alignCoord(anchorPos: number, anchorSize: number, size: number, align: string): number {
