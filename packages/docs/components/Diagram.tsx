@@ -1,33 +1,149 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parseArchitecture, layoutArchitecture, renderArchitecture, DiagramParseError } from "power";
+import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DiagramGrid } from "@/components/DiagramGrid";
 import { cn } from "@/lib/utils";
 
-function toSvg(dsl: string): { svg: string; error: null } | { svg: null; error: string } {
+const MIN_SCALE = 0.2;
+const MAX_SCALE = 4;
+/** Breathing room left around the diagram when fitting it to the viewport. */
+const FIT_MARGIN = 16;
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+interface Rendered {
+  svg: string | null;
+  error: string | null;
+  width: number;
+  height: number;
+}
+
+function render(dsl: string): Rendered {
   try {
     const diagram = parseArchitecture(dsl);
     layoutArchitecture(diagram);
-    return { svg: renderArchitecture(diagram), error: null };
+    const svg = renderArchitecture(diagram);
+    // The core always emits `viewBox="0 0 W H"` — steadier than measuring the DOM
+    // and it keeps the padding knowledge in one place (the renderer).
+    const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg);
+    return { svg, error: null, width: Number(m?.[1] ?? 0), height: Number(m?.[2] ?? 0) };
   } catch (e) {
-    if (e instanceof DiagramParseError) return { svg: null, error: e.message };
-    return { svg: null, error: (e as Error).message };
+    const error = e instanceof DiagramParseError ? e.message : (e as Error).message;
+    return { svg: null, error, width: 0, height: 0 };
   }
 }
 
 export function Diagram({
   dsl,
   interactive = false,
+  grid = true,
+  controls,
   className,
 }: {
   dsl: string;
+  /** Enable pan and zoom. Off by default so doc pages keep scrolling normally. */
   interactive?: boolean;
+  /** Draw the dot grid behind the diagram. */
+  grid?: boolean;
+  /** Show zoom/fit buttons. Defaults to `interactive`. */
+  controls?: boolean;
   className?: string;
 }) {
-  const { svg, error } = useMemo(() => toSvg(dsl), [dsl]);
+  const { svg, error, width, height } = useMemo(() => render(dsl), [dsl]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
+  const surface = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
+  // Once the view has been moved by hand, stop auto-fitting it out from under the user.
+  const touched = useRef(false);
+
+  const fit = useCallback(() => {
+    const el = surface.current;
+    if (!el || !width || !height) return;
+    const cw = el.clientWidth;
+    const ch = el.clientHeight;
+    if (!cw || !ch) return;
+    // Never scale a small diagram up — only shrink what does not fit.
+    const scale = clamp(
+      Math.min((cw - FIT_MARGIN * 2) / width, (ch - FIT_MARGIN * 2) / height),
+      MIN_SCALE,
+      1,
+    );
+    setView({ scale, x: (cw - width * scale) / 2, y: (ch - height * scale) / 2 });
+  }, [width, height]);
+
+  useEffect(() => {
+    if (!interactive) return;
+    const el = surface.current;
+    if (!el) return;
+    if (!touched.current) fit();
+    const ro = new ResizeObserver(() => {
+      if (!touched.current) fit();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [interactive, fit]);
+
+  // React attaches `wheel` at the root as a passive listener, so calling
+  // preventDefault from an onWheel prop is ignored and the page scrolls or zooms
+  // along with the diagram. A native non-passive listener is the only fix.
+  useEffect(() => {
+    if (!interactive) return;
+    const el = surface.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      touched.current = true;
+      // Normalise deltaMode so a line/page-scrolling device does not cross the
+      // whole zoom range in one tick.
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1;
+      const factor = Math.exp((-e.deltaY * unit) / 500);
+      const rect = el.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      setView((v) => {
+        const scale = clamp(v.scale * factor, MIN_SCALE, MAX_SCALE);
+        const k = scale / v.scale;
+        // Keep the diagram point under the cursor pinned to the cursor.
+        return { scale, x: px - (px - v.x) * k, y: py - (py - v.y) * k };
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [interactive]);
+
+  const zoomBy = (factor: number) => {
+    const el = surface.current;
+    const cw = el?.clientWidth ?? 0;
+    const ch = el?.clientHeight ?? 0;
+    touched.current = true;
+    setView((v) => {
+      const scale = clamp(v.scale * factor, MIN_SCALE, MAX_SCALE);
+      const k = scale / v.scale;
+      // Buttons have no cursor to anchor on, so hold the viewport centre still.
+      return { scale, x: cw / 2 - (cw / 2 - v.x) * k, y: ch / 2 - (ch / 2 - v.y) * k };
+    });
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); // otherwise the browser starts selecting text and SVG
+    touched.current = true;
+    drag.current = { x: e.clientX - view.x, y: e.clientY - view.y };
+    // Capture on the surface, not on e.target: the SVG subtree is replaced
+    // wholesale whenever the DSL changes, which would drop the capture mid-drag.
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    setView((v) => ({ ...v, x: e.clientX - d.x, y: e.clientY - d.y }));
+  };
+  const endDrag = () => {
+    drag.current = null;
+  };
 
   if (error) {
     return (
@@ -39,38 +155,27 @@ export function Diagram({
 
   if (!interactive) {
     return (
-      <div
-        className={cn("flex w-full justify-center [&_svg]:h-auto [&_svg]:max-w-full", className)}
-        dangerouslySetInnerHTML={{ __html: svg! }}
-      />
+      <div className={cn("relative flex w-full items-center justify-center", className)}>
+        {grid && <DiagramGrid x={0} y={0} scale={1} />}
+        <div
+          className="relative [&_svg]:h-auto [&_svg]:max-w-full"
+          dangerouslySetInnerHTML={{ __html: svg! }}
+        />
+      </div>
     );
   }
 
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    setView((v) => ({ ...v, scale: Math.min(4, Math.max(0.2, v.scale * factor)) }));
-  };
-  const onPointerDown = (e: React.PointerEvent) => {
-    drag.current = { x: e.clientX - view.x, y: e.clientY - view.y };
-    (e.target as Element).setPointerCapture(e.pointerId);
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
-    setView((v) => ({ ...v, x: e.clientX - drag.current!.x, y: e.clientY - drag.current!.y }));
-  };
-  const onPointerUp = () => {
-    drag.current = null;
-  };
-
   return (
     <div className={cn("relative h-full w-full overflow-hidden", className)}>
+      {grid && <DiagramGrid x={view.x} y={view.y} scale={view.scale} />}
       <div
-        className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
-        onWheel={onWheel}
+        ref={surface}
+        className="relative h-full w-full cursor-grab select-none touch-none active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
       >
         <div
           className="origin-top-left [&_svg]:max-w-none"
@@ -78,14 +183,43 @@ export function Diagram({
           dangerouslySetInnerHTML={{ __html: svg! }}
         />
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        className="absolute bottom-2 right-2"
-        onClick={() => setView({ x: 0, y: 0, scale: 1 })}
-      >
-        Reset
-      </Button>
+      {(controls ?? interactive) && (
+        <div className="absolute bottom-2 right-2 flex items-center gap-1">
+          <span className="mr-1 rounded bg-background/80 px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+            {Math.round(view.scale * 100)}%
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            aria-label="Zoom out"
+            onClick={() => zoomBy(1 / 1.2)}
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            aria-label="Zoom in"
+            onClick={() => zoomBy(1.2)}
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            aria-label="Fit to view"
+            onClick={() => {
+              touched.current = false; // let resizes re-centre again
+              fit();
+            }}
+          >
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
