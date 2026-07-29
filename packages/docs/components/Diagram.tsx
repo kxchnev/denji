@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { parseArchitecture, layoutArchitecture, renderArchitecture, DiagramParseError } from "power";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,13 @@ const MAX_SCALE = 4;
 const FIT_MARGIN = 16;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * The first fit has to land before the browser paints, or the diagram is visible
+ * at the origin for a frame and then jumps to the middle. On the server there is
+ * nothing to lay out, so fall back to useEffect and skip React's warning.
+ */
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 interface Rendered {
   svg: string | null;
@@ -54,6 +61,10 @@ export function Diagram({
 }) {
   const { svg, error, width, height } = useMemo(() => render(dsl), [dsl]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
+  // Until the first measurement the diagram is centred in CSS instead of by
+  // transform, so the markup that ships from the server is already centred and
+  // there is nothing to jump away from.
+  const [fitted, setFitted] = useState(false);
   const surface = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
   // Once the view has been moved by hand, stop auto-fitting it out from under the user.
@@ -72,9 +83,10 @@ export function Diagram({
       1,
     );
     setView({ scale, x: (cw - width * scale) / 2, y: (ch - height * scale) / 2 });
+    setFitted(true);
   }, [width, height]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!interactive) return;
     const el = surface.current;
     if (!el) return;
@@ -167,7 +179,13 @@ export function Diagram({
 
   return (
     <div className={cn("relative h-full w-full overflow-hidden", className)}>
-      {grid && <DiagramGrid x={view.x} y={view.y} scale={view.scale} />}
+      {grid && (
+        <DiagramGrid
+          x={fitted ? view.x : 0}
+          y={fitted ? view.y : 0}
+          scale={fitted ? view.scale : 1}
+        />
+      )}
       <div
         ref={surface}
         className="relative h-full w-full cursor-grab select-none touch-none active:cursor-grabbing"
@@ -178,8 +196,16 @@ export function Diagram({
         onLostPointerCapture={endDrag}
       >
         <div
-          className="origin-top-left [&_svg]:max-w-none"
-          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+          className={
+            fitted
+              ? "origin-top-left [&_svg]:max-w-none"
+              : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 [&_svg]:max-w-none"
+          }
+          style={
+            fitted
+              ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }
+              : undefined
+          }
           dangerouslySetInnerHTML={{ __html: svg! }}
         />
       </div>
