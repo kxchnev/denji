@@ -19,7 +19,14 @@
     "tailwind-merge": "^2.6.0",
     "lucide-react": "^0.471.1",
     "@radix-ui/react-slot": "^1.1.1",
-    "@radix-ui/react-tabs": "^1.1.2"
+    "@radix-ui/react-tabs": "^1.1.2",
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.7",
+    "@lezer/highlight": "^1.2.3",
+    "@lezer/javascript": "^1.5.4"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

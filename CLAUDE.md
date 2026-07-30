@@ -38,6 +38,19 @@ Next.js App Router + Tailwind + shadcn-компоненты. Ядро подкл
 `components/Diagram.tsx` (parse→layout→render→SVG, pan/zoom), `Example.tsx`
 (превью + табы DSL/API), `examples/*` (датасет), `app/**/page.tsx` (страницы).
 
+Подсветка синтаксиса и автокомплит — на CodeMirror 6: `lib/pwr-language.ts`
+(токенайзер `.pwr`, `StreamLanguage`), `lib/ts-language.ts` (обёртка над
+`@lezer/javascript` для API-таба), `lib/pwr-symbols.ts` + `lib/pwr-complete.ts`
+(скан документа и контекстный автокомплит в плейграунде), `lib/editor-theme.ts`
+(общая тема редактора). `components/CodeViewer.tsx` — read-only редактор для
+статичных примеров (`CodeBlock.tsx`), `components/PwrEditor.tsx` — редактируемый
+для `app/playground/page.tsx`. Палитра токенов — CSS-переменные `--tok-*` /
+`--code-*` в `globals.css`, **вне `@layer base`** (Tailwind иначе вычищает эти
+классы, т.к. они не встречаются как литералы в файлах из `content`).
+⚠️ Токенайзер `.pwr` дублирует грамматику ядра — при правках
+`core/src/dsl/arch-parse.ts` синхронно обновляй `lib/pwr-language.ts` и
+`lib/pwr-symbols.ts`.
+
 ## Команды (из корня)
 
 - `npm run build` — собрать ядро (`packages/core/dist`)

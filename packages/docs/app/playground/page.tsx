@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { Diagram } from "@/components/Diagram";
+import { PwrEditor } from "@/components/PwrEditor";
 import { Button } from "@/components/ui/button";
 import { intro, blocks, layout } from "@/examples";
 
@@ -14,13 +15,15 @@ const presets = [
 
 export default function Playground() {
   const [dsl, setDsl] = useState(intro.dsl);
+  const preview = useDeferredValue(dsl);
 
   return (
     <div>
       <h1 className="text-3xl font-bold tracking-tight">Playground</h1>
       <p className="mt-3 text-muted-foreground">
         Edit the DSL on the left and see it render live. Drag to pan, scroll to zoom at the
-        cursor, or use the buttons to zoom and re-centre.
+        cursor, or use the buttons to zoom and re-centre. The editor supports undo (Mod-Z),
+        comment toggling (Mod-/), and autocomplete for shapes, directives, and node ids.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -32,14 +35,13 @@ export default function Playground() {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <textarea
+        <PwrEditor
           value={dsl}
-          onChange={(e) => setDsl(e.target.value)}
-          spellCheck={false}
-          className="h-[70vh] w-full resize-none rounded-lg border bg-zinc-950 p-4 font-mono text-sm text-zinc-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-zinc-900"
+          onChange={setDsl}
+          className="h-[70vh] overflow-hidden rounded-lg border bg-code"
         />
         <div className="h-[70vh] overflow-hidden rounded-lg border bg-card">
-          <Diagram dsl={dsl} interactive />
+          <Diagram dsl={preview} interactive />
         </div>
       </div>
     </div>

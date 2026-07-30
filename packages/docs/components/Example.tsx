@@ -18,10 +18,10 @@ export function Example({ title, description, dsl, api }: ExampleData) {
               <TabsTrigger value="api">API</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="dsl" className="m-0 p-3">
-            <CodeBlock code={dsl} lang="text" />
+          <TabsContent value="dsl" className="m-0">
+            <CodeBlock code={dsl} lang="pwr" />
           </TabsContent>
-          <TabsContent value="api" className="m-0 p-3">
+          <TabsContent value="api" className="m-0">
             <CodeBlock code={api} lang="ts" />
           </TabsContent>
         </Tabs>
