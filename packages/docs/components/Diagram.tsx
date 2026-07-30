@@ -5,6 +5,7 @@ import { parseArchitecture, layoutArchitecture, renderArchitecture, DiagramParse
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiagramGrid } from "@/components/DiagramGrid";
+import { DownloadButton } from "@/components/DownloadButton";
 import { cn } from "@/lib/utils";
 
 const MIN_SCALE = 0.2;
@@ -48,6 +49,7 @@ export function Diagram({
   interactive = false,
   grid = true,
   controls,
+  name,
   className,
 }: {
   dsl: string;
@@ -57,6 +59,8 @@ export function Diagram({
   grid?: boolean;
   /** Show zoom/fit buttons. Defaults to `interactive`. */
   controls?: boolean;
+  /** Base filename (without extension) used when downloading this diagram. */
+  name?: string;
   className?: string;
 }) {
   const { svg, error, width, height } = useMemo(() => render(dsl), [dsl]);
@@ -167,11 +171,20 @@ export function Diagram({
 
   if (!interactive) {
     return (
-      <div className={cn("relative flex w-full items-center justify-center", className)}>
+      <div
+        className={cn("group relative flex w-full items-center justify-center", className)}
+      >
         {grid && <DiagramGrid x={0} y={0} scale={1} />}
         <div
           className="relative [&_svg]:h-auto [&_svg]:max-w-full"
           dangerouslySetInnerHTML={{ __html: svg! }}
+        />
+        <DownloadButton
+          svg={svg!}
+          width={width}
+          height={height}
+          name={name}
+          className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
         />
       </div>
     );
@@ -244,6 +257,7 @@ export function Diagram({
           >
             <Maximize2 className="h-4 w-4" />
           </Button>
+          <DownloadButton svg={svg!} width={width} height={height} name={name} />
         </div>
       )}
     </div>

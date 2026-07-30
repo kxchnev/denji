@@ -4,13 +4,21 @@ import { Diagram } from "@/components/Diagram";
 import { CodeBlock } from "@/components/CodeBlock";
 import type { ExampleData } from "@/examples/types";
 
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function Example({ title, description, dsl, api }: ExampleData) {
   return (
     <section className="my-8">
       <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
       {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
       <Card className="mt-3 overflow-hidden">
-        <Diagram dsl={dsl} className="min-h-40 bg-card p-8" />
+        <Diagram dsl={dsl} name={slugify(title)} className="min-h-40 bg-card p-8" />
         <Tabs defaultValue="dsl" className="border-t">
           <div className="border-b px-3 py-2">
             <TabsList>

@@ -22,8 +22,9 @@ export default function Playground() {
       <h1 className="text-3xl font-bold tracking-tight">Playground</h1>
       <p className="mt-3 text-muted-foreground">
         Edit the DSL on the left and see it render live. Drag to pan, scroll to zoom at the
-        cursor, or use the buttons to zoom and re-centre. The editor supports undo (Mod-Z),
-        comment toggling (Mod-/), and autocomplete for shapes, directives, and node ids.
+        cursor, or use the buttons to zoom and re-centre. Download the diagram as SVG, PNG, or
+        JPEG from the download button. The editor supports undo (Mod-Z), comment toggling
+        (Mod-/), and autocomplete for shapes, directives, and node ids.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
