@@ -1,4 +1,5 @@
 import { StreamLanguage, type StreamParser, type StringStream } from "@codemirror/language";
+import { STYLE_PROPS, normalizePropName, type StylePropSpec } from "power";
 import { pwrCompletions } from "./pwr-complete";
 
 /** Mirrors SHAPE_KINDS / CONTAINER_KINDS in packages/core/src/dsl/arch-parse.ts — case-sensitive. */
@@ -14,10 +15,26 @@ const FIRST_TOKEN = /^\S+/;
 const ID = /^[A-Za-z0-9_]+/;
 /** Trailing `"?` so a half-typed label still reads as a string in the editor. */
 const QUOTED = /^"[^"]*"?/;
-const DIRECTIVE = /^@[A-Za-z]+/;
-const ARG = /^[^)\s]+/;
+/** Style properties are spellable with dashes: `@stroke-width(2)`. */
+const DIRECTIVE = /^@[A-Za-z][A-Za-z-]*/;
+/** A whole argument, spaces and all — `@dash(6 4)` is one value. */
+const ARG = /^[^)]+/;
+/** Mirrors STYLE_OPEN in packages/core/src/dsl/arch-parse.ts. */
+const STYLE_OPEN = /^style\s+[A-Za-z][A-Za-z0-9_-]*\s*\{/;
+const PROP_NAME = /^[A-Za-z][A-Za-z-]*/;
+const PROP_VALUE = /^[^;}]+/;
 
-type Mode = "start" | "id" | "decl" | "arg" | "conn" | "label" | "rest";
+type Mode =
+  | "start"
+  | "id"
+  | "decl"
+  | "arg"
+  | "conn"
+  | "label"
+  | "rest"
+  | "styleHead"
+  | "prop"
+  | "propValue";
 
 interface PwrState {
   /** Position inside the current line — reset on every line. */
@@ -26,6 +43,30 @@ interface PwrState {
   directive: string;
   /** Open `{` count. Survives across lines; used only by `indent`. */
   depth: number;
+  /** Inside a multi-line `style { … }`. Survives lines, like `depth`. */
+  inStyle: boolean;
+  /** Property whose value comes next, inside a style block. */
+  prop: string;
+}
+
+/** Paint a style value by what the core will accept there. */
+function valueRole(spec: StylePropSpec | undefined, raw: string): string | null {
+  if (!spec) return null; // unknown property — the core will error, don't guess
+  const v = raw.trim();
+  switch (spec.kind) {
+    case "color":
+      return "string";
+    case "size":
+    case "unit": {
+      const n = Number(v);
+      const ok = Number.isFinite(n) && n >= 0 && (spec.kind === "size" || n <= 1);
+      return ok ? "number" : "invalid";
+    }
+    case "dash":
+      return /^[0-9.\s,]+$/.test(v) ? "number" : "invalid";
+    case "weight":
+      return "atom";
+  }
 }
 
 /** The core dispatches connections by scanning the whole line for an operator,
@@ -43,12 +84,24 @@ function startOfLine(stream: StringStream, state: PwrState): string | null {
     stream.skipToEnd();
     return "comment";
   }
+  // A style block owns every line up to its own `}` — including one that would
+  // otherwise read as a container close or as a connection (`dash: 6 4`).
+  if (state.inStyle) {
+    state.mode = "prop";
+    return property(stream, state);
+  }
   if (stream.match("}")) {
     state.depth = Math.max(0, state.depth - 1);
     state.mode = "rest";
     return "punctuation";
   }
   const first = (stream.match(FIRST_TOKEN, false) as RegExpMatchArray | null)?.[0] ?? "";
+  // `style x {` opens a block; `style -> db` is a connection between two nodes.
+  if (first === "style" && STYLE_OPEN.test(stream.string.slice(stream.pos))) {
+    stream.match("style");
+    state.mode = "styleHead";
+    return "keyword";
+  }
   if (first === "architecture") {
     stream.match(first);
     // The header can carry diagram-level directives, so keep reading the line.
@@ -82,6 +135,53 @@ function connection(stream: StringStream, state: PwrState): string | null {
   return null;
 }
 
+/** `style <name> {` — the name, then the brace that decides one line or many. */
+function styleHead(stream: StringStream, state: PwrState): string | null {
+  if (stream.match("{")) {
+    stream.eatSpace();
+    // Nothing after the brace means the block continues on the next line.
+    state.inStyle = stream.eol();
+    // Counted in `depth` so the properties inside indent like a container body.
+    if (state.inStyle) state.depth++;
+    state.mode = state.inStyle ? "rest" : "prop";
+    return "punctuation";
+  }
+  const name = stream.match(/^[A-Za-z][A-Za-z0-9_-]*/) as RegExpMatchArray | null;
+  // A name that is a kind is a selector over all of them, so paint it as a type.
+  if (name) return KINDS.has(name[0]) || name[0] === "edge" ? "typeName" : "variableName";
+  stream.next();
+  return null;
+}
+
+/** A `name: value` declaration inside a style block. */
+function property(stream: StringStream, state: PwrState): string | null {
+  if (stream.match("}")) {
+    if (state.inStyle) state.depth = Math.max(0, state.depth - 1);
+    state.inStyle = false;
+    state.mode = "rest";
+    return "punctuation";
+  }
+  if (stream.match(";")) return "punctuation";
+  if (stream.match(":")) {
+    state.mode = "propValue";
+    return "punctuation";
+  }
+  const name = stream.match(PROP_NAME) as RegExpMatchArray | null;
+  if (name) {
+    state.prop = name[0];
+    return STYLE_PROPS[normalizePropName(name[0])] ? "propertyName" : "invalid";
+  }
+  stream.next();
+  return null;
+}
+
+function propertyValue(stream: StringStream, state: PwrState): string | null {
+  state.mode = "prop";
+  const v = stream.match(PROP_VALUE) as RegExpMatchArray | null;
+  if (!v) return null;
+  return valueRole(STYLE_PROPS[normalizePropName(state.prop)], v[0]);
+}
+
 function declaration(stream: StringStream, state: PwrState): string | null {
   if (stream.match(QUOTED)) return "string";
   const d = stream.match(DIRECTIVE) as RegExpMatchArray | null;
@@ -113,8 +213,12 @@ function argument(stream: StringStream, state: PwrState): string | null {
     // The core rejects negatives too, so flag them rather than paint them valid.
     return Number.isFinite(n) && n >= 0 ? "number" : "invalid";
   }
-  if (state.directive === "align") return "atom";
+  if (state.directive === "align" || state.directive === "theme") return "atom";
+  if (state.directive === "style") return "variableName";
   if (RELATIONAL.has(state.directive)) return "variableName";
+  // An inline style property: `@fill(#0f172a)`, `@stroke-width(2)`.
+  const spec = STYLE_PROPS[normalizePropName(state.directive)];
+  if (spec) return valueRole(spec, arg[0]);
   return null; // unknown directive — the core will error, don't guess a colour
 }
 
@@ -128,7 +232,7 @@ export const pwrStreamParser: StreamParser<PwrState> = {
     // (the parser requires `{` to end the line, so `{}` is always wrong).
     closeBrackets: { brackets: ['"'] },
   },
-  startState: () => ({ mode: "start", directive: "", depth: 0 }),
+  startState: () => ({ mode: "start", directive: "", depth: 0, inStyle: false, prop: "" }),
   copyState: (s) => ({ ...s }),
 
   token(stream, state) {
@@ -148,6 +252,12 @@ export const pwrStreamParser: StreamParser<PwrState> = {
         return stream.match(ID) ? "variableName" : null;
       case "decl":
         return declaration(stream, state);
+      case "styleHead":
+        return styleHead(stream, state);
+      case "prop":
+        return property(stream, state);
+      case "propValue":
+        return propertyValue(stream, state);
       case "arg":
         return argument(stream, state);
       case "conn":

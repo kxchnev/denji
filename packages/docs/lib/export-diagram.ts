@@ -17,6 +17,7 @@ async function rasterize(
   width: number,
   height: number,
   format: "png" | "jpeg",
+  matte: string,
 ): Promise<Blob> {
   const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
   try {
@@ -33,8 +34,9 @@ async function rasterize(
     canvas.height = height * SCALE;
     const ctx = canvas.getContext("2d")!;
     if (format === "jpeg") {
-      // JPEG has no alpha channel — flatten onto white instead of black.
-      ctx.fillStyle = "#ffffff";
+      // JPEG has no alpha channel — flatten onto the theme's own surface, or a
+      // dark diagram lands on white.
+      ctx.fillStyle = matte;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
     ctx.scale(SCALE, SCALE);
@@ -58,11 +60,12 @@ export async function downloadDiagram(
   height: number,
   format: ExportFormat,
   filename = "diagram",
+  matte = "#ffffff",
 ): Promise<void> {
   if (format === "svg") {
     triggerDownload(new Blob([svg], { type: "image/svg+xml" }), `${filename}.svg`);
     return;
   }
-  const blob = await rasterize(svg, width, height, format);
+  const blob = await rasterize(svg, width, height, format, matte);
   triggerDownload(blob, `${filename}.${format === "jpeg" ? "jpg" : "png"}`);
 }

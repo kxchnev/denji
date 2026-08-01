@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { parseArchitecture, layoutArchitecture, renderArchitecture, DiagramParseError } from "power";
+import {
+  parseArchitecture,
+  layoutArchitecture,
+  renderArchitecture,
+  resolveTheme,
+  DiagramParseError,
+  type ThemeName,
+} from "power";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiagramGrid } from "@/components/DiagramGrid";
@@ -27,17 +34,29 @@ interface Rendered {
   error: string | null;
   width: number;
   height: number;
+  /** Set when the document names a theme, which no export may override. */
+  pinned?: ThemeName;
 }
 
 function render(dsl: string): Rendered {
   try {
     const diagram = parseArchitecture(dsl);
     layoutArchitecture(diagram);
-    const svg = renderArchitecture(diagram);
+    // On screen the diagram follows the site, whose no-flash script has already
+    // folded the device preference into the `.dark` class on <html>. Matching on
+    // that class means the header toggle moves the diagrams too — through CSS,
+    // with no React state and no re-render. Downloads bake one palette instead.
+    const svg = renderArchitecture(diagram, { themeMode: "selector" });
     // The core always emits `viewBox="0 0 W H"` — steadier than measuring the DOM
     // and it keeps the padding knowledge in one place (the renderer).
     const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg);
-    return { svg, error: null, width: Number(m?.[1] ?? 0), height: Number(m?.[2] ?? 0) };
+    return {
+      svg,
+      error: null,
+      width: Number(m?.[1] ?? 0),
+      height: Number(m?.[2] ?? 0),
+      pinned: diagram.theme,
+    };
   } catch (e) {
     const error = e instanceof DiagramParseError ? e.message : (e as Error).message;
     return { svg: null, error, width: 0, height: 0 };
@@ -63,7 +82,21 @@ export function Diagram({
   name?: string;
   className?: string;
 }) {
-  const { svg, error, width, height } = useMemo(() => render(dsl), [dsl]);
+    const { svg, error, width, height, pinned } = useMemo(() => render(dsl), [dsl]);
+  // An export must not react to anything: it captures the palette the reader is
+  // looking at right now and bakes it in, media query and all removed.
+  const exportSvg = useCallback((): { svg: string; matte: string } => {
+    const dark =
+      pinned === "dark" ||
+      (!pinned && document.documentElement.classList.contains("dark"));
+    const theme = dark ? "dark" : "light";
+    const diagram = parseArchitecture(dsl);
+    layoutArchitecture(diagram);
+    return {
+      svg: renderArchitecture(diagram, { theme, themeMode: "fixed" }),
+      matte: resolveTheme(theme).surface,
+    };
+  }, [dsl, pinned]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   // Until the first measurement the diagram is centred in CSS instead of by
   // transform, so the markup that ships from the server is already centred and
@@ -180,7 +213,7 @@ export function Diagram({
           dangerouslySetInnerHTML={{ __html: svg! }}
         />
         <DownloadButton
-          svg={svg!}
+          exportSvg={exportSvg}
           width={width}
           height={height}
           name={name}
@@ -257,7 +290,7 @@ export function Diagram({
           >
             <Maximize2 className="h-4 w-4" />
           </Button>
-          <DownloadButton svg={svg!} width={width} height={height} name={name} />
+          <DownloadButton exportSvg={exportSvg} width={width} height={height} name={name} />
         </div>
       )}
     </div>

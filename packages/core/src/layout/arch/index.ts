@@ -26,7 +26,8 @@ export interface ArchLayoutOptions {
 
 const DEFAULT_GAP = 40;
 const DEFAULT_PADDING = 24;
-const DEFAULT_HEADER_H = 28;
+/** The renderer draws this band; exported so the two cannot drift apart. */
+export const DEFAULT_HEADER_H = 28;
 const DEFAULT_MARGIN = 24;
 
 interface Local {

@@ -40,8 +40,20 @@ for (const ex of allExamples) {
   try {
     const d = parseArchitecture(ex.dsl);
     layoutArchitecture(d);
-    const svg = renderArchitecture(d);
-    if (!svg.includes("<svg")) throw new Error("no svg produced");
+    // The site renders in `selector`, downloads bake one palette. Both paths,
+    // and both palettes, have to survive every example.
+    for (const opts of [
+      { themeMode: "selector" as const },
+      { theme: "light" as const },
+      { theme: "dark" as const },
+    ]) {
+      const svg = renderArchitecture(d, opts);
+      if (!svg.includes("<svg")) throw new Error("no svg produced");
+      // A var() without a literal fallback renders as nothing wherever custom
+      // properties are unsupported — librsvg in the CLI, for one.
+      const bare = svg.match(/var\(--[a-z0-9-]+\)/g);
+      if (bare) throw new Error(`var() without a fallback: ${bare.join(", ")}`);
+    }
     const bad = overlappingSiblings(d);
     if (bad.length > 0) throw new Error(`overlapping siblings: ${bad.join(", ")}`);
   } catch (e) {

@@ -1,8 +1,17 @@
 export * from "./model/geometry.js";
 export * from "./model/arch.js";
 export * from "./model/arch-builder.js";
+export {
+  STYLE_PROPS,
+  lookupProp,
+  isStyleSlot,
+  normalizePropName,
+  type StylePropSpec,
+  type StyleValueKind,
+} from "./model/style.js";
 export { layoutArchitecture, type ArchLayoutOptions } from "./layout/arch/index.js";
-export { renderArchitecture, type ArchRenderOptions } from "./render/arch-svg.js";
+export { renderArchitecture, type ArchRenderOptions, type ThemeMode } from "./render/arch-svg.js";
+export { lightTheme, darkTheme, themes, resolveTheme, type Theme } from "./render/theme.js";
 export { parseArchitecture } from "./dsl/arch-parse.js";
 export { DiagramParseError } from "./dsl/error.js";
 

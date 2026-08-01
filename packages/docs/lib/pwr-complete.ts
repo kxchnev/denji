@@ -11,6 +11,7 @@ import {
 } from "@codemirror/autocomplete";
 import { EditorView, keymap } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
+import { STYLE_PROPS, lightTheme, normalizePropName, type StylePropSpec } from "power";
 import { scanPwr, uniqueIds, type PwrKind, type PwrScan, type PwrSymbol } from "./pwr-symbols";
 
 /* ------------------------------------------------------------------ sections */
@@ -62,7 +63,71 @@ const KIND_COMPLETIONS: Completion[] = [
  * packages/core/src/dsl/arch-parse.ts. Placement hints belong to a node;
  * spacing settings belong to the scope a line opens — containers are both.
  */
-type DirectiveCtx = "shape" | "container" | "diagram";
+type DirectiveCtx = "shape" | "container" | "diagram" | "connection";
+
+/** `strokeWidth` → `stroke-width`: how a property reads inside a style block. */
+function displayProp(spec: StylePropSpec): string {
+  return spec.key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+}
+
+/** Property names a block accepts; a type selector only offers what applies. */
+function stylePropOptions(slot: string | undefined): Completion[] {
+  return Object.values(STYLE_PROPS)
+    .filter((spec) => !slot || (spec.slots as readonly string[]).includes(slot))
+    .map((spec, i) => ({
+      label: displayProp(spec),
+      type: "property",
+      detail: spec.kind,
+      info: spec.detail,
+      apply: `${displayProp(spec)}: `,
+      boost: 50 - i,
+    }));
+}
+
+/**
+ * Values worth suggesting for one property. Colours come from the light theme
+ * so the palette on offer is the one the diagram already uses.
+ */
+function styleValueOptions(spec: StylePropSpec | undefined): Completion[] {
+  if (!spec) return [];
+  switch (spec.kind) {
+    case "color": {
+      const seen = new Map<string, string>();
+      for (const [slot, props] of Object.entries(lightTheme.slots)) {
+        for (const [key, v] of Object.entries(props)) {
+          if (typeof v === "string" && v.startsWith("#") && !seen.has(v)) {
+            seen.set(v, `${slot} ${key}`);
+          }
+        }
+      }
+      return [
+        ...[...seen].map(([v, where], i) => ({
+          label: v,
+          type: "constant",
+          detail: where,
+          boost: 40 - i,
+        })),
+        { label: "none", type: "keyword", detail: "no paint", boost: -10 },
+        { label: "transparent", type: "keyword", detail: "see-through", boost: -20 },
+      ];
+    }
+    case "size":
+      return ["0", "1", "1.5", "2", "3"].map((v, i) => ({ label: v, type: "constant", boost: 30 - i }));
+    case "unit":
+      return ["0.25", "0.5", "0.75", "1"].map((v, i) => ({ label: v, type: "constant", boost: 30 - i }));
+    case "dash":
+      return ["2 2", "6 4", "1 4"].map((v, i) => ({ label: v, type: "constant", boost: 30 - i }));
+    case "weight":
+      return ["normal", "500", "600", "bold"].map((v, i) => ({ label: v, type: "enum", boost: 30 - i }));
+  }
+}
+
+const THEME_NAMES: Completion[] = ["light", "dark"].map((v, i) => ({
+  label: v,
+  type: "enum",
+  detail: "theme",
+  boost: 30 - i,
+}));
 
 const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: DirectiveCtx[] }> = [
   {
@@ -131,6 +196,33 @@ const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: Direct
     info: "Whitespace around the whole drawing. Defaults to 24.",
     in: ["diagram"],
   },
+  {
+    name: "theme",
+    detail: "(light|dark)",
+    info: "Pin the diagram to one palette. Without it, the diagram follows the page.",
+    in: ["diagram"],
+  },
+  {
+    name: "style",
+    detail: "(name)",
+    info: "Attach a style declared by a `style` block. Repeat it to stack several.",
+    in: ["shape", "container", "connection"],
+  },
+  // One directive per style property, offered only where the core will accept
+  // it — `@radius` is meaningless on a connection, `@header-fill` on a shape.
+  ...Object.values(STYLE_PROPS).map((spec) => {
+    const applies = (slots: string[]) => slots.some((s) => (spec.slots as readonly string[]).includes(s));
+    const where: DirectiveCtx[] = [];
+    if (applies(["app", "database", "queue", "rect"])) where.push("shape");
+    if (applies(["service", "group"])) where.push("container");
+    if (applies(["edge"])) where.push("connection");
+    return {
+      name: displayProp(spec),
+      detail: `(${spec.kind})`,
+      info: `${spec.detail}. Beats any named style on this element.`,
+      in: where,
+    };
+  }),
 ];
 
 /**
@@ -142,6 +234,7 @@ const DIRECTIVE_COMPLETIONS: Record<DirectiveCtx, Completion[]> = {
   shape: [],
   container: [],
   diagram: [],
+  connection: [],
 };
 for (const [i, d] of DIRECTIVES.entries()) {
   const completion = snippetCompletion(`@${d.name}(\${})`, {
@@ -260,8 +353,17 @@ function anchorOptions(scan: PwrScan): Completion[] {
     );
 }
 
+const STYLE_SNIPPET = snippetCompletion("style ${name} {\n\t${}\n}", {
+  label: "style",
+  type: "keyword",
+  detail: "reusable style",
+  info: "Declares a style. Name it after a kind (`app`, `edge`, …) to restyle all of them, or give it your own name and attach it with `@style(name)`.",
+  section: DECLARE,
+  boost: 58,
+});
+
 function lineStartOptions(scan: PwrScan, lineNo: number): Completion[] {
-  const out: Completion[] = [...KIND_COMPLETIONS];
+  const out: Completion[] = [...KIND_COMPLETIONS, STYLE_SNIPPET];
   if (!scan.hasHeader && (scan.firstContentLine === 0 || lineNo <= scan.firstContentLine)) {
     out.push(HEADER);
   }
@@ -309,20 +411,25 @@ function result(options: readonly Completion[], from: number): CompletionResult 
   return { from, options, validFor: IDENT };
 }
 
-const IN_ARGS = /@([A-Za-z]+)\(([^)]*)$/;
-const AT_SIGN = /@([A-Za-z]*)$/;
+const IN_ARGS = /@([A-Za-z][A-Za-z-]*)\(([^)]*)$/;
+const AT_SIGN = /@([A-Za-z-]*)$/;
 const DECL_HEAD = /^\s*(app|database|queue|rect|service|group)\s+([A-Za-z0-9_]+)(.*)$/;
 const CONNECTION = /^\s*([A-Za-z0-9_]+)\s*(<->|-\.->|-\.-|->|<-|--)\s*([A-Za-z0-9_]*)(\s*)$/;
 const OP_POSITION = /^\s*([A-Za-z0-9_]+)\s*([<>.-]*)$/;
 const HEADER_LINE = /^\s*architecture\b/;
 const RESERVED = new Set(["architecture", "app", "database", "queue", "rect", "service", "group"]);
+const STYLE_SLOTS = ["app", "database", "queue", "rect", "service", "group", "edge"];
 
 /** Which set of directives the line being typed accepts. */
 function directiveCtx(masked: string): DirectiveCtx | null {
   if (HEADER_LINE.test(masked)) return "diagram";
   const kind = DECL_HEAD.exec(masked)?.[1];
-  if (!kind) return null;
-  return kind === "service" || kind === "group" ? "container" : "shape";
+  if (kind) return kind === "service" || kind === "group" ? "container" : "shape";
+  // `a -> b @…` — directives sit before the colon, so the label never gets here.
+  if (/^\s*[A-Za-z0-9_]+\s*(<->|-\.->|-\.-|->|<-|--)\s*[A-Za-z0-9_]+/.test(masked)) {
+    return "connection";
+  }
+  return null;
 }
 
 export const pwrCompletions: CompletionSource = (ctx) => {
@@ -334,10 +441,28 @@ export const pwrCompletions: CompletionSource = (ctx) => {
 
   const { masked, inString } = maskStrings(before);
   if (inString) return null; // inside a "label"
+
+  const scan = scanPwr(ctx.state.doc, line.number);
+
+  // 0. Inside a `style { … }` block: property names, then values. Checked first
+  // because every line here is `name: value`, which the connection-label guard
+  // below would otherwise swallow.
+  if (scan.inStyleBlock) {
+    const decl = /([A-Za-z][A-Za-z-]*)\s*:\s*([^;]*)$/.exec(masked);
+    if (decl) {
+      const spec = STYLE_PROPS[normalizePropName(decl[1]!)];
+      const typed = decl[2]!;
+      return typed.trim() === "" || ctx.explicit
+        ? { from: ctx.pos - typed.length, options: styleValueOptions(spec), validFor: /^[^;}]*$/ }
+        : null;
+    }
+    const partial = /[A-Za-z-]*$/.exec(before)![0];
+    return { from: ctx.pos - partial.length, options: stylePropOptions(scan.styleSlot) };
+  }
+
   if (masked.includes(":")) return null; // inside a connection label
   if (/\}\s*$/.test(masked)) return null; // `}` stands alone and is already complete
 
-  const scan = scanPwr(ctx.state.doc, line.number);
   const word = /[A-Za-z0-9_]*$/.exec(before)![0];
   const wordFrom = ctx.pos - word.length;
 
@@ -355,6 +480,22 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     }
     if (name === "rightof" || name === "leftof" || name === "above" || name === "below") {
       return result(anchorOptions(scan), wordFrom);
+    }
+    if (name === "theme") return result(THEME_NAMES, wordFrom);
+    if (name === "style") {
+      const options = scan.styles.map((n, i) => ({
+        label: n,
+        type: STYLE_SLOTS.includes(n) ? "class" : "variable",
+        detail: STYLE_SLOTS.includes(n) ? `${n} selector` : "style",
+        boost: 40 - i,
+      }));
+      return result(options, wordFrom);
+    }
+    const spec = STYLE_PROPS[normalizePropName(name)];
+    if (spec) {
+      return arg.trim() === "" || ctx.explicit
+        ? { from: ctx.pos - arg.length, options: styleValueOptions(spec), validFor: /^[^)]*$/ }
+        : null;
     }
     return null; // unknown directive: nothing useful to say
   }

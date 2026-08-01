@@ -24,6 +24,7 @@ export const nav: NavSection[] = [
       { title: "Blocks", href: "/blocks" },
       { title: "Layout", href: "/layout" },
       { title: "Spacing", href: "/spacing" },
+      { title: "Styling", href: "/styling" },
     ],
   },
 ];

@@ -29,7 +29,17 @@ export interface PwrScan {
   firstContentLine: number;
   /** Id declared on the cursor line, if any — a node cannot anchor itself. */
   selfId?: string;
+  /** Names declared by `style <name> { … }`, in source order. */
+  styles: string[];
+  /** True when the cursor sits inside a multi-line style block. */
+  inStyleBlock: boolean;
+  /** The kind a type-selector block targets, when the cursor is inside one. */
+  styleSlot?: string;
 }
+
+/** Mirrors STYLE_OPEN in packages/core/src/dsl/arch-parse.ts. */
+const STYLE_OPEN = /^style\s+([A-Za-z][A-Za-z0-9_-]*)\s*\{(.*)$/;
+const SLOTS = new Set(["app", "database", "queue", "rect", "service", "group", "edge"]);
 
 /**
  * The parser's shape/container regexes truncated after the optional label: the
@@ -51,6 +61,11 @@ export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
   let hasHeader = false;
   let firstContentLine = 0;
   let selfId: string | undefined;
+  const styles: string[] = [];
+  /** Name of the open style block, or null. Its `}` must not pop `open`. */
+  let styleBlock: string | null = null;
+  let inStyleBlock = false;
+  let styleSlot: string | undefined;
 
   for (let n = 1; n <= doc.lines; n++) {
     const l = doc.line(n);
@@ -62,10 +77,25 @@ export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
     if (n === cursorLine) {
       scope = open[open.length - 1] ?? "";
       depth = open.length;
+      inStyleBlock = styleBlock !== null;
+      styleSlot = styleBlock && SLOTS.has(styleBlock) ? styleBlock : undefined;
     }
 
     if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("%%")) continue;
     if (firstContentLine === 0) firstContentLine = n;
+
+    // A style block owns its lines, and — crucially — its closing brace. Popping
+    // `open` here would corrupt the scope of everything after it.
+    if (styleBlock !== null) {
+      if (trimmed === "}") styleBlock = null;
+      continue;
+    }
+    const style = STYLE_OPEN.exec(trimmed);
+    if (style) {
+      styles.push(style[1]!);
+      if (!style[2]!.trim().endsWith("}")) styleBlock = style[1]!;
+      continue;
+    }
     // The header may carry diagram-level directives after the keyword.
     if (/^architecture\b/.test(trimmed)) {
       hasHeader = true;
@@ -95,7 +125,17 @@ export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
     if ((kind === "service" || kind === "group") && /\{\s*$/.test(trimmed)) open.push(id);
   }
 
-  return { symbols, scope, depth, hasHeader, firstContentLine, selfId };
+  return {
+    symbols,
+    scope,
+    depth,
+    hasHeader,
+    firstContentLine,
+    selfId,
+    styles,
+    inStyleBlock,
+    styleSlot,
+  };
 }
 
 /** First declaration wins, so a duplicated id shows up once in the popup. */

@@ -7,6 +7,70 @@ export type ShapeKind = "app" | "database" | "queue" | "rect";
 export type ContainerKind = "service" | "group";
 
 /**
+ * Everything a theme can paint, and everything a `style <slot> { … }` block can
+ * select. Shapes and containers are addressed by their own kind; every
+ * connection shares the single `edge` slot.
+ */
+export type StyleSlot = ShapeKind | ContainerKind | "edge";
+
+export const STYLE_SLOTS: readonly StyleSlot[] = [
+  "app",
+  "database",
+  "queue",
+  "rect",
+  "service",
+  "group",
+  "edge",
+];
+
+/**
+ * "CSS на минималках": the small, fixed set of visual properties a theme, a
+ * named style or an inline directive can set. Deliberately not extensible —
+ * every property here has a defined meaning on at least one slot, and the
+ * renderer knows how to paint all of them.
+ *
+ * `fontSize` is absent on purpose: `measure.ts` sizes shapes from a fixed
+ * `FONT_SIZE`, so text size is an input to *layout*, not to rendering.
+ */
+export interface StyleProps {
+  /** Body fill. On `edge`, the background of the label chip. */
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  /** Label colour. On `service`, the body has no label — use `headerText`. */
+  text?: string;
+  /** Corner radius. Ignored by the cylinder shapes (`database`, `queue`). */
+  radius?: number;
+  /** `stroke-dasharray` pattern, e.g. `"6 4"`. */
+  dash?: string;
+  opacity?: number;
+  fontWeight?: string;
+  /** `service` only: the title band. */
+  headerFill?: string;
+  /** `service` only: the title text. */
+  headerText?: string;
+}
+
+/**
+ * Named styles declared in one place and referenced by many elements. A key
+ * that happens to be a {@link StyleSlot} acts as a selector over every element
+ * of that kind instead of as a name. Insertion order is the cascade order:
+ * when two styles set the same property, the later-declared one wins.
+ */
+export type StyleSheet = Record<string, StyleProps>;
+
+/** The two built-in themes. */
+export type ThemeName = "light" | "dark";
+
+/** Style attachments shared by shapes, containers and connections. */
+export interface Styled {
+  /** Names of styles from the diagram's stylesheet, applied in declared order. */
+  styleRefs?: string[];
+  /** Properties written directly on this element; they beat every named style. */
+  styleProps?: StyleProps;
+}
+
+/**
  * Relative-only placement. There are no absolute coordinates — a node is
  * positioned against a sibling. One horizontal relation (rightOf/leftOf) sets
  * X, one vertical relation (above/below) sets Y; the single given relation also
@@ -33,7 +97,7 @@ export interface Spacing {
   y?: number;
 }
 
-export interface Shape {
+export interface Shape extends Styled {
   type: "shape";
   id: string;
   label: string;
@@ -43,7 +107,7 @@ export interface Shape {
   rect?: Rect;
 }
 
-export interface Container {
+export interface Container extends Styled {
   type: "container";
   id: string;
   label: string;
@@ -60,7 +124,7 @@ export interface Container {
 
 export type ArchNode = Shape | Container;
 
-export interface Connection {
+export interface Connection extends Styled {
   from: string;
   to: string;
   label?: string;
@@ -81,4 +145,8 @@ export interface ArchDiagram {
   spacing?: Spacing;
   /** Outer margin around the whole drawing. */
   margin?: number;
+  /** Built-in theme the document asks for; beats the renderer's option. */
+  theme?: ThemeName;
+  /** Named styles and per-kind selectors, in declaration order. */
+  styles?: StyleSheet;
 }

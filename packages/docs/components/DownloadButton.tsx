@@ -13,13 +13,17 @@ const FORMATS: { value: ExportFormat; label: string }[] = [
 ];
 
 export function DownloadButton({
-  svg,
+  exportSvg,
   width,
   height,
   name = "diagram",
   className,
 }: {
-  svg: string;
+  /**
+   * Renders the diagram with one palette baked in, plus the opaque backdrop
+   * JPEG needs. Called at click time so the file matches what is on screen.
+   */
+  exportSvg: () => { svg: string; matte: string };
   width: number;
   height: number;
   name?: string;
@@ -56,7 +60,8 @@ export function DownloadButton({
               className="px-3 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
               onClick={() => {
                 setOpen(false);
-                void downloadDiagram(svg, width, height, f.value, name);
+                const { svg, matte } = exportSvg();
+                void downloadDiagram(svg, width, height, f.value, name, matte);
               }}
             >
               {f.label}

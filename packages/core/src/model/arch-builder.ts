@@ -8,13 +8,18 @@ import type {
   Shape,
   ShapeKind,
   Spacing,
+  StyleProps,
+  StyleSheet,
+  Styled,
+  ThemeName,
 } from "./arch.js";
+import { isStyleSlot } from "./style.js";
 
-export interface ShapeOptions {
+export interface ShapeOptions extends Styled {
   hint?: PlaceHint;
 }
 
-export interface ContainerOptions {
+export interface ContainerOptions extends Styled {
   kind?: ContainerKind;
   children?: string[];
   hint?: PlaceHint;
@@ -27,7 +32,7 @@ export interface ContainerOptions {
 /** Connection direction: which ends get an arrowhead. */
 export type Dir = "to" | "from" | "none" | "both";
 
-export interface ConnectOptions {
+export interface ConnectOptions extends Styled {
   label?: string;
   dir?: Dir;
   style?: "solid" | "dashed";
@@ -48,10 +53,21 @@ export class ArchitectureBuilder {
   private readonly connections: Connection[] = [];
   private diagramSpacing?: Spacing;
   private diagramMargin?: number;
+  private diagramTheme?: ThemeName;
+  /** Insertion order is the cascade order, so a plain object is the right shape. */
+  private readonly stylesheet: StyleSheet = {};
 
   private addShape(id: string, kind: ShapeKind, label: string | undefined, opts: ShapeOptions): this {
     if (this.nodes.has(id)) throw new Error(`Duplicate node id: "${id}"`);
-    const shape: Shape = { type: "shape", id, label: label ?? id, kind, hint: opts.hint };
+    const shape: Shape = {
+      type: "shape",
+      id,
+      label: label ?? id,
+      kind,
+      hint: opts.hint,
+      styleRefs: opts.styleRefs,
+      styleProps: opts.styleProps,
+    };
     this.nodes.set(id, shape);
     return this;
   }
@@ -80,8 +96,28 @@ export class ArchitectureBuilder {
       hint: opts.hint,
       spacing: opts.spacing,
       padding: opts.padding,
+      styleRefs: opts.styleRefs,
+      styleProps: opts.styleProps,
     };
     this.nodes.set(id, container);
+    return this;
+  }
+
+  /** Pick one of the built-in themes; the document beats the render option. */
+  theme(name: ThemeName): this {
+    this.diagramTheme = name;
+    return this;
+  }
+
+  /**
+   * Declare a reusable style. A name that is a {@link StyleSlot} (`app`,
+   * `edge`, …) acts as a selector over every element of that kind instead.
+   */
+  defineStyle(name: string, props: StyleProps): this {
+    if (Object.prototype.hasOwnProperty.call(this.stylesheet, name)) {
+      throw new Error(`Duplicate style: "${name}"`);
+    }
+    this.stylesheet[name] = props;
     return this;
   }
 
@@ -114,6 +150,8 @@ export class ArchitectureBuilder {
       fromArrow: dir === "from" || dir === "both",
       toArrow: dir === "to" || dir === "both",
       style: opts.style ?? "solid",
+      styleRefs: opts.styleRefs,
+      styleProps: opts.styleProps,
     });
     return this;
   }
@@ -143,12 +181,30 @@ export class ArchitectureBuilder {
 
     assertNoNestingCycle(this.nodes, parentOf);
 
+    // Every @style(name) resolves. A slot name always does — it is a selector
+    // and applies whether or not anyone declared a block for it.
+    const styled: Array<{ what: string; refs?: string[] }> = [
+      ...[...this.nodes.values()].map((n) => ({ what: `Node "${n.id}"`, refs: n.styleRefs })),
+      ...this.connections.map((c) => ({ what: `Connection ${c.from}->${c.to}`, refs: c.styleRefs })),
+    ];
+    for (const { what, refs } of styled) {
+      for (const ref of refs ?? []) {
+        if (!Object.prototype.hasOwnProperty.call(this.stylesheet, ref) && !isStyleSlot(ref)) {
+          throw new Error(`${what} references unknown style: "${ref}"`);
+        }
+      }
+    }
+
+    const styles = Object.keys(this.stylesheet).length > 0 ? this.stylesheet : undefined;
+
     return {
       kind: "architecture",
       nodes: [...this.nodes.values()],
       connections: this.connections,
       spacing: this.diagramSpacing,
       margin: this.diagramMargin,
+      theme: this.diagramTheme,
+      styles,
     };
   }
 }
