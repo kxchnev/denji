@@ -18,6 +18,14 @@ export const styling: ExampleData[] = [
     api: `architecture()\n  .defineStyle("database", { fill: "#ecfeff", stroke: "#0891b2", text: "#164e63" })\n  .app("api", "API")\n  .database("one", "Orders", { hint: { below: "api" } })\n  .database("two", "Billing", { hint: { rightOf: "one" } })\n  .build();`,
   },
   {
+    id: "size",
+    title: "Size",
+    description:
+      "A box sizes itself to its label until you say otherwise. `width` and `height` are style properties like any other, so one selector resizes every element of a kind, and `@width(200)` overrides a single one. On a shape the size is exact; on a container it is a floor — it still grows to hold its children. These two are the only properties here that change the layout.",
+    dsl: `architecture\n  style app {\n    width: 150\n    height: 64\n  }\n  app a "Every app"\n  app b "the same" @rightOf(a)\n  database c "Untouched" @below(a)\n  rect d "One-off" @rightOf(c) @width(200) @height(40)`,
+    api: `architecture()\n  .defineStyle("app", { width: 150, height: 64 })\n  .app("a", "Every app")\n  .app("b", "the same", { hint: { rightOf: "a" } })\n  .database("c", "Untouched", { hint: { below: "a" } })\n  .rect("d", "One-off", {\n    hint: { rightOf: "c" },\n    styleProps: { width: 200, height: 40 },\n  })\n  .build();`,
+  },
+  {
     id: "named",
     title: "Reusable styles",
     description:
@@ -48,14 +56,6 @@ export const styling: ExampleData[] = [
       "Connections use the `edge` slot. Directives go *before* the `:` — a label runs to the end of the line. `fill` paints the label chip, and the arrowhead follows the stroke.",
     dsl: `architecture\n  style critical {\n    stroke: #dc2626\n    stroke-width: 2.5\n  }\n  app a "Client"\n  app b "Server" @rightOf(a) @gap(120)\n  app c "Cache" @below(b)\n  a -> b @style(critical) : login\n  b -> c @stroke(#0891b2) @dash(3 3)`,
     api: `architecture()\n  .defineStyle("critical", { stroke: "#dc2626", strokeWidth: 2.5 })\n  .app("a", "Client")\n  .app("b", "Server", { hint: { rightOf: "a", gap: 120 } })\n  .app("c", "Cache", { hint: { below: "b" } })\n  .connect("a", "b", { label: "login", styleRefs: ["critical"] })\n  .connect("b", "c", { styleProps: { stroke: "#0891b2", dash: "3 3" } })\n  .build();`,
-  },
-  {
-    id: "size",
-    title: "Size",
-    description:
-      "`width` and `height` are style properties like any other, so one selector resizes every element of a kind. On a shape the size is exact; on a container it is a floor — it still grows to hold its children.",
-    dsl: `architecture\n  style app {\n    width: 150\n    height: 64\n  }\n  app a "Every app"\n  app b "the same" @rightOf(a)\n  database c "Untouched" @below(a)\n  rect d "One-off" @rightOf(c) @width(200) @height(40)`,
-    api: `architecture()\n  .defineStyle("app", { width: 150, height: 64 })\n  .app("a", "Every app")\n  .app("b", "the same", { hint: { rightOf: "a" } })\n  .database("c", "Untouched", { hint: { below: "a" } })\n  .rect("d", "One-off", {\n    hint: { rightOf: "c" },\n    styleProps: { width: 200, height: 40 },\n  })\n  .build();`,
   },
   {
     id: "cascade",
