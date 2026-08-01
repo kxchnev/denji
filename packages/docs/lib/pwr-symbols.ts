@@ -31,14 +31,18 @@ export interface PwrScan {
   selfId?: string;
   /** Names declared by `style <name> { … }`, in source order. */
   styles: string[];
+  /** Names declared by `icon <name> { … }`, in source order. */
+  icons: string[];
+  /** The kind of declaration block the cursor sits in, if any. */
+  block?: "style" | "icon";
   /** True when the cursor sits inside a multi-line style block. */
   inStyleBlock: boolean;
   /** The kind a type-selector block targets, when the cursor is inside one. */
   styleSlot?: string;
 }
 
-/** Mirrors STYLE_OPEN in packages/core/src/dsl/arch-parse.ts. */
-const STYLE_OPEN = /^style\s+([A-Za-z][A-Za-z0-9_-]*)\s*\{(.*)$/;
+/** Mirrors BLOCK_OPEN in packages/core/src/dsl/arch-parse.ts. */
+const BLOCK_OPEN = /^(style|icon)\s+([A-Za-z][A-Za-z0-9_-]*)\s*\{(.*)$/;
 const SLOTS = new Set(["app", "database", "queue", "rect", "service", "group", "edge"]);
 
 /**
@@ -62,8 +66,10 @@ export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
   let firstContentLine = 0;
   let selfId: string | undefined;
   const styles: string[] = [];
-  /** Name of the open style block, or null. Its `}` must not pop `open`. */
-  let styleBlock: string | null = null;
+  const icons: string[] = [];
+  /** The open declaration block, or null. Its `}` must not pop `open`. */
+  let declBlock: { kind: "style" | "icon"; name: string } | null = null;
+  let block: "style" | "icon" | undefined;
   let inStyleBlock = false;
   let styleSlot: string | undefined;
 
@@ -77,23 +83,27 @@ export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
     if (n === cursorLine) {
       scope = open[open.length - 1] ?? "";
       depth = open.length;
-      inStyleBlock = styleBlock !== null;
-      styleSlot = styleBlock && SLOTS.has(styleBlock) ? styleBlock : undefined;
+      block = declBlock?.kind;
+      inStyleBlock = declBlock?.kind === "style";
+      styleSlot =
+        declBlock?.kind === "style" && SLOTS.has(declBlock.name) ? declBlock.name : undefined;
     }
 
     if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("%%")) continue;
     if (firstContentLine === 0) firstContentLine = n;
 
-    // A style block owns its lines, and — crucially — its closing brace. Popping
-    // `open` here would corrupt the scope of everything after it.
-    if (styleBlock !== null) {
-      if (trimmed === "}") styleBlock = null;
+    // A declaration block owns its lines, and — crucially — its closing brace.
+    // Popping `open` here would corrupt the scope of everything after it.
+    if (declBlock !== null) {
+      if (trimmed === "}") declBlock = null;
       continue;
     }
-    const style = STYLE_OPEN.exec(trimmed);
-    if (style) {
-      styles.push(style[1]!);
-      if (!style[2]!.trim().endsWith("}")) styleBlock = style[1]!;
+    const opening = BLOCK_OPEN.exec(trimmed);
+    if (opening) {
+      const kind = opening[1] as "style" | "icon";
+      const name = opening[2]!;
+      (kind === "style" ? styles : icons).push(name);
+      if (!opening[3]!.trim().endsWith("}")) declBlock = { kind, name };
       continue;
     }
     // The header may carry diagram-level directives after the keyword.
@@ -133,6 +143,8 @@ export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
     firstContentLine,
     selfId,
     styles,
+    icons,
+    block,
     inStyleBlock,
     styleSlot,
   };

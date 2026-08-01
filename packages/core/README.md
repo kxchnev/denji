@@ -67,6 +67,7 @@ npx tsx src/cli.ts render diagram.pwr -o diagram.svg
   диаграммы: `architecture @spacing(60) @margin(40) @theme(dark)`.
 - **Стили:** `style <имя> {` … `}` (или в одну строку через `;`) — см. раздел
   «Стили и темы».
+- **Иконки:** `icon <имя> {` … `}` — своя иконка, см. раздел «Иконки».
 - **Фигуры:** `<kind> <id> "label" [@hints]`, где kind ∈ `app` · `database` ·
   `queue` · `rect`.
 - **Контейнеры:** `service|group <id> "label" [@hints] {` … дети … `}` —
@@ -79,6 +80,7 @@ npx tsx src/cli.ts render diagram.pwr -o diagram.svg
 - **@-настройки** расстояний (на `architecture` или контейнере):
   `@spacing(n)` · `@spacingX(n)` · `@spacingY(n)` · `@padding(n)` (только
   контейнер) · `@margin(n)` (только `architecture`).
+- **@-иконки** (на фигуре или контейнере): `@icon(имя)`.
 - **@-стили** (на фигуре, контейнере или связи): `@style(имя)` и любое свойство
   из таблицы ниже, например `@fill(#0f172a)`. На связи директивы пишутся **до**
   двоеточия: `a -> b @style(hot) : http` — метка забирает всё до конца строки.
@@ -179,6 +181,7 @@ architecture @spacingX(120) @spacingY(16) @margin(40)
 | `dash` | числа, напр. `6 4` | всё; у `edge` — только для `-.->` и `-.-` |
 | `opacity` | 0..1 | всё |
 | `font-weight` | `normal` · `bold` · 100..900 | подписи |
+| `icon-color` | цвет | фигуры и контейнеры — заглушить фирменный цвет иконки |
 | `header-fill` / `header-text` | цвет | только `service` |
 
 Имя пишется как угодно: `stroke-width`, `strokeWidth` и `strokewidth` — одно и
@@ -236,6 +239,70 @@ Fallback обязателен, потому что librsvg (растр в CLI) �
 `idPrefix`), чтобы две диаграммы на одной странице не делили `url(#…)` и
 переменные.
 
+## Иконки
+
+`@icon(имя)` рисует фирменный знак перед подписью — в цвете бренда. Если подпись
+пустая, остаётся одна иконка, и фигура ужимается под неё. На контейнере знак
+встаёт в полосу заголовка. Иконка меняет только ширину фигуры, на остальную
+раскладку не влияет.
+
+```
+architecture
+  app api "Orders API" @icon(dotnet)
+  database db "Postgres" @below(api) @icon(pg)
+  queue bus "" @below(db) @icon(kafka)
+  service svc "Payments" @rightOf(api) @icon(openjdk) { app pay "API" }
+```
+
+Встроено ~60 знаков под слагами [Simple Icons](https://simpleicons.org) плюс
+короткие синонимы (`pg`, `k8s`, `java`, `node`, `gcp`, …). Полный список — на
+странице Icons в доке или в `ICON_NAMES`. Для брендов, чей цвет тонет на тёмном
+фоне (`github`, `openjdk`, `vercel`), заготовлен светлый вариант, и он
+подставляется вместе с тёмной темой.
+
+`@icon-color(...)` (он же свойство стиля `icon-color`) перекрашивает знак в один
+цвет — удобно, когда логотипов на схеме много и они спорят друг с другом.
+
+### Свои иконки
+
+Иконка — это **данные пути**, а не файл `.svg`: содержимое атрибута `d`.
+Объявляется блоком, тем же синтаксисом, что и `style`:
+
+```
+architecture
+
+icon acme {
+  path: M12 2 L22 20 L2 20 Z
+  color: #ff6600
+  dark-color: #ffa366     # необязательно
+  view-box: 0 0 24 24     # необязательно
+}
+
+  app a "Acme" @icon(acme)
+```
+
+Блок с именем встроенного знака перекрывает его. `path` проверяется строгим
+allowlist-ом: туда попадают только команды пути и числа — содержимое уходит в
+разметку, где экранирование не спасает.
+
+Любую из ~3400 иконок Simple Icons можно добавить тремя способами:
+
+```bash
+power icon vercel          # печатает готовый блок для вставки в .pwr
+```
+
+```ts
+import { fromSimpleIcon } from "power";
+import { siVercel } from "simple-icons";
+architecture().defineIcon("vercel", fromSimpleIcon(siVercel));
+```
+
+…или скопировать путь и hex прямо с simpleicons.org в блок `icon`.
+
+> Знаки взяты из Simple Icons (CC0), но сами логотипы остаются товарными знаками
+> правообладателей. AWS, Azure и Java-логотип Oracle в наборе отсутствуют — эти
+> компании попросили их удалить; вместо Java есть `openjdk`.
+
 ## Связи
 
 `connect(from, to, { dir })`, где `dir` ∈ `to` (по умолчанию) · `from` · `both`
@@ -246,12 +313,16 @@ Fallback обязателен, потому что librsvg (растр в CLI) �
 
 ```bash
 power render <input.pwr> [-o output.svg] [--theme light|dark]
+power icon <slug> [-n name]
 ```
 
 Читает `.pwr`-файл, раскладывает и пишет SVG (по умолчанию — `<input>.svg`).
 Формат берётся из расширения `-o`: `.svg` · `.png` · `.jpg`. У JPEG нет
 прозрачности, поэтому подложка берётся из темы. Ошибки парсинга печатаются с
 номером строки и указателем.
+
+`power icon` печатает блок `icon` для любого слага Simple Icons — команде нужен
+пакет `simple-icons` (`npm i -D simple-icons`), самой библиотеке он не нужен.
 
 ## Лицензия
 

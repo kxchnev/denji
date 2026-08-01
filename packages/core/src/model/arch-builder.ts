@@ -14,13 +14,18 @@ import type {
   ThemeName,
 } from "./arch.js";
 import { isStyleSlot } from "./style.js";
+import { isKnownIcon, suggestIcon, validateIcon, type Icon } from "./icon.js";
 
 export interface ShapeOptions extends Styled {
   hint?: PlaceHint;
+  /** Name of a bundled or document-declared icon. */
+  icon?: string;
 }
 
 export interface ContainerOptions extends Styled {
   kind?: ContainerKind;
+  /** Name of a bundled or document-declared icon. */
+  icon?: string;
   children?: string[];
   hint?: PlaceHint;
   /** Spacing between this container's children; inherited by nested scopes. */
@@ -56,6 +61,7 @@ export class ArchitectureBuilder {
   private diagramTheme?: ThemeName;
   /** Insertion order is the cascade order, so a plain object is the right shape. */
   private readonly stylesheet: StyleSheet = {};
+  private readonly iconset: Record<string, Icon> = {};
 
   private addShape(id: string, kind: ShapeKind, label: string | undefined, opts: ShapeOptions): this {
     if (this.nodes.has(id)) throw new Error(`Duplicate node id: "${id}"`);
@@ -64,6 +70,7 @@ export class ArchitectureBuilder {
       id,
       label: label ?? id,
       kind,
+      icon: opts.icon,
       hint: opts.hint,
       styleRefs: opts.styleRefs,
       styleProps: opts.styleProps,
@@ -92,6 +99,7 @@ export class ArchitectureBuilder {
       id,
       label: label ?? id,
       kind: opts.kind ?? "group",
+      icon: opts.icon,
       children: opts.children ? [...opts.children] : [],
       hint: opts.hint,
       spacing: opts.spacing,
@@ -100,6 +108,18 @@ export class ArchitectureBuilder {
       styleProps: opts.styleProps,
     };
     this.nodes.set(id, container);
+    return this;
+  }
+
+  /**
+   * Declare an icon for this document. It shadows a bundled mark of the same
+   * name, so `defineIcon("postgresql", …)` replaces the built-in one.
+   */
+  defineIcon(name: string, icon: Icon): this {
+    if (Object.prototype.hasOwnProperty.call(this.iconset, name)) {
+      throw new Error(`Duplicate icon: "${name}"`);
+    }
+    this.iconset[name] = validateIcon(icon);
     return this;
   }
 
@@ -195,7 +215,20 @@ export class ArchitectureBuilder {
       }
     }
 
+    // Icon names resolve against the document's own icons first, then the
+    // bundled set — checked here so the programmatic API is guarded too.
+    for (const n of this.nodes.values()) {
+      if (n.icon && !isKnownIcon(n.icon, this.iconset)) {
+        const hint = suggestIcon(n.icon, this.iconset);
+        throw new Error(
+          `Node "${n.id}" references unknown icon: "${n.icon}"` +
+            (hint ? ` (did you mean "${hint}"?)` : ""),
+        );
+      }
+    }
+
     const styles = Object.keys(this.stylesheet).length > 0 ? this.stylesheet : undefined;
+    const icons = Object.keys(this.iconset).length > 0 ? this.iconset : undefined;
 
     return {
       kind: "architecture",
@@ -205,6 +238,7 @@ export class ArchitectureBuilder {
       margin: this.diagramMargin,
       theme: this.diagramTheme,
       styles,
+      icons,
     };
   }
 }

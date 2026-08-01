@@ -69,6 +69,13 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     cssVar: "header-fill",
     detail: "service: заливка полосы заголовка",
   },
+  iconcolor: {
+    key: "iconColor",
+    kind: "color",
+    slots: [...SHAPES, "service", "group"],
+    cssVar: "ic",
+    detail: "Перекрасить иконку в один цвет вместо фирменного",
+  },
   headertext: {
     key: "headerText",
     kind: "color",

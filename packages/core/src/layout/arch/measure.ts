@@ -5,6 +5,12 @@ import type { Size } from "../../model/geometry.js";
 export const FONT_SIZE = 14;
 const AVG_CHAR_WIDTH = FONT_SIZE * 0.6;
 const PAD_X = 18;
+/** Brand mark drawn before a shape's label. Shared with the renderer. */
+export const ICON_SIZE = 18;
+/** Same, in a container's title band, which is only 28px tall. */
+export const HEADER_ICON_SIZE = 14;
+/** Space between a mark and the text after it. */
+export const ICON_GAP = 8;
 const MIN_WIDTH = 96;
 const BASE_HEIGHT = 46;
 
@@ -16,7 +22,13 @@ export function measureLabelWidth(label: string): number {
 /** Size a leaf shape. Cylinders reserve room for their elliptical caps. */
 export function measureShape(shape: Shape): Size {
   const textW = measureLabelWidth(shape.label);
-  let width = Math.max(MIN_WIDTH, Math.round(textW + PAD_X * 2));
+  // An icon on its own is a badge, not a labelled box, so it gets a compact
+  // square rather than being stretched out to MIN_WIDTH.
+  let width = shape.icon
+    ? shape.label === ""
+      ? Math.max(ICON_SIZE + PAD_X * 2, BASE_HEIGHT)
+      : Math.max(MIN_WIDTH, Math.round(textW + ICON_SIZE + ICON_GAP + PAD_X * 2))
+    : Math.max(MIN_WIDTH, Math.round(textW + PAD_X * 2));
   let height = BASE_HEIGHT;
 
   switch (shape.kind) {

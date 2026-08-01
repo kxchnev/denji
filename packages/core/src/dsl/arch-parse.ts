@@ -10,6 +10,7 @@ import type {
 } from "../model/arch.js";
 import { architecture, type ArchitectureBuilder, type Dir } from "../model/arch-builder.js";
 import { isStyleSlot, lookupProp, setStyleProp, StyleValueError } from "../model/style.js";
+import { IconError, type Icon } from "../model/icon.js";
 import { DiagramParseError, indentCol } from "./error.js";
 
 const SHAPE_KINDS = new Set<ShapeKind>(["app", "database", "queue", "rect"]);
@@ -35,12 +36,15 @@ interface Frame {
   padding?: number;
   styleRefs?: string[];
   styleProps?: StyleProps;
+  icon?: string;
 }
 
-/** An open `style <name> { … }` block. */
-interface StyleFrame {
+/** An open `style <name> { … }` or `icon <name> { … }` block. */
+interface BlockFrame {
+  kind: "style" | "icon";
   name: string;
   props: StyleProps;
+  icon: Partial<Icon>;
   /** The slot a type-selector block targets; undefined for a named style. */
   slot?: StyleSlot;
   lineNo: number;
@@ -61,14 +65,16 @@ interface Directives {
   theme?: ThemeName;
   styleRefs?: string[];
   styleProps?: StyleProps;
+  icon?: string;
 }
 
 /**
  * `style hot {` opens a block; `style hot { fill: #fff; stroke: red }` is the
- * whole thing on one line. Neither matches `style -> db`, which is a connection
- * between two nodes that happen to be called `style` and `db`.
+ * whole thing on one line. `icon acme { … }` declares a mark the same way.
+ * Neither matches `style -> db`, which is a connection between two nodes that
+ * happen to be called `style` and `db`.
  */
-const STYLE_OPEN = /^style\s+([A-Za-z][A-Za-z0-9_-]*)\s*\{(.*)$/;
+const BLOCK_OPEN = /^(style|icon)\s+([A-Za-z][A-Za-z0-9_-]*)\s*\{(.*)$/;
 /** One `name: value` declaration; a trailing `;` is tolerated. */
 const STYLE_PROP = /^([A-Za-z][A-Za-z-]*)\s*:\s*(.+?)\s*;?$/;
 
@@ -77,7 +83,7 @@ export function parseArchitecture(src: string): ArchDiagram {
   const lines = src.split(/\r?\n/);
   const b = architecture();
   const frames: Frame[] = [];
-  let style: StyleFrame | null = null;
+  let block: BlockFrame | null = null;
 
   const addChildToScope = (id: string) => {
     const top = frames[frames.length - 1];
@@ -90,57 +96,47 @@ export function parseArchitecture(src: string): ArchDiagram {
     const line = raw.trim();
     if (line === "" || line.startsWith("#") || line.startsWith("%%")) continue;
 
-    // A style block owns its lines outright. Without this the generic dispatch
-    // below would hand `dash: 6 4` to the connection scanner, which looks for
-    // `--` anywhere in a line.
-    if (style) {
+    // A declaration block owns its lines outright. Without this the generic
+    // dispatch below would hand `dash: 6 4` — or a path full of `-` and `,` —
+    // to the connection scanner, which looks for `--` anywhere in a line.
+    if (block) {
       if (line === "}") {
-        try {
-          b.defineStyle(style.name, style.props);
-        } catch (e) {
-          throw new DiagramParseError((e as Error).message, style.lineNo, 1, lines[style.lineNo - 1] ?? "");
-        }
-        style = null;
+        closeBlock(b, block, block.lineNo, lines[block.lineNo - 1] ?? "");
+        block = null;
         continue;
       }
-      readStyleProps(style, line, lineNo, raw);
+      readBlockProps(block, line, lineNo, raw);
       continue;
     }
 
-    const opening = line.match(STYLE_OPEN);
+    const opening = line.match(BLOCK_OPEN);
     if (opening) {
+      const kind = opening[1] as "style" | "icon";
       if (frames.length > 0) {
-        throw new DiagramParseError(
-          "style blocks are top-level only",
-          lineNo,
-          indentCol(raw),
-          raw,
-        );
+        throw new DiagramParseError(`${kind} blocks are top-level only`, lineNo, indentCol(raw), raw);
       }
-      const name = opening[1]!;
-      const frame: StyleFrame = {
+      const name = opening[2]!;
+      const frame: BlockFrame = {
+        kind,
         name,
         props: {},
-        slot: isStyleSlot(name) ? name : undefined,
+        icon: {},
+        slot: kind === "style" && isStyleSlot(name) ? name : undefined,
         lineNo,
       };
-      const inline = (opening[2] ?? "").trim();
+      const inline = (opening[3] ?? "").trim();
       if (inline.endsWith("}")) {
-        readStyleProps(frame, inline.slice(0, -1), lineNo, raw);
-        try {
-          b.defineStyle(frame.name, frame.props);
-        } catch (e) {
-          throw new DiagramParseError((e as Error).message, lineNo, indentCol(raw), raw);
-        }
+        readBlockProps(frame, inline.slice(0, -1), lineNo, raw);
+        closeBlock(b, frame, lineNo, raw);
       } else if (inline !== "") {
         throw new DiagramParseError(
-          "a style block opens with `{` at the end of the line, or closes with `}` on it",
+          `a ${kind} block opens with \`{\` at the end of the line, or closes with \`}\` on it`,
           lineNo,
           indentCol(raw),
           raw,
         );
       } else {
-        style = frame;
+        block = frame;
       }
       continue;
     }
@@ -166,6 +162,7 @@ export function parseArchitecture(src: string): ArchDiagram {
         padding: frame.padding,
         styleRefs: frame.styleRefs,
         styleProps: frame.styleProps,
+        icon: frame.icon,
       });
       addChildToScope(frame.id);
       continue;
@@ -184,8 +181,13 @@ export function parseArchitecture(src: string): ArchDiagram {
     }
   }
 
-  if (style) {
-    throw new DiagramParseError(`unclosed style "${style.name}"`, lines.length, 1, "");
+  if (block) {
+    throw new DiagramParseError(
+      `unclosed ${block.kind} "${block.name}"`,
+      lines.length,
+      1,
+      "",
+    );
   }
 
   if (frames.length > 0) {
@@ -200,28 +202,71 @@ export function parseArchitecture(src: string): ArchDiagram {
   return b.build();
 }
 
+/** Icon blocks take their own small set of properties, not style properties. */
+const ICON_PROPS = new Set(["path", "color", "darkcolor", "viewbox", "title"]);
+
 /** Read one or more `name: value` declarations, `;`-separated, into a block. */
-function readStyleProps(frame: StyleFrame, text: string, lineNo: number, raw: string): void {
+function readBlockProps(frame: BlockFrame, text: string, lineNo: number, raw: string): void {
   for (const decl of text.split(";")) {
     const d = decl.trim();
     if (d === "") continue;
     const p = d.match(STYLE_PROP);
     if (!p) {
       throw new DiagramParseError(
-        "expected `property: value` inside a style block",
+        `expected \`property: value\` inside a ${frame.kind} block`,
         lineNo,
         indentCol(raw),
         raw,
       );
     }
+    const name = p[1]!;
+    const value = p[2]!;
     try {
-      setStyleProp(frame.props, p[1]!, p[2]!, frame.slot);
+      if (frame.kind === "style") {
+        setStyleProp(frame.props, name, value, frame.slot);
+      } else {
+        setIconProp(frame.icon, name, value);
+      }
     } catch (e) {
-      if (e instanceof StyleValueError) {
+      if (e instanceof StyleValueError || e instanceof IconError) {
         throw new DiagramParseError(e.message, lineNo, indentCol(raw), raw);
       }
       throw e;
     }
+  }
+}
+
+function setIconProp(target: Partial<Icon>, rawName: string, value: string): void {
+  const name = rawName.toLowerCase().replace(/[-_]/g, "");
+  if (!ICON_PROPS.has(name)) {
+    throw new IconError(
+      `unknown icon property "${rawName}" (expected path, color, dark-color, view-box or title)`,
+    );
+  }
+  if (name === "path") target.path = value;
+  else if (name === "color") target.color = value;
+  else if (name === "darkcolor") target.darkColor = value;
+  else if (name === "viewbox") target.viewBox = value;
+  else target.title = value;
+}
+
+/** Hand a finished block to the builder, reporting failures at its own line. */
+function closeBlock(b: ArchitectureBuilder, frame: BlockFrame, lineNo: number, raw: string): void {
+  try {
+    if (frame.kind === "style") {
+      b.defineStyle(frame.name, frame.props);
+      return;
+    }
+    if (frame.icon.path === undefined) throw new IconError("an icon block needs a `path`");
+    b.defineIcon(frame.name, {
+      path: frame.icon.path,
+      color: frame.icon.color ?? "currentColor",
+      darkColor: frame.icon.darkColor,
+      viewBox: frame.icon.viewBox,
+      title: frame.icon.title,
+    });
+  } catch (e) {
+    throw new DiagramParseError((e as Error).message, lineNo, indentCol(raw), raw);
   }
 }
 
@@ -237,9 +282,9 @@ function parseShapeLine(
   const kind = m[1] as ShapeKind;
   const id = m[2]!;
   const label = m[3];
-  const { hint, styleRefs, styleProps } = parseDirectives(m[4] ?? "", lineNo, raw, "shape", kind);
+  const { hint, styleRefs, styleProps, icon } = parseDirectives(m[4] ?? "", lineNo, raw, "shape", kind);
 
-  const opts = { hint, styleRefs, styleProps };
+  const opts = { hint, styleRefs, styleProps, icon };
   if (kind === "app") b.app(id, label, opts);
   else if (kind === "database") b.database(id, label, opts);
   else if (kind === "queue") b.queue(id, label, opts);
@@ -269,6 +314,7 @@ function parseContainerOpen(line: string, lineNo: number, raw: string): Frame {
     padding: d.padding,
     styleRefs: d.styleRefs,
     styleProps: d.styleProps,
+    icon: d.icon,
   };
 }
 
@@ -312,7 +358,7 @@ const RELATIONAL: Record<string, keyof PlaceHint> = {
 
 /** Which directives each position accepts, for the "not allowed here" message. */
 const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
-  shape: new Set(["rightof", "leftof", "above", "below", "gap", "align", "style"]),
+  shape: new Set(["rightof", "leftof", "above", "below", "gap", "align", "style", "icon"]),
   container: new Set([
     "rightof",
     "leftof",
@@ -325,6 +371,7 @@ const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
     "spacingy",
     "padding",
     "style",
+    "icon",
   ]),
   diagram: new Set(["spacing", "spacingx", "spacingy", "margin", "theme"]),
   connection: new Set(["style"]),
@@ -333,7 +380,15 @@ const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
 /** Positions where an inline style property such as `@fill(#fff)` is accepted. */
 const STYLABLE: ReadonlySet<DirectiveCtx> = new Set(["shape", "container", "connection"]);
 
-const KNOWN = new Set([...ALLOWED.container, ...ALLOWED.diagram, ...ALLOWED.connection]);
+// ⚠️ Must include every context. Leaving `shape` out worked only while its set
+// was a subset of `container`'s; a shape-only directive would have fallen
+// through to "unknown directive".
+const KNOWN = new Set([
+  ...ALLOWED.shape,
+  ...ALLOWED.container,
+  ...ALLOWED.diagram,
+  ...ALLOWED.connection,
+]);
 
 const WHERE: Record<DirectiveCtx, string> = {
   shape: "on a shape",
@@ -442,6 +497,14 @@ function parseDirectives(
         throw new DiagramParseError("@theme expects light|dark", lineNo, indentCol(raw), raw);
       }
       out.theme = arg;
+    } else if (name === "icon") {
+      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(arg)) {
+        throw new DiagramParseError("@icon expects an icon name", lineNo, indentCol(raw), raw);
+      }
+      // Only the shape of the name is checked here. Whether it resolves is
+      // settled by build(), which sees `icon` blocks declared further down —
+      // exactly how @style already behaves.
+      out.icon = arg;
     } else if (name === "style") {
       if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(arg)) {
         throw new DiagramParseError("@style expects a style name", lineNo, indentCol(raw), raw);

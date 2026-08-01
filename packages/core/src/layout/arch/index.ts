@@ -1,6 +1,6 @@
 import type { ArchDiagram } from "../../model/arch.js";
 import type { Size } from "../../model/geometry.js";
-import { measureLabelWidth, measureShape } from "./measure.js";
+import { HEADER_ICON_SIZE, ICON_GAP, measureLabelWidth, measureShape } from "./measure.js";
 import { layoutScope, type AxisGaps, type Placeable } from "./relative.js";
 import { routeConnections } from "./route.js";
 
@@ -91,7 +91,8 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     } else {
       childLocal.set(id, new Map());
     }
-    const labelW = measureLabelWidth(n.label) + 24;
+    const iconW = n.icon ? HEADER_ICON_SIZE + ICON_GAP : 0;
+    const labelW = measureLabelWidth(n.label) + iconW + 24;
     const width = Math.max(contentW + pad * 2, labelW);
     const height = contentH + pad * 2 + headerH;
     innerOffset.set(id, { x: pad, y: headerH + pad });

@@ -1,4 +1,5 @@
 import type { Point, Rect } from "./geometry.js";
+import type { Icon } from "./icon.js";
 
 /** Leaf shapes available in an architecture diagram. */
 export type ShapeKind = "app" | "database" | "queue" | "rect";
@@ -45,6 +46,8 @@ export interface StyleProps {
   dash?: string;
   opacity?: number;
   fontWeight?: string;
+  /** Flattens a brand mark to one colour, overriding its own. */
+  iconColor?: string;
   /** `service` only: the title band. */
   headerFill?: string;
   /** `service` only: the title text. */
@@ -102,6 +105,12 @@ export interface Shape extends Styled {
   id: string;
   label: string;
   kind: ShapeKind;
+  /**
+   * Name of a bundled or document-declared icon, drawn before the label. A
+   * model field rather than a style property because it widens the shape, and
+   * layout runs long before styles are resolved.
+   */
+  icon?: string;
   hint?: PlaceHint;
   /** Filled in by the layout engine. Absent until laid out. */
   rect?: Rect;
@@ -112,6 +121,8 @@ export interface Container extends Styled {
   id: string;
   label: string;
   kind: ContainerKind;
+  /** Icon drawn before the container's title. */
+  icon?: string;
   /** Ids of child nodes (shapes or nested containers). */
   children: string[];
   hint?: PlaceHint;
@@ -149,4 +160,6 @@ export interface ArchDiagram {
   theme?: ThemeName;
   /** Named styles and per-kind selectors, in declaration order. */
   styles?: StyleSheet;
+  /** Icons declared by the document; they shadow the bundled ones. */
+  icons?: Record<string, Icon>;
 }

@@ -19,8 +19,8 @@ const QUOTED = /^"[^"]*"?/;
 const DIRECTIVE = /^@[A-Za-z][A-Za-z-]*/;
 /** A whole argument, spaces and all — `@dash(6 4)` is one value. */
 const ARG = /^[^)]+/;
-/** Mirrors STYLE_OPEN in packages/core/src/dsl/arch-parse.ts. */
-const STYLE_OPEN = /^style\s+[A-Za-z][A-Za-z0-9_-]*\s*\{/;
+/** Mirrors BLOCK_OPEN in packages/core/src/dsl/arch-parse.ts. */
+const BLOCK_OPEN = /^(?:style|icon)\s+[A-Za-z][A-Za-z0-9_-]*\s*\{/;
 const PROP_NAME = /^[A-Za-z][A-Za-z-]*/;
 const PROP_VALUE = /^[^;}]+/;
 
@@ -43,11 +43,16 @@ interface PwrState {
   directive: string;
   /** Open `{` count. Survives across lines; used only by `indent`. */
   depth: number;
-  /** Inside a multi-line `style { … }`. Survives lines, like `depth`. */
+  /** Inside a multi-line `style { … }` / `icon { … }`. Survives lines. */
   inStyle: boolean;
-  /** Property whose value comes next, inside a style block. */
+  /** Which kind of block that is, so property names are checked against it. */
+  block: "style" | "icon";
+  /** Property whose value comes next, inside a block. */
   prop: string;
 }
+
+/** Mirrors ICON_PROPS in packages/core/src/dsl/arch-parse.ts. */
+const ICON_PROPS = new Set(["path", "color", "darkcolor", "viewbox", "title"]);
 
 /** Paint a style value by what the core will accept there. */
 function valueRole(spec: StylePropSpec | undefined, raw: string): string | null {
@@ -96,9 +101,11 @@ function startOfLine(stream: StringStream, state: PwrState): string | null {
     return "punctuation";
   }
   const first = (stream.match(FIRST_TOKEN, false) as RegExpMatchArray | null)?.[0] ?? "";
-  // `style x {` opens a block; `style -> db` is a connection between two nodes.
-  if (first === "style" && STYLE_OPEN.test(stream.string.slice(stream.pos))) {
-    stream.match("style");
+  // `style x {` / `icon x {` open a block; `style -> db` is a connection
+  // between two nodes that happen to be named `style` and `db`.
+  if ((first === "style" || first === "icon") && BLOCK_OPEN.test(stream.string.slice(stream.pos))) {
+    stream.match(first);
+    state.block = first;
     state.mode = "styleHead";
     return "keyword";
   }
@@ -147,8 +154,12 @@ function styleHead(stream: StringStream, state: PwrState): string | null {
     return "punctuation";
   }
   const name = stream.match(/^[A-Za-z][A-Za-z0-9_-]*/) as RegExpMatchArray | null;
-  // A name that is a kind is a selector over all of them, so paint it as a type.
-  if (name) return KINDS.has(name[0]) || name[0] === "edge" ? "typeName" : "variableName";
+  // In a style block a name that is a kind is a selector over all of them, so
+  // paint it as a type. An icon name is always just a name.
+  if (name) {
+    const selector = state.block === "style" && (KINDS.has(name[0]) || name[0] === "edge");
+    return selector ? "typeName" : "variableName";
+  }
   stream.next();
   return null;
 }
@@ -169,7 +180,11 @@ function property(stream: StringStream, state: PwrState): string | null {
   const name = stream.match(PROP_NAME) as RegExpMatchArray | null;
   if (name) {
     state.prop = name[0];
-    return STYLE_PROPS[normalizePropName(name[0])] ? "propertyName" : "invalid";
+    const known =
+      state.block === "icon"
+        ? ICON_PROPS.has(normalizePropName(name[0]))
+        : Boolean(STYLE_PROPS[normalizePropName(name[0])]);
+    return known ? "propertyName" : "invalid";
   }
   stream.next();
   return null;
@@ -179,6 +194,13 @@ function propertyValue(stream: StringStream, state: PwrState): string | null {
   state.mode = "prop";
   const v = stream.match(PROP_VALUE) as RegExpMatchArray | null;
   if (!v) return null;
+  if (state.block === "icon") {
+    const prop = normalizePropName(state.prop);
+    if (prop === "color" || prop === "darkcolor") return "string";
+    // Path data and a viewBox are just numbers and letters; painting them as a
+    // string would drown the line in colour.
+    return prop === "path" || prop === "viewbox" ? "number" : null;
+  }
   return valueRole(STYLE_PROPS[normalizePropName(state.prop)], v[0]);
 }
 
@@ -214,6 +236,7 @@ function argument(stream: StringStream, state: PwrState): string | null {
     return Number.isFinite(n) && n >= 0 ? "number" : "invalid";
   }
   if (state.directive === "align" || state.directive === "theme") return "atom";
+  if (state.directive === "icon") return "atom";
   if (state.directive === "style") return "variableName";
   if (RELATIONAL.has(state.directive)) return "variableName";
   // An inline style property: `@fill(#0f172a)`, `@stroke-width(2)`.
@@ -232,7 +255,14 @@ export const pwrStreamParser: StreamParser<PwrState> = {
     // (the parser requires `{` to end the line, so `{}` is always wrong).
     closeBrackets: { brackets: ['"'] },
   },
-  startState: () => ({ mode: "start", directive: "", depth: 0, inStyle: false, prop: "" }),
+  startState: () => ({
+    mode: "start",
+    directive: "",
+    depth: 0,
+    inStyle: false,
+    block: "style" as const,
+    prop: "",
+  }),
   copyState: (s) => ({ ...s }),
 
   token(stream, state) {

@@ -11,7 +11,14 @@ import {
 } from "@codemirror/autocomplete";
 import { EditorView, keymap } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
-import { STYLE_PROPS, lightTheme, normalizePropName, type StylePropSpec } from "power";
+import {
+  ICONS,
+  ICON_NAMES,
+  STYLE_PROPS,
+  lightTheme,
+  normalizePropName,
+  type StylePropSpec,
+} from "power";
 import { scanPwr, uniqueIds, type PwrKind, type PwrScan, type PwrSymbol } from "./pwr-symbols";
 
 /* ------------------------------------------------------------------ sections */
@@ -122,6 +129,22 @@ function styleValueOptions(spec: StylePropSpec | undefined): Completion[] {
   }
 }
 
+const ICON_OPTIONS: Completion[] = ICON_NAMES.map((name) => ({
+  label: name,
+  type: "constant",
+  detail: ICONS[name]?.color,
+  info: ICONS[name]?.title,
+}));
+
+/** Icon block properties — a different, much shorter list than the style ones. */
+const ICON_PROP_OPTIONS: Completion[] = [
+  { label: "path", detail: "path data", info: "Contents of the SVG `d` attribute." },
+  { label: "color", detail: "colour", info: "The brand colour." },
+  { label: "dark-color", detail: "colour", info: "Used instead on a dark palette." },
+  { label: "view-box", detail: "4 numbers", info: "Defaults to `0 0 24 24`." },
+  { label: "title", detail: "text", info: "Human-readable name." },
+].map((o, i) => ({ ...o, type: "property", apply: `${o.label}: `, boost: 50 - i }));
+
 const THEME_NAMES: Completion[] = ["light", "dark"].map((v, i) => ({
   label: v,
   type: "enum",
@@ -201,6 +224,12 @@ const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: Direct
     detail: "(light|dark)",
     info: "Pin the diagram to one palette. Without it, the diagram follows the page.",
     in: ["diagram"],
+  },
+  {
+    name: "icon",
+    detail: "(name)",
+    info: "Draw a brand mark before the label. Leave the label empty for the mark on its own.",
+    in: ["shape", "container"],
   },
   {
     name: "style",
@@ -362,8 +391,17 @@ const STYLE_SNIPPET = snippetCompletion("style ${name} {\n\t${}\n}", {
   boost: 58,
 });
 
+const ICON_SNIPPET = snippetCompletion("icon ${name} {\n\tpath: ${}\n\tcolor: #000000\n}", {
+  label: "icon",
+  type: "keyword",
+  detail: "custom icon",
+  info: "Declares a brand mark from SVG path data. `power icon <slug>` prints one from Simple Icons.",
+  section: DECLARE,
+  boost: 56,
+});
+
 function lineStartOptions(scan: PwrScan, lineNo: number): Completion[] {
-  const out: Completion[] = [...KIND_COMPLETIONS, STYLE_SNIPPET];
+  const out: Completion[] = [...KIND_COMPLETIONS, STYLE_SNIPPET, ICON_SNIPPET];
   if (!scan.hasHeader && (scan.firstContentLine === 0 || lineNo <= scan.firstContentLine)) {
     out.push(HEADER);
   }
@@ -447,9 +485,12 @@ export const pwrCompletions: CompletionSource = (ctx) => {
   // 0. Inside a `style { … }` block: property names, then values. Checked first
   // because every line here is `name: value`, which the connection-label guard
   // below would otherwise swallow.
-  if (scan.inStyleBlock) {
+  if (scan.block) {
     const decl = /([A-Za-z][A-Za-z-]*)\s*:\s*([^;]*)$/.exec(masked);
     if (decl) {
+      // An icon block's values are path data and free-form colours — nothing
+      // useful to enumerate.
+      if (scan.block === "icon") return null;
       const spec = STYLE_PROPS[normalizePropName(decl[1]!)];
       const typed = decl[2]!;
       return typed.trim() === "" || ctx.explicit
@@ -457,7 +498,8 @@ export const pwrCompletions: CompletionSource = (ctx) => {
         : null;
     }
     const partial = /[A-Za-z-]*$/.exec(before)![0];
-    return { from: ctx.pos - partial.length, options: stylePropOptions(scan.styleSlot) };
+    const options = scan.block === "icon" ? ICON_PROP_OPTIONS : stylePropOptions(scan.styleSlot);
+    return { from: ctx.pos - partial.length, options };
   }
 
   if (masked.includes(":")) return null; // inside a connection label
@@ -482,6 +524,15 @@ export const pwrCompletions: CompletionSource = (ctx) => {
       return result(anchorOptions(scan), wordFrom);
     }
     if (name === "theme") return result(THEME_NAMES, wordFrom);
+    if (name === "icon") {
+      const declared = scan.icons.map((n, i) => ({
+        label: n,
+        type: "variable",
+        detail: "declared here",
+        boost: 60 - i,
+      }));
+      return result([...declared, ...ICON_OPTIONS], wordFrom);
+    }
     if (name === "style") {
       const options = scan.styles.map((n, i) => ({
         label: n,

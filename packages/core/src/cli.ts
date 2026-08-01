@@ -80,4 +80,37 @@ program
     }
   });
 
+program
+  .command("icon")
+  .description("Print an `icon` block for any Simple Icons slug, ready to paste into a .pwr file")
+  .argument("<slug>", "Simple Icons slug, e.g. vercel — see https://simpleicons.org")
+  .option("-n, --name <name>", "name to declare it under (defaults to the slug)")
+  .action(async (slug: string, opts: { name?: string }) => {
+    // `simple-icons` is a devDependency: the ~40 bundled marks are generated
+    // from it at build time, and this command is the only thing that needs the
+    // other few thousand at runtime. Loading it lazily keeps the published
+    // package dependency-free for everyone who does not run it.
+    let icons: Record<string, { path: string; hex: string; title: string } | undefined>;
+    try {
+      icons = (await import("simple-icons")) as never;
+    } catch {
+      console.error("power: this command needs simple-icons — run `npm i -D simple-icons`");
+      process.exitCode = 1;
+      return;
+    }
+    const key = `si${slug.charAt(0).toUpperCase()}${slug.slice(1)}`;
+    const icon = icons[key];
+    if (!icon) {
+      console.error(`power: no icon "${slug}" in simple-icons (check the slug on simpleicons.org)`);
+      process.exitCode = 1;
+      return;
+    }
+    const name = opts.name ?? slug;
+    console.log(`icon ${name} {`);
+    console.log(`  path: ${icon.path}`);
+    console.log(`  color: #${icon.hex.toLowerCase()}`);
+    console.log(`  title: ${icon.title}`);
+    console.log(`}`);
+  });
+
 program.parse();

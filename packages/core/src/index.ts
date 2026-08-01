@@ -12,6 +12,19 @@ export {
 export { layoutArchitecture, type ArchLayoutOptions } from "./layout/arch/index.js";
 export { renderArchitecture, type ArchRenderOptions, type ThemeMode } from "./render/arch-svg.js";
 export { lightTheme, darkTheme, themes, resolveTheme, type Theme } from "./render/theme.js";
+export {
+  ICONS,
+  ICON_ALIASES,
+  ICON_NAMES,
+  resolveIcon,
+  isKnownIcon,
+  canonicalIconName,
+  fromSimpleIcon,
+  validateIcon,
+  IconError,
+  type Icon,
+  type SimpleIconLike,
+} from "./model/icon.js";
 export { parseArchitecture } from "./dsl/arch-parse.js";
 export { DiagramParseError } from "./dsl/error.js";
 

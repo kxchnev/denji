@@ -7,6 +7,11 @@ import type { StyleProps, StyleSlot, ThemeName } from "../model/arch.js";
  */
 export interface Theme {
   name: string;
+  /**
+   * Whether this palette sits on a dark surface. Brand marks consult it to pick
+   * `Icon.darkColor`, so a near-black logo stays visible.
+   */
+  dark: boolean;
   /** Backdrop behind the whole drawing. `transparent` lets the host surface show. */
   background: string;
   /**
@@ -26,6 +31,7 @@ const FONT_FAMILY = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
  */
 export const lightTheme: Theme = {
   name: "light",
+  dark: false,
   background: "transparent",
   surface: "#ffffff",
   fontFamily: FONT_FAMILY,
@@ -72,6 +78,7 @@ export const lightTheme: Theme = {
  */
 export const darkTheme: Theme = {
   name: "dark",
+  dark: true,
   background: "transparent",
   surface: "#0b1220",
   fontFamily: FONT_FAMILY,

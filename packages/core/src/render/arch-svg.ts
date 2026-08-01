@@ -10,8 +10,15 @@ import type {
 } from "../model/arch.js";
 import { STYLE_SLOTS } from "../model/arch.js";
 import { isStyleSlot, mergeStyle, STYLE_PROPS } from "../model/style.js";
+import { canonicalIconName, resolveIcon, type Icon } from "../model/icon.js";
 import { center, type Point, type Rect } from "../model/geometry.js";
-import { FONT_SIZE } from "../layout/arch/measure.js";
+import {
+  FONT_SIZE,
+  HEADER_ICON_SIZE,
+  ICON_GAP,
+  ICON_SIZE,
+  measureLabelWidth,
+} from "../layout/arch/measure.js";
 import { DEFAULT_HEADER_H } from "../layout/arch/index.js";
 import { resolveTheme, type Theme } from "./theme.js";
 
@@ -55,7 +62,7 @@ const DEFAULTS = {
 };
 
 /** Which sub-element of a node each property paints. */
-type Part = "body" | "label" | "header" | "headerText" | "chip";
+type Part = "body" | "label" | "header" | "headerText" | "chip" | "icon";
 
 const CLASS: Record<Part, string> = {
   body: "pwr-b",
@@ -63,6 +70,7 @@ const CLASS: Record<Part, string> = {
   header: "pwr-h",
   headerText: "pwr-ht",
   chip: "pwr-c",
+  icon: "pwr-ic",
 };
 
 /** Render a laid-out architecture diagram (every node has a rect) to SVG. */
@@ -82,7 +90,7 @@ export function renderArchitecture(diagram: ArchDiagram, opts: ArchRenderOptions
   const { width, height } = bounds(diagram, padding);
 
   const sheet = diagram.styles ?? {};
-  const styled = new StyleModel(theme, sheet, opts.background);
+  const styled = new StyleModel(theme, sheet, opts.background, diagram.icons);
 
   const body: string[] = [];
   body.push(`<rect class="pwr-bg" width="${width}" height="${height}"/>`);
@@ -148,12 +156,25 @@ class StyleModel {
   private readonly inline = new Map<string, { props: StyleProps; slots: Set<StyleSlot> }>();
   /** Distinct arrowhead colours, in first-use order; the index is the marker id. */
   readonly arrowColors: string[] = [];
+  /** Marks actually drawn, so only their colour variables get declared. */
+  readonly usedIcons = new Map<string, Icon>();
 
   constructor(
     private readonly theme: Theme,
     private readonly sheet: Record<string, StyleProps>,
     private readonly background: string | undefined,
+    private readonly icons: Record<string, Icon> | undefined,
   ) {}
+
+  /** Resolve a name against the document's icons, then the bundled ones. */
+  useIcon(name: string | undefined): { key: string; icon: Icon } | undefined {
+    if (!name) return undefined;
+    const key = canonicalIconName(name, this.icons);
+    const icon = resolveIcon(name, this.icons);
+    if (!key || !icon) return undefined;
+    this.usedIcons.set(key, icon);
+    return { key, icon };
+  }
 
   /** Classes for one element, plus the resolved values the renderer needs in JS. */
   classesFor(slot: StyleSlot, key: string, refs: string[] | undefined, own: StyleProps | undefined) {
@@ -221,19 +242,34 @@ class StyleModel {
     // The palette lives in custom properties scoped to this one diagram, so
     // `auto` only has to restate the variables — every rule below reads through
     // them and stays as it is.
-    rules.push(`${o.scope}{${vars(o.theme, o.background)}}`);
+    rules.push(`${o.scope}{${vars(o.theme, o.background, this.usedIcons)}}`);
     if (o.mode === "auto") {
       rules.push(
-        `@media(prefers-color-scheme:dark){${o.scope}{${vars(o.darkTheme, o.background)}}}`,
+        `@media(prefers-color-scheme:dark){${o.scope}{${vars(o.darkTheme, o.background, this.usedIcons)}}}`,
       );
     } else if (o.mode === "selector") {
       // No media query alongside it on purpose: a host that owns a selector has
       // already folded the device preference into it, and a query would win
       // back whenever the reader turned the host's toggle against their OS.
-      rules.push(`${o.darkSelector} ${o.scope}{${vars(o.darkTheme, o.background)}}`);
+      rules.push(
+        `${o.darkSelector} ${o.scope}{${vars(o.darkTheme, o.background, this.usedIcons)}}`,
+      );
     }
 
     rules.push(`${o.scope} .pwr-bg{fill:var(--pwr-bg,${o.background ?? o.theme.background})}`);
+
+    // One rule per mark. Deliberately a single class — lower specificity than
+    // the `.pwr-<slot> .pwr-ic` rule an `iconColor` produces, so overriding a
+    // brand colour works from any layer of the cascade.
+    for (const [name, icon] of this.usedIcons) {
+      // The fallback has to be the *active* palette's colour, not always the
+      // light one: librsvg ignores custom properties entirely and renders the
+      // fallback, so a hardcoded light hex would leave dark PNGs unreadable.
+      const literal = (o.theme.dark && icon.darkColor) || icon.color;
+      rules.push(
+        `${o.scope} .pwr-icon-${name}{${guard(`fill:var(--pwr-icon-${name},${literal})`)}}`,
+      );
+    }
 
     // 1. Theme, read through the variables declared above.
     for (const slot of STYLE_SLOTS) {
@@ -267,8 +303,15 @@ class StyleModel {
 }
 
 /** `--pwr-<slot>-<suffix>` declarations for one theme. */
-function vars(theme: Theme, background: string | undefined): string {
+function vars(
+  theme: Theme,
+  background: string | undefined,
+  icons: ReadonlyMap<string, Icon>,
+): string {
   const out: string[] = [`--pwr-bg:${background ?? theme.background}`];
+  for (const [name, icon] of icons) {
+    out.push(`--pwr-icon-${name}:${(theme.dark && icon.darkColor) || icon.color}`);
+  }
   for (const slot of STYLE_SLOTS) {
     for (const spec of Object.values(STYLE_PROPS)) {
       // `radius` is geometry (an attribute) and `dash` is emitted literally —
@@ -307,6 +350,7 @@ function ruleset(
     header: [],
     headerText: [],
     chip: [],
+    icon: [],
   };
   const isEdge = slot === "edge";
   // A `service` has no body label — its only text is the title band, so `text`
@@ -338,6 +382,7 @@ function ruleset(
     if (props.text !== undefined) add(part, `fill:${val("text")}`);
     if (props.fontWeight !== undefined) add(part, `font-weight:${val("fontWeight")}`);
   }
+  if (props.iconColor !== undefined) add("icon", `fill:${val("iconColor")}`);
   if (props.headerFill !== undefined) add("header", `fill:${val("headerFill")}`);
   if (props.headerText !== undefined) add("headerText", `fill:${val("headerText")}`);
 
@@ -400,7 +445,49 @@ function renderShape(n: Shape, styled: StyleModel): string {
         (radius > 0 ? ` rx="${radius}" ry="${radius}"` : "") +
         `/>`;
   }
-  return `<g class="pwr-n ${cls}">${body}${label(n.label, center(r), FONT_SIZE)}</g>`;
+  const mark = styled.useIcon(n.icon);
+  const c = center(r);
+  let content: string;
+  if (mark && n.label === "") {
+    // Icon on its own: centred, no text to align against.
+    content = iconMarkup(mark, c.x - ICON_SIZE / 2, c.y - ICON_SIZE / 2, ICON_SIZE);
+  } else if (mark) {
+    // Centre the icon and the label as one block, then anchor the text at its
+    // own left edge instead of the shape's centre.
+    const textW = measureLabelWidth(n.label);
+    const startX = c.x - (ICON_SIZE + ICON_GAP + textW) / 2;
+    content =
+      iconMarkup(mark, startX, c.y - ICON_SIZE / 2, ICON_SIZE) +
+      `<text class="pwr-t" x="${round(startX + ICON_SIZE + ICON_GAP)}" y="${c.y}" ` +
+      `text-anchor="start" dominant-baseline="central" font-size="${FONT_SIZE}">${esc(n.label)}</text>`;
+  } else {
+    content = label(n.label, c, FONT_SIZE);
+  }
+  return `<g class="pwr-n ${cls}">${body}${content}</g>`;
+}
+
+/**
+ * A brand mark as an inline `<path>`. Not a `<symbol>` + `<use>`: librsvg (the
+ * CLI rasterizer) is unreliable about colour inheriting into a use-shadow tree,
+ * and an `<image>` cannot load at all inside a canvas-rasterized `<img>`.
+ * Repeating the path costs a few hundred bytes and works everywhere.
+ */
+function iconMarkup(mark: { key: string; icon: Icon }, x: number, y: number, size: number): string {
+  const [vx = 0, vy = 0, vw = 24, vh = 24] = (mark.icon.viewBox ?? "0 0 24 24")
+    .trim()
+    .split(/\s+/)
+    .map(Number);
+  const scale = size / Math.max(vw, vh);
+  return (
+    `<path class="pwr-ic pwr-icon-${mark.key}" ` +
+    `transform="translate(${round(x - vx * scale)} ${round(y - vy * scale)}) scale(${round(scale)})" ` +
+    `d="${mark.icon.path}"/>`
+  );
+}
+
+/** Keep generated coordinates short and byte-stable across runs. */
+function round(n: number): number {
+  return Math.round(n * 1000) / 1000;
 }
 
 /** Vertical cylinder (database): body path plus a top rim ellipse. */
@@ -437,7 +524,13 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
   const resolved = styled.resolved(n.kind, n.styleRefs, n.styleProps);
   const radius = resolved.radius ?? 0;
 
+  const mark = styled.useIcon(n.icon);
+  const titleX = r.x + 12 + (mark ? HEADER_ICON_SIZE + ICON_GAP : 0);
+
   if (n.kind === "service") {
+    const headerIcon = mark
+      ? iconMarkup(mark, r.x + 12, r.y + (headerH - HEADER_ICON_SIZE) / 2, HEADER_ICON_SIZE)
+      : "";
     // The header band repeats the body's top corners, so its path is built from
     // the same radius rather than a baked-in 10.
     const k = Math.min(radius, r.width / 2);
@@ -448,7 +541,8 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
       `<g class="pwr-n ${cls}">` +
       `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
       header +
-      `<text class="pwr-ht" x="${r.x + 12}" y="${r.y + headerH / 2}" dominant-baseline="central" font-size="13">${esc(n.label)}</text>` +
+      headerIcon +
+      `<text class="pwr-ht" x="${titleX}" y="${r.y + headerH / 2}" dominant-baseline="central" font-size="13">${esc(n.label)}</text>` +
       `</g>`
     );
   }
@@ -456,7 +550,8 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
   return (
     `<g class="pwr-n ${cls}">` +
     `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
-    `<text class="pwr-t" x="${r.x + 12}" y="${r.y + 18}" font-size="13" text-anchor="start">${esc(n.label)}</text>` +
+    (mark ? iconMarkup(mark, r.x + 12, r.y + 18 - HEADER_ICON_SIZE / 2 - 2, HEADER_ICON_SIZE) : "") +
+    `<text class="pwr-t" x="${titleX}" y="${r.y + 18}" font-size="13" text-anchor="start">${esc(n.label)}</text>` +
     `</g>`
   );
 }
