@@ -1,7 +1,19 @@
-import { STYLE_SLOTS, type StyleProps, type StyleSlot } from "./arch.js";
+import { STYLE_SLOTS, type StyleProps, type StyleSheet, type StyleSlot } from "./arch.js";
 
 /** How a property's value is validated, and what the renderer does with it. */
 export type StyleValueKind = "color" | "size" | "unit" | "dash" | "weight";
+
+/**
+ * How the renderer gets a property into the output.
+ *
+ * - `var` — a CSS declaration reading `--pwr-<slot>-<cssVar>`, so the theme can
+ *   switch it.
+ * - `literal` — a CSS declaration written out in full. For `stroke-dasharray`,
+ *   which librsvg drops entirely if it contains `var()`.
+ * - `geometry` — never CSS. Resolved in JS and written as an attribute, or, for
+ *   `width`/`height`, consumed by the layout before rendering starts.
+ */
+export type StyleEmit = "var" | "literal" | "geometry";
 
 export interface StylePropSpec {
   /** Canonical camelCase key on {@link StyleProps}. */
@@ -9,11 +21,15 @@ export interface StylePropSpec {
   kind: StyleValueKind;
   /** Slots the property means anything on. */
   slots: readonly StyleSlot[];
-  /** CSS custom-property suffix: `--pwr-<slot>-<suffix>`. */
+  emit: StyleEmit;
+  /** CSS custom-property suffix: `--pwr-<slot>-<suffix>`. Only for `emit: "var"`. */
   cssVar: string;
   /** Shown by the docs autocomplete. */
   detail: string;
 }
+
+/** Slots that have a box: everything but a connection. */
+const BOXES: readonly StyleSlot[] = ["app", "database", "queue", "rect", "service", "group"];
 
 const SHAPES: readonly StyleSlot[] = ["app", "database", "queue", "rect"];
 const LABELLED: readonly StyleSlot[] = [...SHAPES, "group", "edge"];
@@ -25,22 +41,41 @@ const LABELLED: readonly StyleSlot[] = [...SHAPES, "group", "edge"];
  */
 export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
   fill: {
+    emit: "var",
     key: "fill",
     kind: "color",
     slots: STYLE_SLOTS,
     cssVar: "fill",
     detail: "Заливка тела; у связи — фон плашки с меткой",
   },
-  stroke: { key: "stroke", kind: "color", slots: STYLE_SLOTS, cssVar: "stroke", detail: "Цвет обводки" },
+  stroke: { key: "stroke", kind: "color", slots: STYLE_SLOTS, emit: "var", cssVar: "stroke", detail: "Цвет обводки" },
   strokewidth: {
+    emit: "var",
     key: "strokeWidth",
     kind: "size",
     slots: STYLE_SLOTS,
     cssVar: "sw",
     detail: "Толщина обводки",
   },
-  text: { key: "text", kind: "color", slots: LABELLED, cssVar: "text", detail: "Цвет подписи" },
+  text: { key: "text", kind: "color", slots: LABELLED, emit: "var", cssVar: "text", detail: "Цвет подписи" },
+  width: {
+    key: "width",
+    kind: "size",
+    slots: BOXES,
+    emit: "geometry",
+    cssVar: "",
+    detail: "Ширина: у фигуры точная, у контейнера минимальная",
+  },
+  height: {
+    key: "height",
+    kind: "size",
+    slots: BOXES,
+    emit: "geometry",
+    cssVar: "",
+    detail: "Высота: у фигуры точная, у контейнера минимальная",
+  },
   radius: {
+    emit: "geometry",
     key: "radius",
     kind: "size",
     slots: ["app", "rect", "service", "group"],
@@ -48,14 +83,16 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     detail: "Радиус скругления (цилиндры игнорируют)",
   },
   dash: {
+    emit: "literal",
     key: "dash",
     kind: "dash",
     slots: STYLE_SLOTS,
     cssVar: "dash",
     detail: "Пунктир, например 6 4",
   },
-  opacity: { key: "opacity", kind: "unit", slots: STYLE_SLOTS, cssVar: "opacity", detail: "Прозрачность 0..1" },
+  opacity: { key: "opacity", kind: "unit", slots: STYLE_SLOTS, emit: "var", cssVar: "opacity", detail: "Прозрачность 0..1" },
   fontweight: {
+    emit: "var",
     key: "fontWeight",
     kind: "weight",
     slots: LABELLED,
@@ -63,6 +100,7 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     detail: "Насыщенность подписи",
   },
   headerfill: {
+    emit: "var",
     key: "headerFill",
     kind: "color",
     slots: ["service"],
@@ -70,6 +108,7 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     detail: "service: заливка полосы заголовка",
   },
   iconcolor: {
+    emit: "var",
     key: "iconColor",
     kind: "color",
     slots: [...SHAPES, "service", "group"],
@@ -77,6 +116,7 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     detail: "Перекрасить иконку в один цвет вместо фирменного",
   },
   headertext: {
+    emit: "var",
     key: "headerText",
     kind: "color",
     slots: ["service"],
@@ -165,6 +205,27 @@ export function setStyleProp(
     throw new StyleValueError(`${spec.key} does not apply to ${slot}`);
   }
   (target as Record<string, unknown>)[spec.key] = validateStyleValue(spec, rawValue);
+}
+
+/**
+ * Resolve the cascade for one element: kind selector, then each named style in
+ * declaration order, then what is written on the element.
+ *
+ * Shared by the layout and the renderer. The layout needs it because `width`
+ * and `height` decide a box's size, and sizing happens long before any paint —
+ * so this has to be a plain function of the document, with no renderer state.
+ */
+export function resolveStyle(
+  sheet: StyleSheet | undefined,
+  slot: StyleSlot,
+  refs: readonly string[] | undefined,
+  own: StyleProps | undefined,
+): StyleProps {
+  if (!sheet && !own && !refs?.length) return {};
+  const layers: Array<StyleProps | undefined> = [sheet?.[slot]];
+  for (const ref of refs ?? []) layers.push(sheet?.[ref]);
+  layers.push(own);
+  return mergeStyle(...layers);
 }
 
 /** Later arguments win, per-property. */

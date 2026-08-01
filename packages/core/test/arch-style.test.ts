@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { parseArchitecture } from "../src/dsl/arch-parse.js";
 import { DiagramParseError } from "../src/dsl/error.js";
 import { architecture } from "../src/model/arch-builder.js";
+import { layoutArchitecture } from "../src/layout/arch/index.js";
+import { renderArchitecture } from "../src/render/arch-svg.js";
 import type { ArchDiagram, Connection, Container, Shape } from "../src/model/arch.js";
 
 function shape(d: ArchDiagram, id: string): Shape {
@@ -217,6 +219,75 @@ describe("style errors", () => {
   it("rejects @style pointing at a style nobody declared", () => {
     expect(() => parseArchitecture(`architecture\napp a "A" @style(ghost)`)).toThrow(
       /unknown style: "ghost"/,
+    );
+  });
+});
+
+describe("sizing through the cascade", () => {
+  const laid = (src: string) => {
+    const d = parseArchitecture(src);
+    layoutArchitecture(d);
+    return d;
+  };
+
+  it("resizes every element of a kind from one selector", () => {
+    const d = laid(`
+      architecture
+      style app { width: 150; height: 64 }
+      app a "A"
+      app b "B" @rightOf(a)
+      database c "C" @below(a)
+    `);
+    expect(shape(d, "a").rect).toMatchObject({ width: 150, height: 64 });
+    expect(shape(d, "b").rect).toMatchObject({ width: 150, height: 64 });
+    // Untouched kinds keep measuring themselves.
+    expect(shape(d, "c").rect!.width).not.toBe(150);
+  });
+
+  it("takes an exact size inline, caps and all", () => {
+    const d = laid(`architecture\ndatabase db "PG" @width(220) @height(40)`);
+    expect(shape(d, "db").rect).toMatchObject({ width: 220, height: 40 });
+  });
+
+  it("follows the same cascade as any other property", () => {
+    const d = laid(`
+      architecture
+      style app { width: 150 }
+      style wide { width: 200 }
+      app a "A"
+      app b "B" @rightOf(a) @style(wide)
+      app c "C" @rightOf(b) @style(wide) @width(260)
+    `);
+    expect(shape(d, "a").rect!.width).toBe(150);
+    expect(shape(d, "b").rect!.width).toBe(200);
+    expect(shape(d, "c").rect!.width).toBe(260);
+  });
+
+  it("treats a container's size as a floor, never cropping its children", () => {
+    const roomy = laid(`architecture\nservice s "S" @width(320) @height(200) {\n  app a "A"\n}`);
+    expect(container(roomy, "s").rect).toMatchObject({ width: 320, height: 200 });
+
+    // Too small to hold the child: the content wins.
+    const cramped = laid(`architecture\nservice s "S" @width(10) @height(10) {\n  app a "A"\n}`);
+    const rect = container(cramped, "s").rect!;
+    expect(rect.width).toBeGreaterThan(shape(cramped, "a").rect!.width);
+    expect(rect.height).toBeGreaterThan(shape(cramped, "a").rect!.height);
+  });
+
+  it("is layout, not paint, so it never reaches the stylesheet", () => {
+    const d = parseArchitecture(`architecture\nstyle app { width: 150; height: 64 }\napp a "A"`);
+    layoutArchitecture(d);
+    const css = /<style>([\s\S]*?)<\/style>/.exec(renderArchitecture(d))![1]!;
+    // `stroke-width` is a real declaration, so match the property at the start
+    // of one rather than anywhere in the text.
+    expect(css).not.toMatch(/[{;]width:/);
+    expect(css).not.toMatch(/[{;]height:/);
+    expect(css).not.toContain("--pwr-app-width");
+  });
+
+  it("is meaningless on a connection", () => {
+    expect(reason(`architecture\napp a "A"\napp b "B"\na -> b @width(10)`)).toContain(
+      "does not apply to edge",
     );
   });
 });

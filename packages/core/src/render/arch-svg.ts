@@ -13,6 +13,8 @@ import { isStyleSlot, mergeStyle, STYLE_PROPS } from "../model/style.js";
 import { canonicalIconName, resolveIcon, type Icon } from "../model/icon.js";
 import { center, type Point, type Rect } from "../model/geometry.js";
 import {
+  CAP_RX,
+  CAP_RY,
   FONT_SIZE,
   HEADER_ICON_SIZE,
   ICON_GAP,
@@ -314,9 +316,9 @@ function vars(
   }
   for (const slot of STYLE_SLOTS) {
     for (const spec of Object.values(STYLE_PROPS)) {
-      // `radius` is geometry (an attribute) and `dash` is emitted literally —
-      // see the note in ruleset(). Neither is reachable through a variable.
-      if (spec.cssVar === "radius" || spec.cssVar === "dash") continue;
+      // Only `emit: "var"` properties are reachable through a variable; the
+      // rest are geometry, or literals that librsvg would otherwise drop.
+      if (spec.emit !== "var") continue;
       const v = theme.slots[slot][spec.key];
       if (v !== undefined) out.push(`--pwr-${slot}-${spec.cssVar}:${v}`);
     }
@@ -365,6 +367,8 @@ function ruleset(
     viaVars && slot ? cssVar(slot, key, props[key]) : String(props[key]);
 
   const add = (part: Part, decl: string) => parts[part].push(decl);
+  // `width`/`height` are consumed by the layout and `radius` is written as an
+  // attribute; none of them belongs in the stylesheet.
 
   // A slot-agnostic style may be attached to shapes and connections at once.
   // On a connection the body is the line, whose fill must stay `none`, so the
@@ -446,7 +450,7 @@ function renderShape(n: Shape, styled: StyleModel): string {
         `/>`;
   }
   const mark = styled.useIcon(n.icon);
-  const c = center(r);
+  const c = labelCenter(n.kind, r);
   let content: string;
   if (mark && n.label === "") {
     // Icon on its own: centred, no text to align against.
@@ -464,6 +468,21 @@ function renderShape(n: Shape, styled: StyleModel): string {
     content = label(n.label, c, FONT_SIZE);
   }
   return `<g class="pwr-n ${cls}">${body}${content}</g>`;
+}
+
+/**
+ * Where a shape's label sits. A database is drawn with an elliptical lid, so
+ * its visible front face starts below the top of the bounding box and text on
+ * the geometric centre reads as sitting too high. Nudging it down by half the
+ * lid puts it on the optical centre instead.
+ */
+const OPTICAL_SHIFT_Y: Partial<Record<Shape["kind"], number>> = {
+  database: CAP_RY / 2,
+};
+
+function labelCenter(kind: Shape["kind"], r: Rect): Point {
+  const c = center(r);
+  return { x: c.x, y: c.y + (OPTICAL_SHIFT_Y[kind] ?? 0) };
 }
 
 /**
@@ -493,7 +512,7 @@ function round(n: number): number {
 /** Vertical cylinder (database): body path plus a top rim ellipse. */
 function cylinderVertical(r: Rect): string {
   const rx = r.width / 2;
-  const ry = 7;
+  const ry = CAP_RY;
   const cx = r.x + rx;
   const body =
     `M ${r.x},${r.y + ry} A ${rx},${ry} 0 0 1 ${r.x + r.width},${r.y + ry} ` +
@@ -506,7 +525,7 @@ function cylinderVertical(r: Rect): string {
 
 /** Horizontal cylinder (queue): body path plus a left rim ellipse. */
 function cylinderHorizontal(r: Rect): string {
-  const rx = 8;
+  const rx = CAP_RX;
   const ry = r.height / 2;
   const cy = r.y + ry;
   const body =

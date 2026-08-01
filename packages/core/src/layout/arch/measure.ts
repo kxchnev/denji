@@ -1,4 +1,4 @@
-import type { Shape } from "../../model/arch.js";
+import type { Shape, StyleProps } from "../../model/arch.js";
 import type { Size } from "../../model/geometry.js";
 
 /** Shared text metrics (no DOM): average glyph advance at the base font size. */
@@ -11,6 +11,10 @@ export const ICON_SIZE = 18;
 export const HEADER_ICON_SIZE = 14;
 /** Space between a mark and the text after it. */
 export const ICON_GAP = 8;
+/** Half-height of a database's elliptical lid; the renderer draws it. */
+export const CAP_RY = 7;
+/** Half-width of a queue's elliptical cap. */
+export const CAP_RX = 8;
 const MIN_WIDTH = 96;
 const BASE_HEIGHT = 46;
 
@@ -19,8 +23,13 @@ export function measureLabelWidth(label: string): number {
   return longest * AVG_CHAR_WIDTH;
 }
 
-/** Size a leaf shape. Cylinders reserve room for their elliptical caps. */
-export function measureShape(shape: Shape): Size {
+/**
+ * Size a leaf shape. Cylinders reserve room for their elliptical caps.
+ *
+ * `style.width` / `style.height` win outright — an explicit size is exact, caps
+ * and all, because a box the author asked for should be the box they get.
+ */
+export function measureShape(shape: Shape, style: StyleProps = {}): Size {
   const textW = measureLabelWidth(shape.label);
   // An icon on its own is a badge, not a labelled box, so it gets a compact
   // square rather than being stretched out to MIN_WIDTH.
@@ -34,12 +43,13 @@ export function measureShape(shape: Shape): Size {
   switch (shape.kind) {
     case "database":
       // Vertical cylinder: top + bottom ellipse caps add height.
-      height += 14;
+      height += CAP_RY * 2;
       break;
     case "queue":
-      // Horizontal cylinder: left + right ellipse caps add width.
-      width += 24;
+      // Horizontal cylinder: left + right ellipse caps, plus a little slack so
+      // the label does not crowd the curve.
+      width += CAP_RX * 2 + 8;
       break;
   }
-  return { width, height };
+  return { width: style.width ?? width, height: style.height ?? height };
 }

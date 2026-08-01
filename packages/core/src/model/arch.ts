@@ -40,6 +40,13 @@ export interface StyleProps {
   strokeWidth?: number;
   /** Label colour. On `service`, the body has no label — use `headerText`. */
   text?: string;
+  /**
+   * Box size. Exact on a shape; a minimum on a container, which still grows to
+   * hold its children. Unlike every other property here these two are read by
+   * the *layout*, not the renderer.
+   */
+  width?: number;
+  height?: number;
   /** Corner radius. Ignored by the cylinder shapes (`database`, `queue`). */
   radius?: number;
   /** `stroke-dasharray` pattern, e.g. `"6 4"`. */

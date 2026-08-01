@@ -1,4 +1,5 @@
-import type { ArchDiagram } from "../../model/arch.js";
+import type { ArchDiagram, StyleProps } from "../../model/arch.js";
+import { resolveStyle } from "../../model/style.js";
 import type { Size } from "../../model/geometry.js";
 import { HEADER_ICON_SIZE, ICON_GAP, measureLabelWidth, measureShape } from "./measure.js";
 import { layoutScope, type AxisGaps, type Placeable } from "./relative.js";
@@ -65,10 +66,15 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
   // Bottom-up sizing: a container's size depends on its laid-out children.
   // `inherited` flows down the container tree so a diagram-level spacing reaches
   // every scope, and a container's own spacing governs its whole subtree.
+  const styleOf = (id: string): StyleProps => {
+    const n = nodes.get(id)!;
+    return resolveStyle(diagram.styles, n.kind, n.styleRefs, n.styleProps);
+  };
+
   const sizeNode = (id: string, inherited: AxisGaps): Size => {
     const n = nodes.get(id)!;
     if (n.type === "shape") {
-      const s = measureShape(n);
+      const s = measureShape(n, styleOf(id));
       sizeMap.set(id, s);
       return s;
     }
@@ -93,8 +99,11 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     }
     const iconW = n.icon ? HEADER_ICON_SIZE + ICON_GAP : 0;
     const labelW = measureLabelWidth(n.label) + iconW + 24;
-    const width = Math.max(contentW + pad * 2, labelW);
-    const height = contentH + pad * 2 + headerH;
+    // A container hugs its content, so an explicit size can only be a floor —
+    // honouring it exactly would crop the children it is meant to hold.
+    const own = styleOf(id);
+    const width = Math.max(contentW + pad * 2, labelW, own.width ?? 0);
+    const height = Math.max(contentH + pad * 2 + headerH, own.height ?? 0);
     innerOffset.set(id, { x: pad, y: headerH + pad });
     const size = { width, height };
     sizeMap.set(id, size);

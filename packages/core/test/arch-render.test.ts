@@ -205,6 +205,27 @@ describe("output shape", () => {
     expect(/viewBox="0 0 ([\d.]+) ([\d.]+)"/.test(out)).toBe(true);
   });
 
+  it("puts a cylinder's label on its optical centre, not its geometric one", () => {
+    // A database is drawn with a lid, so the visible face starts below the top
+    // of the box; text centred on the box reads as sitting too high.
+    const labelY = (src: string, id: string) => {
+      const d = parseArchitecture(src);
+      layoutArchitecture(d);
+      const out = renderArchitecture(d);
+      const rect = d.nodes.find((n) => n.id === id)!.rect!;
+      const y = Number(/<text class="pwr-t" x="[\d.]+" y="([\d.]+)"/.exec(out)![1]);
+      return { y, middle: rect.y + rect.height / 2 };
+    };
+    const db = labelY(`architecture\ndatabase db "PG"`, "db");
+    expect(db.y).toBeGreaterThan(db.middle);
+
+    // A queue's caps are left and right, so it stays vertically centred.
+    const q = labelY(`architecture\nqueue q "Events"`, "q");
+    expect(q.y).toBe(q.middle);
+    const app = labelY(`architecture\napp a "A"`, "a");
+    expect(app.y).toBe(app.middle);
+  });
+
   it("is deterministic", () => {
     expect(svg(SAMPLE)).toEqual(svg(SAMPLE));
   });
