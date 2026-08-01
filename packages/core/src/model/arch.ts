@@ -17,10 +17,20 @@ export interface PlaceHint {
   leftOf?: string;
   above?: string;
   below?: string;
-  /** Extra spacing (px) applied to the relation. */
+  /** Distance (px) to the anchor, replacing the scope's spacing on that axis. */
   gap?: number;
   /** Cross-axis alignment to the anchor when only one axis is constrained. */
   align?: "start" | "center" | "end";
+}
+
+/**
+ * Default gap between the children of one scope, per axis. Set on the diagram
+ * (every scope) or on a container (its own subtree). A node's `hint.gap`
+ * overrides it for that node's own relation.
+ */
+export interface Spacing {
+  x?: number;
+  y?: number;
 }
 
 export interface Shape {
@@ -41,6 +51,10 @@ export interface Container {
   /** Ids of child nodes (shapes or nested containers). */
   children: string[];
   hint?: PlaceHint;
+  /** Spacing between this container's children; inherited by nested scopes. */
+  spacing?: Spacing;
+  /** Inner padding between this container's border and its children. */
+  padding?: number;
   rect?: Rect;
 }
 
@@ -63,4 +77,8 @@ export interface ArchDiagram {
   kind: "architecture";
   nodes: ArchNode[];
   connections: Connection[];
+  /** Spacing default for every scope, unless a container overrides it. */
+  spacing?: Spacing;
+  /** Outer margin around the whole drawing. */
+  margin?: number;
 }

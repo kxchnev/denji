@@ -367,3 +367,114 @@ describe("architecture layout", () => {
     for (const n of d.nodes) expect(n.rect).toBeDefined();
   });
 });
+
+/** Distance between two rects along the axis that separates them. */
+function gapX(d: ArchDiagram, left: string, right: string): number {
+  const a = rectOf(d, left);
+  return rectOf(d, right).x - (a.x + a.width);
+}
+function gapY(d: ArchDiagram, top: string, bottom: string): number {
+  const a = rectOf(d, top);
+  return rectOf(d, bottom).y - (a.y + a.height);
+}
+
+describe("spacing control", () => {
+  const pair = () =>
+    architecture()
+      .app("a", "A")
+      .app("b", "B", { hint: { rightOf: "a" } })
+      .app("c", "C", { hint: { below: "a" } });
+
+  it("separates the axes", () => {
+    const d = pair().spacing({ x: 100, y: 12 }).build();
+    layoutArchitecture(d);
+    expect(gapX(d, "a", "b")).toBeCloseTo(100, 5);
+    expect(gapY(d, "a", "c")).toBeCloseTo(12, 5);
+  });
+
+  it("lets the document win over caller options", () => {
+    const d = pair().spacing({ x: 100 }).build();
+    layoutArchitecture(d, { gapX: 7, gapY: 12 });
+    expect(gapX(d, "a", "b")).toBeCloseTo(100, 5); // document
+    expect(gapY(d, "a", "c")).toBeCloseTo(12, 5); // option, nothing in the document
+  });
+
+  it("falls back gap -> gapX/gapY -> built-in default", () => {
+    const viaGap = pair().build();
+    layoutArchitecture(viaGap, { gap: 60 });
+    expect(gapX(viaGap, "a", "b")).toBeCloseTo(60, 5);
+    expect(gapY(viaGap, "a", "c")).toBeCloseTo(60, 5);
+
+    const bare = pair().build();
+    layoutArchitecture(bare);
+    expect(gapX(bare, "a", "b")).toBeCloseTo(40, 5);
+    expect(gapY(bare, "a", "c")).toBeCloseTo(40, 5);
+  });
+
+  it("keeps a per-node @gap overriding the scope on its own axis", () => {
+    const d = architecture()
+      .app("a", "A")
+      .app("b", "B", { hint: { rightOf: "a", gap: 5 } })
+      .app("c", "C", { hint: { below: "a" } })
+      .spacing({ x: 100, y: 100 })
+      .build();
+    layoutArchitecture(d);
+    expect(gapX(d, "a", "b")).toBeCloseTo(5, 5);
+    expect(gapY(d, "a", "c")).toBeCloseTo(100, 5);
+  });
+
+  it("inherits diagram spacing into a container, and lets the container override it", () => {
+    const build = (spacing?: { x?: number; y?: number }) =>
+      architecture()
+        .app("in1", "In 1")
+        .app("in2", "In 2", { hint: { below: "in1" } })
+        .container("svc", "Svc", { kind: "service", children: ["in1", "in2"], spacing })
+        .spacing({ y: 90 })
+        .build();
+
+    const inherited = build();
+    layoutArchitecture(inherited);
+    expect(gapY(inherited, "in1", "in2")).toBeCloseTo(90, 5);
+
+    const overridden = build({ y: 10 });
+    layoutArchitecture(overridden);
+    expect(gapY(overridden, "in1", "in2")).toBeCloseTo(10, 5);
+  });
+
+  it("reaches a nested container through its parent", () => {
+    const d = architecture()
+      .app("in1", "In 1")
+      .app("in2", "In 2", { hint: { below: "in1" } })
+      .container("inner", "Inner", { kind: "service", children: ["in1", "in2"] })
+      .container("outer", "Outer", { kind: "group", children: ["inner"], spacing: { y: 70 } })
+      .build();
+    layoutArchitecture(d);
+    expect(gapY(d, "in1", "in2")).toBeCloseTo(70, 5);
+  });
+
+  it("applies a per-container padding to its size and its children's offset", () => {
+    const wide = architecture()
+      .app("in", "In")
+      .container("svc", "Svc", { kind: "service", children: ["in"], padding: 60 })
+      .build();
+    layoutArchitecture(wide);
+    const svc = rectOf(wide, "svc");
+    const child = rectOf(wide, "in");
+    expect(child.x - svc.x).toBeCloseTo(60, 5);
+    // Left and right padding both count, plus the header on top.
+    expect(svc.x + svc.width - (child.x + child.width)).toBeCloseTo(60, 5);
+    expect(svc.y + svc.height - (child.y + child.height)).toBeCloseTo(60, 5);
+  });
+
+  it("uses the margin for the whole drawing, on every side of the SVG", () => {
+    const d = architecture().app("a", "A").margin(50).build();
+    layoutArchitecture(d);
+    const r = rectOf(d, "a");
+    expect(r.x).toBeCloseTo(50, 5);
+    expect(r.y).toBeCloseTo(50, 5);
+    // The renderer trails the same margin, so the whitespace stays symmetric.
+    const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(renderArchitecture(d))!;
+    expect(Number(m[1])).toBeCloseTo(r.width + 100, 5);
+    expect(Number(m[2])).toBeCloseTo(r.height + 100, 5);
+  });
+});

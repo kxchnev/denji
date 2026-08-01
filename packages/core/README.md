@@ -63,15 +63,20 @@ npx tsx src/cli.ts render diagram.pwr -o diagram.svg
 
 ### Синтаксис DSL
 
-- **Заголовок:** `architecture` (опционально).
+- **Заголовок:** `architecture` (опционально), может нести настройки уровня
+  диаграммы: `architecture @spacing(60) @margin(40)`.
 - **Фигуры:** `<kind> <id> "label" [@hints]`, где kind ∈ `app` · `database` ·
   `queue` · `rect`.
 - **Контейнеры:** `service|group <id> "label" [@hints] {` … дети … `}` —
   вложенность блоками (можно вкладывать друг в друга).
 - **Связи:** `<id> <op> <id> [: label]`, где op ∈ `->` (стрелка) · `<-` ·
   `<->` (обе) · `--` (линия) · `-.->` / `-.-` (пунктир).
-- **@-хинты** раскладки: `@rightOf(id)` · `@leftOf(id)` · `@above(id)` ·
-  `@below(id)` · `@gap(n)` · `@align(start|center|end)`.
+- **@-хинты** раскладки (на фигуре или контейнере): `@rightOf(id)` ·
+  `@leftOf(id)` · `@above(id)` · `@below(id)` · `@gap(n)` ·
+  `@align(start|center|end)`.
+- **@-настройки** расстояний (на `architecture` или контейнере):
+  `@spacing(n)` · `@spacingX(n)` · `@spacingY(n)` · `@padding(n)` (только
+  контейнер) · `@margin(n)` (только `architecture`).
 - **Комментарии:** строки на `#` или `%%`.
 
 ## Использование (программный API)
@@ -104,11 +109,40 @@ writeFileSync("out.svg", toSvg(diagram));
 |---|---|
 | `rightOf` / `leftOf` | Разместить справа/слева от узла |
 | `above` / `below` | Разместить выше/ниже узла |
-| `gap` | Доп. отступ до якоря |
+| `gap` | Расстояние до своего якоря (замещает `spacing` по этой оси) |
 | `align` | Выравнивание по поперечной оси (`start`/`center`/`end`) |
 
 Одна ось-связь задаёт и выравнивание по другой оси. Узел без хинтов встаёт
 справа от предыдущего сиблинга.
+
+### Расстояния
+
+`@gap` — про **один узел** и его якорь. Настройки ниже — про **область**
+(`architecture` или контейнер) и расстояния **между её детьми**; они наследуются
+внутрь, пока вложенный контейнер их не переопределит.
+
+| Настройка | Где | По умолчанию | Что делает |
+|---|---|---|---|
+| `spacing` | `architecture`, контейнер | 40 | Зазор между сиблингами, обе оси |
+| `spacingX` / `spacingY` | `architecture`, контейнер | 40 | То же по одной оси, уточняет `spacing` |
+| `padding` | контейнер | 24 | Отступ от рамки контейнера до детей |
+| `margin` | `architecture` | 24 | Поля вокруг всего рисунка |
+
+```
+architecture @spacingX(120) @spacingY(16) @margin(40)
+
+  app gw "Gateway"
+
+  service orders "Orders" @spacing(64) @padding(32) {
+    app api "API"
+    database db "PG" @below(api) @gap(80)
+  }
+```
+
+Те же значения есть и в программном API: `.spacing({ x, y })` / `.margin(n)` на
+билдере, `spacing` / `padding` в опциях `container()`, а `ArchLayoutOptions`
+(`gap`, `gapX`, `gapY`, `padding`, `headerH`, `margin`) задаёт дефолты со
+стороны вызывающего — **написанное в документе важнее**.
 
 ## Связи
 

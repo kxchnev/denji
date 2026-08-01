@@ -57,20 +57,79 @@ const KIND_COMPLETIONS: Completion[] = [
   kindCompletion("rect", 60),
 ];
 
-const DIRECTIVES = [
+/**
+ * Where each directive is legal, mirroring ALLOWED in
+ * packages/core/src/dsl/arch-parse.ts. Placement hints belong to a node;
+ * spacing settings belong to the scope a line opens — containers are both.
+ */
+type DirectiveCtx = "shape" | "container" | "diagram";
+
+const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: DirectiveCtx[] }> = [
   {
     name: "rightOf",
     detail: "(id)",
     info: "Place this node to the right of a sibling — a node in the same container.",
+    in: ["shape", "container"],
   },
-  { name: "leftOf", detail: "(id)", info: "Place this node to the left of a sibling." },
-  { name: "below", detail: "(id)", info: "Place this node under a sibling." },
-  { name: "above", detail: "(id)", info: "Place this node over a sibling." },
-  { name: "gap", detail: "(px)", info: "Spacing in px between this node and its anchor. Defaults to 40." },
+  {
+    name: "leftOf",
+    detail: "(id)",
+    info: "Place this node to the left of a sibling.",
+    in: ["shape", "container"],
+  },
+  {
+    name: "below",
+    detail: "(id)",
+    info: "Place this node under a sibling.",
+    in: ["shape", "container"],
+  },
+  {
+    name: "above",
+    detail: "(id)",
+    info: "Place this node over a sibling.",
+    in: ["shape", "container"],
+  },
+  {
+    name: "gap",
+    detail: "(px)",
+    info: "Distance to this node's own anchor, replacing the scope's spacing on that axis.",
+    in: ["shape", "container"],
+  },
   {
     name: "align",
     detail: "(start|center|end)",
     info: "Cross-axis alignment against the anchor. Defaults to center.",
+    in: ["shape", "container"],
+  },
+  {
+    name: "spacing",
+    detail: "(px)",
+    info: "Default gap between this scope's children, both axes. Inherited by nested scopes. Defaults to 40.",
+    in: ["container", "diagram"],
+  },
+  {
+    name: "spacingX",
+    detail: "(px)",
+    info: "Horizontal gap between this scope's children. Refines @spacing.",
+    in: ["container", "diagram"],
+  },
+  {
+    name: "spacingY",
+    detail: "(px)",
+    info: "Vertical gap between this scope's children. Refines @spacing.",
+    in: ["container", "diagram"],
+  },
+  {
+    name: "padding",
+    detail: "(px)",
+    info: "Space between this container's border and its children. Defaults to 24.",
+    in: ["container"],
+  },
+  {
+    name: "margin",
+    detail: "(px)",
+    info: "Whitespace around the whole drawing. Defaults to 24.",
+    in: ["diagram"],
   },
 ];
 
@@ -79,15 +138,21 @@ const DIRECTIVES = [
  * popup after any namespace option is picked, so choosing `@rightOf` lands the
  * cursor inside the parens with the sibling list already showing.
  */
-const DIRECTIVE_COMPLETIONS: Completion[] = DIRECTIVES.map((d, i) =>
-  snippetCompletion(`@${d.name}(\${})`, {
+const DIRECTIVE_COMPLETIONS: Record<DirectiveCtx, Completion[]> = {
+  shape: [],
+  container: [],
+  diagram: [],
+};
+for (const [i, d] of DIRECTIVES.entries()) {
+  const completion = snippetCompletion(`@${d.name}(\${})`, {
     label: `@${d.name}`,
     type: "namespace",
     detail: d.detail,
     info: d.info,
     boost: 50 - i,
-  }),
-);
+  });
+  for (const where of d.in) DIRECTIVE_COMPLETIONS[where].push(completion);
+}
 
 /** Operators carry their trailing space so the endpoint popup can chain. */
 const OPERATORS: Completion[] = (
@@ -108,12 +173,24 @@ const ALIGN: Completion[] = ["start", "center", "end"].map((v, i) => ({
   boost: 30 - i,
 }));
 
-const GAP: Completion[] = ["20", "40", "80", "120"].map((v, i) => ({
-  label: v,
-  type: "constant",
-  detail: v === "40" ? "px — default" : "px",
-  boost: 30 - i,
-}));
+/** Suggested distances, with the engine's own default called out. */
+function pxValues(values: string[], fallback: string): Completion[] {
+  return values.map((v, i) => ({
+    label: v,
+    type: "constant",
+    detail: v === fallback ? "px — default" : "px",
+    boost: 30 - i,
+  }));
+}
+
+const PX: Record<string, Completion[]> = {
+  gap: pxValues(["20", "40", "80", "120"], "40"),
+  spacing: pxValues(["16", "24", "40", "80"], "40"),
+  spacingx: pxValues(["16", "24", "40", "80"], "40"),
+  spacingy: pxValues(["16", "24", "40", "80"], "40"),
+  padding: pxValues(["8", "16", "24", "48"], "24"),
+  margin: pxValues(["0", "24", "48", "80"], "24"),
+};
 
 const LABEL_SNIPPET = snippetCompletion('"${Label}"', {
   label: '"label"',
@@ -237,7 +314,16 @@ const AT_SIGN = /@([A-Za-z]*)$/;
 const DECL_HEAD = /^\s*(app|database|queue|rect|service|group)\s+([A-Za-z0-9_]+)(.*)$/;
 const CONNECTION = /^\s*([A-Za-z0-9_]+)\s*(<->|-\.->|-\.-|->|<-|--)\s*([A-Za-z0-9_]*)(\s*)$/;
 const OP_POSITION = /^\s*([A-Za-z0-9_]+)\s*([<>.-]*)$/;
+const HEADER_LINE = /^\s*architecture\b/;
 const RESERVED = new Set(["architecture", "app", "database", "queue", "rect", "service", "group"]);
+
+/** Which set of directives the line being typed accepts. */
+function directiveCtx(masked: string): DirectiveCtx | null {
+  if (HEADER_LINE.test(masked)) return "diagram";
+  const kind = DECL_HEAD.exec(masked)?.[1];
+  if (!kind) return null;
+  return kind === "service" || kind === "group" ? "container" : "shape";
+}
 
 export const pwrCompletions: CompletionSource = (ctx) => {
   const line = ctx.state.doc.lineAt(ctx.pos);
@@ -261,9 +347,10 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     const name = args[1]!.toLowerCase(); // the parser lowercases too — @RightOf is legal
     const arg = args[2]!;
     if (name === "align") return result(ALIGN, wordFrom);
-    if (name === "gap") {
+    const px = PX[name];
+    if (px) {
       return arg.trim() === "" || ctx.explicit
-        ? { from: ctx.pos - arg.length, options: GAP, validFor: /^\d*$/ }
+        ? { from: ctx.pos - arg.length, options: px, validFor: /^\d*$/ }
         : null;
     }
     if (name === "rightof" || name === "leftof" || name === "above" || name === "below") {
@@ -272,16 +359,25 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     return null; // unknown directive: nothing useful to say
   }
 
-  // 2. Just after an `@`.
+  // 2. Just after an `@` — only what this position actually accepts.
   const at = AT_SIGN.exec(masked);
-  if (at) return result(DIRECTIVE_COMPLETIONS, ctx.pos - at[0]!.length);
+  if (at) {
+    const where = directiveCtx(masked);
+    return where ? result(DIRECTIVE_COMPLETIONS[where], ctx.pos - at[0]!.length) : null;
+  }
 
   // 3. First token of the line.
   if (/^\s*[A-Za-z0-9_]*$/.test(masked)) {
     return result(lineStartOptions(scan, line.number), wordFrom);
   }
 
-  // 4. Tail of a declaration: `<kind> <id> …`
+  // 4. Tail of the `architecture` header, which carries diagram-level settings.
+  if (HEADER_LINE.test(masked)) {
+    if (!/\s$/.test(masked) && !ctx.explicit) return null; // still typing the keyword
+    return result(DIRECTIVE_COMPLETIONS.diagram, wordFrom);
+  }
+
+  // 5. Tail of a declaration: `<kind> <id> …`
   const decl = DECL_HEAD.exec(masked);
   if (decl) {
     const kind = decl[1]!;
@@ -289,13 +385,14 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     // Mid-token, e.g. still typing the id or a label: stay quiet unless asked.
     if (!/\s$/.test(tail) && !ctx.explicit) return null;
     const out: Completion[] = [];
+    const container = kind === "service" || kind === "group";
     if (!tail.includes('"')) out.push(LABEL_SNIPPET);
-    if ((kind === "service" || kind === "group") && !tail.includes("{")) out.push(BRACE_SNIPPET);
-    out.push(...DIRECTIVE_COMPLETIONS);
+    if (container && !tail.includes("{")) out.push(BRACE_SNIPPET);
+    out.push(...DIRECTIVE_COMPLETIONS[container ? "container" : "shape"]);
     return result(out, wordFrom);
   }
 
-  // 5. Connection line.
+  // 6. Connection line.
   const conn = CONNECTION.exec(masked);
   if (conn) {
     const src = conn[1]!;
@@ -313,7 +410,7 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     return result(options, ctx.pos - target.length);
   }
 
-  // 6. Operator position: after an id, or part-way through an operator.
+  // 7. Operator position: after an id, or part-way through an operator.
   const op = OP_POSITION.exec(masked);
   if (op && !RESERVED.has(op[1]!)) {
     const partial = op[2]!;

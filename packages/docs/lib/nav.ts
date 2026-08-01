@@ -23,6 +23,7 @@ export const nav: NavSection[] = [
       { title: "Arrows", href: "/arrows" },
       { title: "Blocks", href: "/blocks" },
       { title: "Layout", href: "/layout" },
+      { title: "Spacing", href: "/spacing" },
     ],
   },
 ];

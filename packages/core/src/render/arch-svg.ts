@@ -31,7 +31,10 @@ const TEXT = "#1e293b";
 
 /** Render a laid-out architecture diagram (every node has a rect) to SVG. */
 export function renderArchitecture(diagram: ArchDiagram, opts: ArchRenderOptions = {}): string {
-  const o = { ...DEFAULTS, ...opts };
+  // The layout pushes the drawing to (margin, margin); this padding is what
+  // trails it on the right and bottom. Follow the diagram's own margin so the
+  // whitespace stays symmetric, unless the caller asked for something else.
+  const o = { ...DEFAULTS, padding: diagram.margin ?? DEFAULTS.padding, ...opts };
   const { width, height } = bounds(diagram, o.padding);
 
   const parts: string[] = [];

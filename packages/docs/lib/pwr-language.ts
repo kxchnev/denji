@@ -7,6 +7,8 @@ const KINDS = new Set(["app", "database", "queue", "rect", "service", "group"]);
 const OPS = ["<->", "-.->", "-.-", "->", "<-", "--"];
 /** Directive names are lower-cased by the core, so matching is case-insensitive. */
 const RELATIONAL = new Set(["rightof", "leftof", "above", "below"]);
+/** Directives whose argument is a distance in px. */
+const NUMERIC = new Set(["gap", "spacing", "spacingx", "spacingy", "padding", "margin"]);
 
 const FIRST_TOKEN = /^\S+/;
 const ID = /^[A-Za-z0-9_]+/;
@@ -49,7 +51,8 @@ function startOfLine(stream: StringStream, state: PwrState): string | null {
   const first = (stream.match(FIRST_TOKEN, false) as RegExpMatchArray | null)?.[0] ?? "";
   if (first === "architecture") {
     stream.match(first);
-    state.mode = "rest";
+    // The header can carry diagram-level directives, so keep reading the line.
+    state.mode = "decl";
     return "keyword";
   }
   if (KINDS.has(first)) {
@@ -105,8 +108,10 @@ function argument(stream: StringStream, state: PwrState): string | null {
   state.mode = "decl";
   const arg = stream.match(ARG) as RegExpMatchArray | null;
   if (!arg) return null; // `@gap()` — let `decl` consume the `)` on the next call
-  if (state.directive === "gap") {
-    return Number.isFinite(Number(arg[0])) ? "number" : "invalid";
+  if (NUMERIC.has(state.directive)) {
+    const n = Number(arg[0]);
+    // The core rejects negatives too, so flag them rather than paint them valid.
+    return Number.isFinite(n) && n >= 0 ? "number" : "invalid";
   }
   if (state.directive === "align") return "atom";
   if (RELATIONAL.has(state.directive)) return "variableName";

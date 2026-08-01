@@ -1,12 +1,21 @@
 import type { ArchDiagram } from "../../model/arch.js";
 import type { Size } from "../../model/geometry.js";
 import { measureLabelWidth, measureShape } from "./measure.js";
-import { layoutScope, type Placeable } from "./relative.js";
+import { layoutScope, type AxisGaps, type Placeable } from "./relative.js";
 import { routeConnections } from "./route.js";
 
+/**
+ * Caller-side defaults. Anything the diagram itself declares (`@spacing`,
+ * `@padding`, `@margin` in the DSL) wins over these — the document is authored
+ * intent, options are just the environment's fallback.
+ */
 export interface ArchLayoutOptions {
-  /** Spacing between siblings. */
+  /** Spacing between siblings, both axes. Overridden by gapX/gapY. */
   gap?: number;
+  /** Horizontal spacing between siblings. */
+  gapX?: number;
+  /** Vertical spacing between siblings. */
+  gapY?: number;
   /** Inner padding between a container border and its content. */
   padding?: number;
   /** Height of a container's title header. */
@@ -14,6 +23,11 @@ export interface ArchLayoutOptions {
   /** Outer margin around the whole drawing. */
   margin?: number;
 }
+
+const DEFAULT_GAP = 40;
+const DEFAULT_PADDING = 24;
+const DEFAULT_HEADER_H = 28;
+const DEFAULT_MARGIN = 24;
 
 interface Local {
   x: number;
@@ -26,10 +40,14 @@ interface Local {
  * in their parent scope. Mutates and returns the diagram.
  */
 export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions = {}): ArchDiagram {
-  const gap = opts.gap ?? 40;
-  const padding = opts.padding ?? 24;
-  const headerH = opts.headerH ?? 28;
-  const margin = opts.margin ?? 24;
+  // Document over options over built-in, per axis.
+  const rootGaps: AxisGaps = {
+    x: diagram.spacing?.x ?? opts.gapX ?? opts.gap ?? DEFAULT_GAP,
+    y: diagram.spacing?.y ?? opts.gapY ?? opts.gap ?? DEFAULT_GAP,
+  };
+  const padding = opts.padding ?? DEFAULT_PADDING;
+  const headerH = opts.headerH ?? DEFAULT_HEADER_H;
+  const margin = diagram.margin ?? opts.margin ?? DEFAULT_MARGIN;
 
   const nodes = new Map(diagram.nodes.map((n) => [n.id, n]));
 
@@ -44,21 +62,28 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
   const innerOffset = new Map<string, Local>();
 
   // Bottom-up sizing: a container's size depends on its laid-out children.
-  const sizeNode = (id: string): Size => {
+  // `inherited` flows down the container tree so a diagram-level spacing reaches
+  // every scope, and a container's own spacing governs its whole subtree.
+  const sizeNode = (id: string, inherited: AxisGaps): Size => {
     const n = nodes.get(id)!;
     if (n.type === "shape") {
       const s = measureShape(n);
       sizeMap.set(id, s);
       return s;
     }
+    const gaps: AxisGaps = {
+      x: n.spacing?.x ?? inherited.x,
+      y: n.spacing?.y ?? inherited.y,
+    };
+    const pad = n.padding ?? padding;
     const items: Placeable[] = n.children.map((cid) => {
-      const s = sizeNode(cid);
+      const s = sizeNode(cid, gaps);
       return { id: cid, width: s.width, height: s.height, hint: nodes.get(cid)!.hint };
     });
     let contentW = 0;
     let contentH = 0;
     if (items.length > 0) {
-      const scope = layoutScope(items, gap);
+      const scope = layoutScope(items, gaps);
       childLocal.set(id, scope.pos);
       contentW = scope.width;
       contentH = scope.height;
@@ -66,19 +91,19 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
       childLocal.set(id, new Map());
     }
     const labelW = measureLabelWidth(n.label) + 24;
-    const width = Math.max(contentW + padding * 2, labelW);
-    const height = contentH + padding * 2 + headerH;
-    innerOffset.set(id, { x: padding, y: headerH + padding });
+    const width = Math.max(contentW + pad * 2, labelW);
+    const height = contentH + pad * 2 + headerH;
+    innerOffset.set(id, { x: pad, y: headerH + pad });
     const size = { width, height };
     sizeMap.set(id, size);
     return size;
   };
 
   const topItems: Placeable[] = topLevel.map((id) => {
-    const s = sizeNode(id);
+    const s = sizeNode(id, rootGaps);
     return { id, width: s.width, height: s.height, hint: nodes.get(id)!.hint };
   });
-  const topScope = layoutScope(topItems, gap);
+  const topScope = layoutScope(topItems, rootGaps);
 
   // Top-down absolute placement.
   const place = (id: string, absX: number, absY: number): void => {

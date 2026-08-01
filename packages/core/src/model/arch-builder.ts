@@ -7,6 +7,7 @@ import type {
   PlaceHint,
   Shape,
   ShapeKind,
+  Spacing,
 } from "./arch.js";
 
 export interface ShapeOptions {
@@ -17,6 +18,10 @@ export interface ContainerOptions {
   kind?: ContainerKind;
   children?: string[];
   hint?: PlaceHint;
+  /** Spacing between this container's children; inherited by nested scopes. */
+  spacing?: Spacing;
+  /** Inner padding between this container's border and its children. */
+  padding?: number;
 }
 
 /** Connection direction: which ends get an arrowhead. */
@@ -41,6 +46,8 @@ export interface ConnectOptions {
 export class ArchitectureBuilder {
   private readonly nodes = new Map<string, ArchNode>();
   private readonly connections: Connection[] = [];
+  private diagramSpacing?: Spacing;
+  private diagramMargin?: number;
 
   private addShape(id: string, kind: ShapeKind, label: string | undefined, opts: ShapeOptions): this {
     if (this.nodes.has(id)) throw new Error(`Duplicate node id: "${id}"`);
@@ -71,8 +78,22 @@ export class ArchitectureBuilder {
       kind: opts.kind ?? "group",
       children: opts.children ? [...opts.children] : [],
       hint: opts.hint,
+      spacing: opts.spacing,
+      padding: opts.padding,
     };
     this.nodes.set(id, container);
+    return this;
+  }
+
+  /** Diagram-wide spacing between siblings; merges with any earlier call. */
+  spacing(s: Spacing): this {
+    this.diagramSpacing = { ...this.diagramSpacing, ...s };
+    return this;
+  }
+
+  /** Outer margin around the whole drawing. */
+  margin(n: number): this {
+    this.diagramMargin = n;
     return this;
   }
 
@@ -126,6 +147,8 @@ export class ArchitectureBuilder {
       kind: "architecture",
       nodes: [...this.nodes.values()],
       connections: this.connections,
+      spacing: this.diagramSpacing,
+      margin: this.diagramMargin,
     };
   }
 }

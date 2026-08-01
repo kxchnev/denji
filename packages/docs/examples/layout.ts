@@ -16,13 +16,6 @@ export const layout: ExampleData[] = [
     api: `architecture()\n  .app("a", "A")\n  .app("b", "B", { hint: { leftOf: "a" } })\n  .app("c", "C", { hint: { above: "a" } })\n  .build();`,
   },
   {
-    id: "gap",
-    title: "gap",
-    description: "`@gap(n)` adds extra spacing between a node and its anchor.",
-    dsl: `architecture\n  app a "A"\n  app b "B" @rightOf(a) @gap(120)`,
-    api: `architecture()\n  .app("a", "A")\n  .app("b", "B", { hint: { rightOf: "a", gap: 120 } })\n  .build();`,
-  },
-  {
     id: "align",
     title: "align",
     description: "By default a node centers on its anchor; `@align(start|end)` overrides the cross-axis.",

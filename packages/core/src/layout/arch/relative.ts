@@ -14,6 +14,12 @@ export interface ScopeResult {
   height: number;
 }
 
+/** Resolved spacing for one scope: horizontal and vertical gaps between siblings. */
+export interface AxisGaps {
+  x: number;
+  y: number;
+}
+
 /**
  * Resolve a single scope of siblings into local coordinates using relative
  * hints only. X comes from rightOf/leftOf, Y from above/below; the single given
@@ -25,8 +31,11 @@ export interface ScopeResult {
  * Within a block, a node whose slot is already taken slides clear along the
  * cross axis of the relation that placed it. The result is normalized to
  * origin (0,0).
+ *
+ * Every distance comes from `gaps`, picked by the axis it acts on; a node's
+ * own `hint.gap` replaces it for that node's relation.
  */
-export function layoutScope(items: Placeable[], gap: number): ScopeResult {
+export function layoutScope(items: Placeable[], gaps: AxisGaps): ScopeResult {
   const byId = new Map(items.map((it) => [it.id, it]));
 
   /** Anchors that actually resolve to a sibling in this scope. */
@@ -43,8 +52,9 @@ export function layoutScope(items: Placeable[], gap: number): ScopeResult {
   const pos = new Map<string, { x: number; y: number }>();
   let prev: Rect | undefined;
   for (const members of buildBlocks(items, anchorIds)) {
-    const local = placeBlock(members, gap, anchorIds);
-    const g = members[0]!.hint?.gap ?? gap;
+    const local = placeBlock(members, gaps, anchorIds);
+    // Blocks are laid out left to right, so this is a horizontal gap.
+    const g = members[0]!.hint?.gap ?? gaps.x;
     // Blocks occupy strictly increasing, disjoint x-intervals, so nothing from
     // one block can ever overlap another.
     const dx = prev ? prev.x + prev.width + g : 0;
@@ -102,7 +112,7 @@ function buildBlocks(items: Placeable[], anchorIds: (it: Placeable) => string[])
 /** Solve one block of hint-connected siblings into local coordinates. */
 function placeBlock(
   members: Placeable[],
-  gap: number,
+  gaps: AxisGaps,
   anchorIds: (it: Placeable) => string[],
 ): ScopeResult {
   const byId = new Map(members.map((it) => [it.id, it]));
@@ -128,7 +138,9 @@ function placeBlock(
     // Center on the cross axis by default so connected nodes share an axis and
     // their connectors stay straight. Override per node with @align(start|end).
     const align = h?.align ?? "center";
-    const g = h?.gap ?? gap;
+    // A node's own gap replaces the scope default on whichever axis it acts.
+    const gx = h?.gap ?? gaps.x;
+    const gy = h?.gap ?? gaps.y;
 
     const hx = h?.rightOf
       ? { anchor: h.rightOf, side: "right" as const }
@@ -149,7 +161,7 @@ function placeBlock(
       const pa = p ? pos.get(p) : undefined;
       const pit = p ? byId.get(p) : undefined;
       if (pa && pit) {
-        x = pa.x + pit.width + g;
+        x = pa.x + pit.width + gx; // the implicit flow is horizontal
         y = pa.y + (pit.height - it.height) / 2; // center on the previous sibling
       }
     } else {
@@ -157,7 +169,7 @@ function placeBlock(
         const a = pos.get(hx.anchor);
         const ai = byId.get(hx.anchor);
         if (a && ai) {
-          x = hx.side === "right" ? a.x + ai.width + g : a.x - it.width - g;
+          x = hx.side === "right" ? a.x + ai.width + gx : a.x - it.width - gx;
           if (!vy) y = alignCoord(a.y, ai.height, it.height, align);
         }
       }
@@ -165,7 +177,7 @@ function placeBlock(
         const a = pos.get(vy.anchor);
         const ai = byId.get(vy.anchor);
         if (a && ai) {
-          y = vy.side === "below" ? a.y + ai.height + g : a.y - it.height - g;
+          y = vy.side === "below" ? a.y + ai.height + gy : a.y - it.height - gy;
           if (!hx) x = alignCoord(a.x, ai.width, it.width, align);
         }
       }
@@ -177,7 +189,7 @@ function placeBlock(
       { x, y, width: it.width, height: it.height },
       placed,
       hx ? "down" : "right",
-      g,
+      hx ? gy : gx,
     );
     pos.set(id, { x: rect.x, y: rect.y });
     placed.push(rect);

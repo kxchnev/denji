@@ -1,4 +1,4 @@
-import type { ArchDiagram, ContainerKind, PlaceHint, ShapeKind } from "../model/arch.js";
+import type { ArchDiagram, ContainerKind, PlaceHint, ShapeKind, Spacing } from "../model/arch.js";
 import { architecture, type ArchitectureBuilder, type Dir } from "../model/arch-builder.js";
 import { DiagramParseError, indentCol } from "./error.js";
 
@@ -21,6 +21,22 @@ interface Frame {
   kind: ContainerKind;
   children: string[];
   hint?: PlaceHint;
+  spacing?: Spacing;
+  padding?: number;
+}
+
+/**
+ * Where a directive was written. Placement hints belong to a node; spacing
+ * settings belong to the scope a node opens, so the two lists only overlap on
+ * containers — which are both at once.
+ */
+type DirectiveCtx = "shape" | "container" | "diagram";
+
+interface Directives {
+  hint?: PlaceHint;
+  spacing?: Spacing;
+  padding?: number;
+  margin?: number;
 }
 
 /** Parse `.pwr` architecture DSL source into an ArchDiagram (via the builder). */
@@ -39,7 +55,15 @@ export function parseArchitecture(src: string): ArchDiagram {
     const lineNo = i + 1;
     const line = raw.trim();
     if (line === "" || line.startsWith("#") || line.startsWith("%%")) continue;
-    if (line === "architecture") continue;
+
+    // The header may carry diagram-level settings: `architecture @spacing(60)`.
+    const header = line.match(/^architecture\b\s*(.*)$/);
+    if (header) {
+      const d = parseDirectives(header[1] ?? "", lineNo, raw, "diagram");
+      if (d.spacing) b.spacing(d.spacing);
+      if (d.margin !== undefined) b.margin(d.margin);
+      continue;
+    }
 
     if (line === "}") {
       const frame = frames.pop();
@@ -48,6 +72,8 @@ export function parseArchitecture(src: string): ArchDiagram {
         kind: frame.kind,
         children: frame.children,
         hint: frame.hint,
+        spacing: frame.spacing,
+        padding: frame.padding,
       });
       addChildToScope(frame.id);
       continue;
@@ -90,7 +116,7 @@ function parseShapeLine(
   const kind = m[1] as ShapeKind;
   const id = m[2]!;
   const label = m[3];
-  const hint = parseDirectives(m[4] ?? "", lineNo, raw);
+  const { hint } = parseDirectives(m[4] ?? "", lineNo, raw, "shape");
 
   const opts = { hint };
   if (kind === "app") b.app(id, label, opts);
@@ -110,12 +136,15 @@ function parseContainerOpen(line: string, lineNo: number, raw: string): Frame {
       raw,
     );
   }
+  const d = parseDirectives(m[4] ?? "", lineNo, raw, "container");
   return {
     id: m[2]!,
     label: m[3] ?? m[2]!,
     kind: m[1] as ContainerKind,
     children: [],
-    hint: parseDirectives(m[4] ?? "", lineNo, raw),
+    hint: d.hint,
+    spacing: d.spacing,
+    padding: d.padding,
   };
 }
 
@@ -139,16 +168,64 @@ function parseConnectionLine(
   b.connect(fromId, toId, { label, dir: spec.dir, style: spec.style });
 }
 
-function parseDirectives(text: string, lineNo: number, raw: string): PlaceHint | undefined {
+const RELATIONAL: Record<string, keyof PlaceHint> = {
+  rightof: "rightOf",
+  leftof: "leftOf",
+  above: "above",
+  below: "below",
+};
+
+/** Which directives each position accepts, for the "not allowed here" message. */
+const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
+  shape: new Set(["rightof", "leftof", "above", "below", "gap", "align"]),
+  container: new Set([
+    "rightof",
+    "leftof",
+    "above",
+    "below",
+    "gap",
+    "align",
+    "spacing",
+    "spacingx",
+    "spacingy",
+    "padding",
+  ]),
+  diagram: new Set(["spacing", "spacingx", "spacingy", "margin"]),
+};
+
+const KNOWN = new Set([...ALLOWED.container, ...ALLOWED.diagram]);
+
+const WHERE: Record<DirectiveCtx, string> = {
+  shape: "on a shape",
+  container: "on a container",
+  diagram: "on the architecture line",
+};
+
+function parseDirectives(
+  text: string,
+  lineNo: number,
+  raw: string,
+  ctx: DirectiveCtx,
+): Directives {
   let rest = text.trim();
-  if (rest === "") return undefined;
-  const hint: PlaceHint = {};
-  const relational: Record<string, keyof PlaceHint> = {
-    rightof: "rightOf",
-    leftof: "leftOf",
-    above: "above",
-    below: "below",
+  const out: Directives = {};
+  if (rest === "") return out;
+
+  /** Non-negative and finite — a negative distance would pull nodes together. */
+  const size = (name: string, arg: string): number => {
+    const n = Number(arg);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new DiagramParseError(
+        `@${name} expects a number >= 0`,
+        lineNo,
+        indentCol(raw),
+        raw,
+      );
+    }
+    return n;
   };
+  const hint = (): PlaceHint => (out.hint ??= {});
+  const spacing = (): Spacing => (out.spacing ??= {});
 
   while (rest !== "") {
     const m = rest.match(/^@([A-Za-z]+)\(([^)]*)\)/);
@@ -156,28 +233,46 @@ function parseDirectives(text: string, lineNo: number, raw: string): PlaceHint |
     const name = m[1]!.toLowerCase();
     const arg = m[2]!.trim();
 
-    if (relational[name]) {
+    if (!KNOWN.has(name)) {
+      throw new DiagramParseError(`unknown directive @${m[1]}`, lineNo, indentCol(raw), raw);
+    }
+    if (!ALLOWED[ctx].has(name)) {
+      throw new DiagramParseError(
+        `@${m[1]} is not allowed ${WHERE[ctx]}`,
+        lineNo,
+        indentCol(raw),
+        raw,
+      );
+    }
+
+    if (RELATIONAL[name]) {
       if (!/^[A-Za-z0-9_]+$/.test(arg)) {
         throw new DiagramParseError(`@${m[1]} expects a node id`, lineNo, indentCol(raw), raw);
       }
-      (hint[relational[name]] as string) = arg;
+      (hint()[RELATIONAL[name]] as string) = arg;
     } else if (name === "gap") {
-      const g = Number(arg);
-      if (!Number.isFinite(g)) {
-        throw new DiagramParseError("@gap expects a number", lineNo, indentCol(raw), raw);
-      }
-      hint.gap = g;
+      hint().gap = size(m[1]!, arg);
     } else if (name === "align") {
       if (arg !== "start" && arg !== "center" && arg !== "end") {
         throw new DiagramParseError("@align expects start|center|end", lineNo, indentCol(raw), raw);
       }
-      hint.align = arg;
+      hint().align = arg;
+    } else if (name === "spacing") {
+      const n = size(m[1]!, arg);
+      spacing().x = n;
+      spacing().y = n;
+    } else if (name === "spacingx") {
+      spacing().x = size(m[1]!, arg);
+    } else if (name === "spacingy") {
+      spacing().y = size(m[1]!, arg);
+    } else if (name === "padding") {
+      out.padding = size(m[1]!, arg);
     } else {
-      throw new DiagramParseError(`unknown directive @${m[1]}`, lineNo, indentCol(raw), raw);
+      out.margin = size(m[1]!, arg);
     }
     rest = rest.slice(m[0].length).trim();
   }
-  return hint;
+  return out;
 }
 
 /** Find the first connection operator in a line (left-to-right, longest-first). */

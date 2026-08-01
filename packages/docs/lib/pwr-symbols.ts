@@ -66,7 +66,8 @@ export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
 
     if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("%%")) continue;
     if (firstContentLine === 0) firstContentLine = n;
-    if (trimmed === "architecture") {
+    // The header may carry diagram-level directives after the keyword.
+    if (/^architecture\b/.test(trimmed)) {
       hasHeader = true;
       continue;
     }

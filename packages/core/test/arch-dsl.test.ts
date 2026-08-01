@@ -86,6 +86,66 @@ describe("architecture DSL", () => {
     expect(container(d, "s").hint).toMatchObject({ rightOf: "a", align: "center" });
   });
 
+  it("reads spacing settings off the architecture header", () => {
+    const d = parseArchitecture(`
+      architecture @spacing(60) @margin(40)
+      app a "A"
+    `);
+    expect(d.spacing).toEqual({ x: 60, y: 60 });
+    expect(d.margin).toBe(40);
+  });
+
+  it("lets @spacingX/@spacingY refine @spacing, last one winning", () => {
+    const d = parseArchitecture(`architecture @spacing(60) @spacingX(20)\napp a "A"`);
+    expect(d.spacing).toEqual({ x: 20, y: 60 });
+  });
+
+  it("takes scope settings on a container alongside its own placement hint", () => {
+    const d = parseArchitecture(`
+      architecture
+      app a "A"
+      service s "S" @rightOf(a) @spacingY(24) @padding(32) {
+        app c "C"
+      }
+    `);
+    const s = container(d, "s");
+    expect(s.hint).toMatchObject({ rightOf: "a" });
+    expect(s.spacing).toEqual({ y: 24 });
+    expect(s.padding).toBe(32);
+  });
+
+  it("keeps the bare header and an absent header working", () => {
+    expect(parseArchitecture(`architecture\napp a "A"`).spacing).toBeUndefined();
+    expect(parseArchitecture(`app a "A"`).nodes).toHaveLength(1);
+  });
+
+  it("rejects a directive used in the wrong position", () => {
+    const reason = (src: string) => {
+      try {
+        parseArchitecture(src);
+      } catch (e) {
+        return (e as DiagramParseError).reason;
+      }
+      throw new Error("expected throw");
+    };
+    expect(reason(`architecture\napp a "A" @padding(10)`)).toContain("not allowed on a shape");
+    expect(reason(`architecture @rightOf(a)\napp a "A"`)).toContain(
+      "not allowed on the architecture line",
+    );
+    expect(reason(`architecture @padding(10)\napp a "A"`)).toContain("not allowed");
+    expect(reason(`architecture\napp a "A" @wat(1)`)).toContain("unknown directive");
+  });
+
+  it("rejects negative distances", () => {
+    for (const src of [
+      `architecture\napp a "A"\napp b "B" @rightOf(a) @gap(-5)`,
+      `architecture @spacing(-1)\napp a "A"`,
+      `architecture @margin(-1)\napp a "A"`,
+    ]) {
+      expect(() => parseArchitecture(src)).toThrow(/>= 0/);
+    }
+  });
+
   it("reports parse errors with the line number", () => {
     const bad = (src: string) => {
       try {

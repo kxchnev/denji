@@ -3,9 +3,10 @@ import { elements } from "./elements";
 import { arrows } from "./arrows";
 import { blocks } from "./blocks";
 import { layout } from "./layout";
+import { spacing } from "./spacing";
 
 export type { ExampleData };
-export { elements, arrows, blocks, layout };
+export { elements, arrows, blocks, layout, spacing };
 
 /** The headline example shown on the introduction page. */
 export const intro: ExampleData = {
@@ -50,4 +51,11 @@ export const intro: ExampleData = {
 };
 
 /** Flat list for the example validator. */
-export const allExamples: ExampleData[] = [intro, ...elements, ...arrows, ...blocks, ...layout];
+export const allExamples: ExampleData[] = [
+  intro,
+  ...elements,
+  ...arrows,
+  ...blocks,
+  ...layout,
+  ...spacing,
+];
