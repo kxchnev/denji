@@ -267,6 +267,35 @@ describe("architecture layout", () => {
       }
     });
 
+    it("leaves the arrowhead a straight run even in a cramped corridor", () => {
+      // The head is markerWidth 7 in strokeWidth units; at the theme's 1.5 that
+      // is 10.5 units, of which refX=9/10 sits behind the endpoint. A shorter
+      // approach than 9.45 puts the bend inside the head and the line appears
+      // to join the arrow from the side.
+      const ARROWHEAD_REACH = 9.45;
+      // A 16px corridor is the interesting width: one grid step, so the lane
+      // used to snap to 8px of approach — under the head. Anything under ~13px
+      // of corridor cannot fit the head at all, whatever the lane.
+      const d = parse(
+        [
+          "architecture",
+          '  app a "A"',
+          '  service b "B" @rightOf(a) @align(start) @gap(16) {',
+          '    app b1 "One"',
+          '    app b2 "Two" @below(b1)',
+          "  }",
+          "  a -> b",
+        ].join("\n"),
+      );
+      layoutArchitecture(d);
+      const path = d.connections[0]!.path!;
+      const last = Math.hypot(
+        path[path.length - 1]!.x - path[path.length - 2]!.x,
+        path[path.length - 1]!.y - path[path.length - 2]!.y,
+      );
+      expect(last).toBeGreaterThan(ARROWHEAD_REACH);
+    });
+
     it("still merges near-aligned centres into one straight line", () => {
       // An app and a taller database centred on each other must not gain a
       // dogleg just because their heights differ.

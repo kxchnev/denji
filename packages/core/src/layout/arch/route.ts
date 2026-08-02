@@ -80,7 +80,7 @@ export function routeConnections(diagram: ArchDiagram): void {
 
   // Pass 3: build paths from the (possibly redistributed) ports.
   for (const w of wired) {
-    const path = simplify(buildPath(w.start, w.end));
+    const path = simplify(buildPath(w.start, w.end, w.c.fromArrow, w.c.toArrow));
     w.c.path = path;
     w.c.labelPos = midpoint(path);
   }
@@ -162,29 +162,58 @@ function spreadPort(port: Port, r: Rect, side: Side, frac: number): void {
 }
 
 /**
+ * Straight run an arrowhead needs before the path is allowed to turn.
+ *
+ * The head is drawn as a marker `markerWidth="7"` in `strokeWidth` units, so at
+ * the theme's edge width of 1.5 it measures 10.5 user units, and `refX="9"` of a
+ * 10-unit viewBox puts 9.45 of that *behind* the endpoint. A shorter final
+ * segment than that puts the bend inside the head, and the line visibly meets
+ * the arrow from the side instead of running into its tail.
+ */
+const ARROW_CLEARANCE = 12;
+/** Ends without an arrowhead still want to leave the border before turning. */
+const PLAIN_CLEARANCE = 4;
+
+/**
  * Where the jog between two ports sits on the axis they are separated along.
  *
  * Snapping to the grid lines parallel edges up, but the corridor between two
  * nodes is often narrower than one grid step — 15px is enough for `snap` to
- * round the lane straight past the far port and into the node, which drew the
- * connector through the box and left it pointing at the border from the inside.
- * When the snapped lane will not fit, the plain midpoint always does.
+ * round the lane straight past the far port and into the node. On top of that
+ * each end needs room for its arrowhead, so the lane is confined to the stretch
+ * that leaves both approaches long enough, and only snapped inside it.
  */
-function jogLane(from: number, to: number): number {
+function jogLane(from: number, to: number, fromNeed: number, toNeed: number): number {
   const lo = Math.min(from, to);
   const hi = Math.max(from, to);
   if (hi - lo < 1e-6) return lo; // ports already aligned; the path is straight
+
+  const forward = from < to;
+  let min = forward ? from + fromNeed : to + toNeed;
+  let max = forward ? to - toNeed : from - fromNeed;
+  if (min > max) {
+    // The corridor cannot satisfy both ends. Split it in proportion to what
+    // each asked for, so the end with an arrowhead keeps most of the room.
+    // Below roughly 13px of corridor even that is not enough for the head — no
+    // orthogonal jog can be, and the answer there is more room between the
+    // nodes rather than a cleverer lane.
+    const total = fromNeed + toNeed;
+    const share = total > 0 ? (forward ? fromNeed : toNeed) / total : 0.5;
+    min = max = lo + (hi - lo) * share;
+  }
   const snapped = snap((from + to) / 2);
-  return snapped <= lo || snapped >= hi ? (from + to) / 2 : snapped;
+  return Math.min(Math.max(snapped, min), max);
 }
 
 /** Orthogonal path between two ports on opposite, same-axis sides. */
-function buildPath(start: Port, end: Port): Point[] {
+function buildPath(start: Port, end: Port, fromArrow: boolean, toArrow: boolean): Point[] {
+  const fromNeed = fromArrow ? ARROW_CLEARANCE : PLAIN_CLEARANCE;
+  const toNeed = toArrow ? ARROW_CLEARANCE : PLAIN_CLEARANCE;
   if (start.side === "left" || start.side === "right") {
-    const midX = jogLane(start.x, end.x);
+    const midX = jogLane(start.x, end.x, fromNeed, toNeed);
     return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
   }
-  const midY = jogLane(start.y, end.y);
+  const midY = jogLane(start.y, end.y, fromNeed, toNeed);
   return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
 }
 
