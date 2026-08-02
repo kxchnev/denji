@@ -22,13 +22,13 @@ connections, placed **only** by relative hints. No coordinates.
    re-renders on every save, so they can watch your edits land and tell you what
    to change without a round trip.
 
-The full grammar is `packages/core/LANGUAGE.md` — **read it before writing
-anything non-trivial** — or run `power spec` to print it. `power icons` lists
-every bundled icon name; run it rather than guessing.
+**Run `power spec` and read it before writing anything non-trivial** — it prints
+the complete grammar. `power icons` lists every bundled icon name; run it rather
+than guessing.
 
-In this repo the CLI is `node packages/core/dist/cli.js` after `npm run build`.
-Resolve that to an absolute path once and reuse it — the working directory does
-not persist between commands.
+If `power` is not on the PATH, the CLI is `node <repo>/packages/core/dist/cli.js`
+after `npm run build`. Resolve it to an absolute path once and reuse it — the
+working directory does not persist between commands.
 
 ## Shape of a diagram
 
