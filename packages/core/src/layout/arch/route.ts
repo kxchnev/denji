@@ -3,6 +3,11 @@ import { center, type Point, type Rect } from "../../model/geometry.js";
 
 const MIN_OVERLAP = 2;
 
+/** Grid the connector jogs snap to, so parallel segments of unrelated edges
+ *  line up on shared lanes instead of scattering. */
+export const ROUTE_GRID = 16;
+const snap = (v: number) => Math.round(v / ROUTE_GRID) * ROUTE_GRID;
+
 type Side = "top" | "bottom" | "left" | "right";
 interface Port {
   x: number;
@@ -81,31 +86,57 @@ export function routeConnections(diagram: ArchDiagram): void {
   }
 }
 
-/** Ports on the two facing sides, at the natural (centered) position. */
+/**
+ * How far two centres may disagree and still share one coordinate. Below half a
+ * grid step the jog they would otherwise produce is a sub-grid wobble, and a
+ * straight line reads better than a barely-visible dogleg.
+ */
+const STRAIGHT_TOLERANCE = ROUTE_GRID / 2;
+
+/**
+ * Where an edge leaves each node when the two face each other.
+ *
+ * Both ports aim at their **own** node's centre. Aiming instead at the middle of
+ * the band where the two rects overlap — which is what this used to do — gives a
+ * straight line, but when the overlap is a thin sliver that line attaches
+ * nowhere near either centre and reads as a mistake. Two nodes offset by 34px
+ * with only 12px of overlap ended up wired 17px off-centre at *both* ends.
+ *
+ * So: centre on each node, and collapse to a shared coordinate only when the
+ * centres nearly agree, which is what keeps aligned nodes on a straight line.
+ */
 function defaultPorts(a: Rect, b: Rect): { start: Port; end: Port } {
   const ox1 = Math.max(a.x, b.x);
   const ox2 = Math.min(a.x + a.width, b.x + b.width);
   const oy1 = Math.max(a.y, b.y);
   const oy2 = Math.min(a.y + a.height, b.y + b.height);
+  const ca = center(a);
+  const cb = center(b);
+
+  /** The two ports' free-axis coordinates, merged when they nearly agree. The
+   *  clamp keeps the merged value on both sides, however small either node is. */
+  const facing = (sa: number, sb: number, lo: number, hi: number): [number, number] => {
+    if (Math.abs(sa - sb) > STRAIGHT_TOLERANCE) return [sa, sb];
+    const m = Math.min(Math.max((sa + sb) / 2, lo), hi);
+    return [m, m];
+  };
 
   if (ox2 - ox1 > MIN_OVERLAP) {
-    const cx = (ox1 + ox2) / 2;
+    const [sx, ex] = facing(ca.x, cb.x, ox1, ox2);
     const aAbove = a.y + a.height <= b.y;
     return aAbove
-      ? { start: { x: cx, y: a.y + a.height, side: "bottom" }, end: { x: cx, y: b.y, side: "top" } }
-      : { start: { x: cx, y: a.y, side: "top" }, end: { x: cx, y: b.y + b.height, side: "bottom" } };
+      ? { start: { x: sx, y: a.y + a.height, side: "bottom" }, end: { x: ex, y: b.y, side: "top" } }
+      : { start: { x: sx, y: a.y, side: "top" }, end: { x: ex, y: b.y + b.height, side: "bottom" } };
   }
   if (oy2 - oy1 > MIN_OVERLAP) {
-    const cy = (oy1 + oy2) / 2;
+    const [sy, ey] = facing(ca.y, cb.y, oy1, oy2);
     const aLeft = a.x + a.width <= b.x;
     return aLeft
-      ? { start: { x: a.x + a.width, y: cy, side: "right" }, end: { x: b.x, y: cy, side: "left" } }
-      : { start: { x: a.x, y: cy, side: "left" }, end: { x: b.x + b.width, y: cy, side: "right" } };
+      ? { start: { x: a.x + a.width, y: sy, side: "right" }, end: { x: b.x, y: ey, side: "left" } }
+      : { start: { x: a.x, y: sy, side: "left" }, end: { x: b.x + b.width, y: ey, side: "right" } };
   }
 
   // Diagonal: pick the dominant axis and exit/enter perpendicular to it.
-  const ca = center(a);
-  const cb = center(b);
   const dx = cb.x - ca.x;
   const dy = cb.y - ca.y;
   if (Math.abs(dx) >= Math.abs(dy)) {
@@ -130,27 +161,46 @@ function spreadPort(port: Port, r: Rect, side: Side, frac: number): void {
   }
 }
 
-/** Grid the connector jogs snap to, so parallel segments of unrelated edges
- *  line up on shared lanes instead of scattering. */
-export const ROUTE_GRID = 16;
-const snap = (v: number) => Math.round(v / ROUTE_GRID) * ROUTE_GRID;
+/**
+ * Where the jog between two ports sits on the axis they are separated along.
+ *
+ * Snapping to the grid lines parallel edges up, but the corridor between two
+ * nodes is often narrower than one grid step — 15px is enough for `snap` to
+ * round the lane straight past the far port and into the node, which drew the
+ * connector through the box and left it pointing at the border from the inside.
+ * When the snapped lane will not fit, the plain midpoint always does.
+ */
+function jogLane(from: number, to: number): number {
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  if (hi - lo < 1e-6) return lo; // ports already aligned; the path is straight
+  const snapped = snap((from + to) / 2);
+  return snapped <= lo || snapped >= hi ? (from + to) / 2 : snapped;
+}
 
-/** Orthogonal path between two ports on opposite, same-axis sides. The jog is
- *  snapped to a grid so nearby edges share the same lane. */
+/** Orthogonal path between two ports on opposite, same-axis sides. */
 function buildPath(start: Port, end: Port): Point[] {
   if (start.side === "left" || start.side === "right") {
-    const midX = snap((start.x + end.x) / 2);
+    const midX = jogLane(start.x, end.x);
     return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
   }
-  const midY = snap((start.y + end.y) / 2);
+  const midY = jogLane(start.y, end.y);
   return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
 }
+
+/**
+ * Coordinates are compared with a tolerance rather than exactly: `spreadPort`
+ * divides a side into fractions, so two points that are collinear by
+ * construction can differ in the last bits and survive as a sub-pixel zigzag.
+ */
+const EPSILON = 1e-6;
+const same = (a: number, b: number) => Math.abs(a - b) < EPSILON;
 
 function simplify(points: Point[]): Point[] {
   const dedup: Point[] = [];
   for (const p of points) {
     const last = dedup[dedup.length - 1];
-    if (!last || last.x !== p.x || last.y !== p.y) dedup.push({ x: p.x, y: p.y });
+    if (!last || !same(last.x, p.x) || !same(last.y, p.y)) dedup.push({ x: p.x, y: p.y });
   }
   const out: Point[] = [];
   for (let i = 0; i < dedup.length; i++) {
@@ -158,8 +208,8 @@ function simplify(points: Point[]): Point[] {
     const cur = dedup[i]!;
     const next = dedup[i + 1];
     if (prev && next) {
-      const collinearX = prev.x === cur.x && cur.x === next.x;
-      const collinearY = prev.y === cur.y && cur.y === next.y;
+      const collinearX = same(prev.x, cur.x) && same(cur.x, next.x);
+      const collinearY = same(prev.y, cur.y) && same(cur.y, next.y);
       if (collinearX || collinearY) continue;
     }
     out.push(cur);

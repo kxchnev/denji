@@ -194,6 +194,88 @@ describe("architecture layout", () => {
     expect(path[0]!.y).toBeCloseTo(path[1]!.y, 5); // perfectly horizontal
   });
 
+  // Both of these come from a real diagram whose arrows looked wrong.
+  describe("connector regressions", () => {
+    /** Where the port sits on its side, measured from that side's midpoint. */
+    function offCentre(point: { x: number; y: number }, r: Rect): number {
+      const onVerticalSide =
+        Math.abs(point.x - r.x) < 0.6 || Math.abs(point.x - (r.x + r.width)) < 0.6;
+      return onVerticalSide
+        ? Math.abs(point.y - (r.y + r.height / 2))
+        : Math.abs(point.x - (r.x + r.width / 2));
+    }
+
+    it("centres a lone edge on each node when their centres are far apart", () => {
+      // Ports used to land in the middle of the band where the two rects
+      // overlap. Facing a container four times its height, that band is the
+      // small node's own extent, so the edge met the container 81px above its
+      // centre. Both ends must sit on their own centre instead.
+      const d = parse(
+        [
+          "architecture",
+          '  app a "A"',
+          '  service b "B" @rightOf(a) @align(start) {',
+          '    app b1 "One"',
+          '    app b2 "Two" @below(b1)',
+          "  }",
+          "  a -> b",
+        ].join("\n"),
+      );
+      layoutArchitecture(d);
+      const path = d.connections[0]!.path!;
+      expect(offCentre(path[0]!, rectOf(d, "a"))).toBeLessThan(0.6);
+      expect(offCentre(path[path.length - 1]!, rectOf(d, "b"))).toBeLessThan(0.6);
+    });
+
+    it("merges centres that differ by less than half a grid step", () => {
+      // An app and a taller database sharing a bottom edge are 7px apart —
+      // close enough that a dogleg would read as a wobble, so one straight line.
+      const d = parse(
+        'architecture\n  app a "A"\n  database b "Store" @rightOf(a) @align(end)\n  a -> b\n',
+      );
+      layoutArchitecture(d);
+      expect(d.connections[0]!.path!).toHaveLength(2);
+    });
+
+    it("keeps the jog out of both nodes when the corridor is narrower than the grid", () => {
+      // A gap under ROUTE_GRID let `snap` round the lane past the far port, so
+      // the connector ran through the target and pointed at its border from
+      // inside. The gap here is deliberately a fraction of one grid step.
+      const gap = Math.round(ROUTE_GRID / 2) - 1;
+      const d = parse(
+        [
+          "architecture",
+          '  app a "A"',
+          `  database b "Locks" @rightOf(a) @below(a) @gap(${gap})`,
+          "  a -> b",
+        ].join("\n"),
+      );
+      layoutArchitecture(d);
+      const path = d.connections[0]!.path!;
+      const rects = [rectOf(d, "a"), rectOf(d, "b")];
+      for (const p of path.slice(1, -1)) {
+        for (const r of rects) {
+          const insideX = p.x > r.x + 0.01 && p.x < r.x + r.width - 0.01;
+          const insideY = p.y > r.y + 0.01 && p.y < r.y + r.height - 0.01;
+          expect(insideX && insideY).toBe(false);
+        }
+      }
+      // and no hairline segment left over from a lane that overshot
+      for (let i = 0; i + 1 < path.length; i++) {
+        const len = Math.hypot(path[i + 1]!.x - path[i]!.x, path[i + 1]!.y - path[i]!.y);
+        expect(len).toBeGreaterThan(1);
+      }
+    });
+
+    it("still merges near-aligned centres into one straight line", () => {
+      // An app and a taller database centred on each other must not gain a
+      // dogleg just because their heights differ.
+      const d = parse('architecture\n  app a "A"\n  database b "Store" @rightOf(a)\n  a -> b\n');
+      layoutArchitecture(d);
+      expect(d.connections[0]!.path!).toHaveLength(2);
+    });
+  });
+
   it("honors connection direction flags", () => {
     const d = architecture()
       .app("a")
