@@ -293,3 +293,83 @@ describe("icons in the output", () => {
     expect(svg(src)).toEqual(svg(src));
   });
 });
+
+describe("icon geometry", () => {
+  /** Every mark is drawn as one transformed path; pull its placement back out. */
+  function marks(out: string): { x: number; y: number; scale: number }[] {
+    const re = /class="pwr-ic[^"]*" transform="translate\((-?[\d.]+) (-?[\d.]+)\) scale\(([\d.]+)\)"/g;
+    return [...out.matchAll(re)].map((m) => ({
+      x: Number(m[1]),
+      y: Number(m[2]),
+      scale: Number(m[3]),
+    }));
+  }
+
+  it("draws a mark at the same size in a shape and in a container title", () => {
+    // The title band used to get a 14px mark against the shape's 18px, which
+    // read as inconsistent because the two labels are the same size.
+    const out = svg(
+      [
+        "architecture",
+        '  service svc "Payments" @icon(openjdk) {',
+        '    app api "API" @icon(react)',
+        "  }",
+      ].join("\n"),
+    );
+    const found = marks(out);
+    expect(found).toHaveLength(2);
+    expect(found[0]!.scale).toBeCloseTo(found[1]!.scale, 6);
+  });
+
+  it("centres the mark on the title band, for a group as well as a service", () => {
+    // The group branch used to place its icon off a raw text baseline with a
+    // hand-tuned fudge, leaving it ~2.6px below the label it sat beside.
+    const offsets = ["service", "group"].map((kind) => {
+      const src = `architecture\n  ${kind} c "Title" @icon(k8s) {\n    app a "A"\n  }`;
+      const d = parseArchitecture(src);
+      layoutArchitecture(d);
+      const out = renderArchitecture(d);
+      const rect = container(d, "c").rect!;
+      const mark = marks(out)[0]!;
+      return { top: mark.y - rect.y, left: mark.x - rect.x };
+    });
+    expect(offsets[0]!.top).toBeCloseTo(offsets[1]!.top, 6);
+    expect(offsets[0]!.left).toBeCloseTo(offsets[1]!.left, 6);
+    // 18px mark centred on a 28px band
+    expect(offsets[0]!.top).toBeCloseTo(5, 6);
+  });
+
+  it("centres a non-square view-box inside the square reserved for it", () => {
+    // Fitting the long side leaves slack on the other one; without centring the
+    // mark clings to the top-left of its box.
+    const wide = svg(
+      [
+        "icon wide {",
+        "  path: M0 0 L24 0 L24 12 L0 12 Z",
+        "  view-box: 0 0 24 12",
+        "}",
+        "architecture",
+        '  app a "A" @icon(wide)',
+      ].join("\n"),
+    );
+    const tall = svg(
+      [
+        "icon tall {",
+        "  path: M0 0 L12 0 L12 24 L0 24 Z",
+        "  view-box: 0 0 12 24",
+        "}",
+        "architecture",
+        '  app a "A" @icon(tall)',
+      ].join("\n"),
+    );
+    const w = marks(wide)[0]!;
+    const t = marks(tall)[0]!;
+    // A half-height mark is pushed down by a quarter of the box; a half-width
+    // one is pushed right by the same. Compare against the square case.
+    const square = marks(svg('architecture\n  app a "A" @icon(react)'))[0]!;
+    expect(w.y - square.y).toBeCloseTo(4.5, 1);
+    expect(w.x - square.x).toBeCloseTo(0, 1);
+    expect(t.x - square.x).toBeCloseTo(4.5, 1);
+    expect(t.y - square.y).toBeCloseTo(0, 1);
+  });
+});

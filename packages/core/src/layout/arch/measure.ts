@@ -1,14 +1,20 @@
 import type { Shape, StyleProps } from "../../model/arch.js";
 import type { Size } from "../../model/geometry.js";
 
-/** Shared text metrics (no DOM): average glyph advance at the base font size. */
+/**
+ * Shared text metrics (no DOM): average glyph advance at the base font size.
+ * One size for every label — a shape's and a container's title alike — which is
+ * what lets `measureLabelWidth` be right about both. They used to differ by a
+ * point, so container widths were measured at one size and drawn at another.
+ */
 export const FONT_SIZE = 14;
 const AVG_CHAR_WIDTH = FONT_SIZE * 0.6;
 const PAD_X = 18;
-/** Brand mark drawn before a shape's label. Shared with the renderer. */
+/**
+ * Brand mark drawn before a label, in a shape and in a container's title band
+ * alike. The band is 28px tall, so this leaves 5px of clearance either side.
+ */
 export const ICON_SIZE = 18;
-/** Same, in a container's title band, which is only 28px tall. */
-export const HEADER_ICON_SIZE = 14;
 /** Space between a mark and the text after it. */
 export const ICON_GAP = 8;
 /** Half-height of a database's elliptical lid; the renderer draws it. */

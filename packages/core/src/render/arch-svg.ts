@@ -16,7 +16,6 @@ import {
   CAP_RX,
   CAP_RY,
   FONT_SIZE,
-  HEADER_ICON_SIZE,
   ICON_GAP,
   ICON_SIZE,
   measureLabelWidth,
@@ -496,10 +495,15 @@ function iconMarkup(mark: { key: string; icon: Icon }, x: number, y: number, siz
     .trim()
     .split(/\s+/)
     .map(Number);
+  // Fit the long side, then centre what is left over. Without the centring a
+  // non-square `view-box` sticks to the top-left of the square the layout
+  // reserved: a wide, short mark floats above the label it should sit beside.
   const scale = size / Math.max(vw, vh);
+  const dx = (size - vw * scale) / 2;
+  const dy = (size - vh * scale) / 2;
   return (
     `<path class="pwr-ic pwr-icon-${mark.key}" ` +
-    `transform="translate(${round(x - vx * scale)} ${round(y - vy * scale)}) scale(${round(scale)})" ` +
+    `transform="translate(${round(x + dx - vx * scale)} ${round(y + dy - vy * scale)}) scale(${round(scale)})" ` +
     `d="${mark.icon.path}"/>`
   );
 }
@@ -544,12 +548,15 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
   const radius = resolved.radius ?? 0;
 
   const mark = styled.useIcon(n.icon);
-  const titleX = r.x + 12 + (mark ? HEADER_ICON_SIZE + ICON_GAP : 0);
+  const titleX = r.x + 12 + (mark ? ICON_SIZE + ICON_GAP : 0);
+  // Both kinds hang their title on the middle of the same band, so a mark and
+  // its text line up the same way whichever one you used.
+  const titleY = r.y + headerH / 2;
+  const headerIcon = mark
+    ? iconMarkup(mark, r.x + 12, r.y + (headerH - ICON_SIZE) / 2, ICON_SIZE)
+    : "";
 
   if (n.kind === "service") {
-    const headerIcon = mark
-      ? iconMarkup(mark, r.x + 12, r.y + (headerH - HEADER_ICON_SIZE) / 2, HEADER_ICON_SIZE)
-      : "";
     // The header band repeats the body's top corners, so its path is built from
     // the same radius rather than a baked-in 10.
     const k = Math.min(radius, r.width / 2);
@@ -561,7 +568,7 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
       `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
       header +
       headerIcon +
-      `<text class="pwr-ht" x="${titleX}" y="${r.y + headerH / 2}" dominant-baseline="central" font-size="13">${esc(n.label)}</text>` +
+      `<text class="pwr-ht" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}">${esc(n.label)}</text>` +
       `</g>`
     );
   }
@@ -569,8 +576,8 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
   return (
     `<g class="pwr-n ${cls}">` +
     `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
-    (mark ? iconMarkup(mark, r.x + 12, r.y + 18 - HEADER_ICON_SIZE / 2 - 2, HEADER_ICON_SIZE) : "") +
-    `<text class="pwr-t" x="${titleX}" y="${r.y + 18}" font-size="13" text-anchor="start">${esc(n.label)}</text>` +
+    headerIcon +
+    `<text class="pwr-t" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}" text-anchor="start">${esc(n.label)}</text>` +
     `</g>`
   );
 }

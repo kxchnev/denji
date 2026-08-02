@@ -1,7 +1,7 @@
 import type { ArchDiagram, StyleProps } from "../../model/arch.js";
 import { resolveStyle } from "../../model/style.js";
 import type { Size } from "../../model/geometry.js";
-import { HEADER_ICON_SIZE, ICON_GAP, measureLabelWidth, measureShape } from "./measure.js";
+import { ICON_GAP, ICON_SIZE, measureLabelWidth, measureShape } from "./measure.js";
 import { layoutScope, type AxisGaps, type LayoutWarning, type Placeable } from "./relative.js";
 import { routeConnections } from "./route.js";
 
@@ -109,7 +109,7 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     } else {
       childLocal.set(id, new Map());
     }
-    const iconW = n.icon ? HEADER_ICON_SIZE + ICON_GAP : 0;
+    const iconW = n.icon ? ICON_SIZE + ICON_GAP : 0;
     const labelW = measureLabelWidth(n.label) + iconW + 24;
     // A container hugs its content, so an explicit size can only be a floor —
     // honouring it exactly would crop the children it is meant to hold.
