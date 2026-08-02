@@ -250,6 +250,7 @@ export function Diagram({
             width={width}
             height={height}
             name={name}
+            source={shown.dsl}
             className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
           />
         )}
@@ -332,6 +333,7 @@ export function Diagram({
             width={width}
             height={height}
             name={name}
+            source={shown.dsl}
             openTo="up"
           />
         </div>

@@ -3,13 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { downloadDiagram, type ExportFormat } from "@/lib/export-diagram";
+import {
+  DEFAULT_SCALE,
+  downloadDiagram,
+  downloadSource,
+  type ExportFormat,
+} from "@/lib/export-diagram";
 import { cn } from "@/lib/utils";
 
-const FORMATS: { value: ExportFormat; label: string }[] = [
+/** `scale` is only meaningful for the raster formats; SVG ignores it. */
+const FORMATS: { value: ExportFormat; label: string; scale?: number; hint?: string }[] = [
   { value: "svg", label: "SVG" },
-  { value: "png", label: "PNG" },
-  { value: "jpeg", label: "JPEG" },
+  { value: "png", label: "PNG", scale: DEFAULT_SCALE, hint: `${DEFAULT_SCALE}×` },
+  { value: "png", label: "PNG", scale: 5, hint: "5×" },
+  { value: "jpeg", label: "JPEG", scale: DEFAULT_SCALE, hint: `${DEFAULT_SCALE}×` },
+  { value: "jpeg", label: "JPEG", scale: 5, hint: "5×" },
 ];
 
 export function DownloadButton({
@@ -17,6 +25,7 @@ export function DownloadButton({
   width,
   height,
   name = "diagram",
+  source,
   openTo = "down",
   className,
 }: {
@@ -28,6 +37,8 @@ export function DownloadButton({
   width: number;
   height: number;
   name?: string;
+  /** The diagram's `.pwr` source. Given one, the menu can also save the code. */
+  source?: string;
   /**
    * Which way the menu opens. Use `"up"` when the button sits at the bottom of
    * its container: opening downwards there puts the menu past the edge, where
@@ -66,17 +77,32 @@ export function DownloadButton({
             openTo === "up" ? "bottom-full mb-1" : "top-full mt-1",
           )}
         >
+          {source !== undefined && (
+            <>
+              <button
+                className="whitespace-nowrap px-3 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                  setOpen(false);
+                  downloadSource(source, name);
+                }}
+              >
+                Code (.pwr)
+              </button>
+              <div className="my-1 h-px bg-border" />
+            </>
+          )}
           {FORMATS.map((f) => (
             <button
-              key={f.value}
-              className="px-3 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+              key={`${f.value}-${f.scale ?? 0}`}
+              className="flex items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
               onClick={() => {
                 setOpen(false);
                 const { svg, matte } = exportSvg();
-                void downloadDiagram(svg, width, height, f.value, name, matte);
+                void downloadDiagram(svg, width, height, f.value, name, matte, f.scale);
               }}
             >
               {f.label}
+              {f.hint && <span className="text-xs text-muted-foreground">{f.hint}</span>}
             </button>
           ))}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeferredValue, useState } from "react";
+import { CopyButton } from "@/components/CopyButton";
 import { Diagram } from "@/components/Diagram";
 import { PwrEditor } from "@/components/PwrEditor";
 import { DiagramList } from "@/components/playground/DiagramList";
@@ -99,15 +100,20 @@ export default function Playground() {
             problem with its pan/zoom, which would carry over from the diagram you
             just left. Keying on the id resets both on a switch and on nothing
             else; typing never remounts. */}
-        <PwrEditor
-          key={`editor-${session.id}`}
-          value={session.dsl}
-          onChange={setDsl}
+        <div
           className={cn(
-            "min-h-0 flex-1 overflow-hidden bg-code md:block",
+            "group relative min-h-0 flex-1 bg-code md:block",
             pane === "code" ? "block" : "hidden",
           )}
-        />
+        >
+          <PwrEditor
+            key={`editor-${session.id}`}
+            value={session.dsl}
+            onChange={setDsl}
+            className="h-full overflow-hidden"
+          />
+          <CopyButton code={session.dsl} />
+        </div>
         <div
           className={cn(
             "min-h-0 flex-1 border-l bg-card md:block",

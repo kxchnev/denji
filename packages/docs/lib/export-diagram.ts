@@ -1,7 +1,15 @@
 export type ExportFormat = "svg" | "png" | "jpeg";
 
 /** Render at 2x the diagram's own units so raster exports stay crisp on retina. */
-const SCALE = 2;
+export const DEFAULT_SCALE = 2;
+
+/**
+ * Browsers cap how large a canvas may be, and the limit is both per-side and by
+ * total area — Safari is the strictest. Past it `toBlob` simply hands back null,
+ * so a 5x export of a big diagram would fail with nothing to show for it.
+ * Scaling down to fit gives a slightly smaller file instead of no file.
+ */
+const MAX_DIMENSION = 8192;
 
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -18,7 +26,9 @@ async function rasterize(
   height: number,
   format: "png" | "jpeg",
   matte: string,
+  scale: number,
 ): Promise<Blob> {
+  const safe = Math.max(0.1, Math.min(scale, MAX_DIMENSION / Math.max(width, height, 1)));
   const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
   try {
     const img = new Image();
@@ -30,8 +40,8 @@ async function rasterize(
     await loaded;
 
     const canvas = document.createElement("canvas");
-    canvas.width = width * SCALE;
-    canvas.height = height * SCALE;
+    canvas.width = Math.round(width * safe);
+    canvas.height = Math.round(height * safe);
     const ctx = canvas.getContext("2d")!;
     if (format === "jpeg") {
       // JPEG has no alpha channel — flatten onto the theme's own surface, or a
@@ -39,7 +49,7 @@ async function rasterize(
       ctx.fillStyle = matte;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-    ctx.scale(SCALE, SCALE);
+    ctx.scale(safe, safe);
     ctx.drawImage(img, 0, 0, width, height);
 
     return await new Promise<Blob>((resolve, reject) => {
@@ -61,11 +71,22 @@ export async function downloadDiagram(
   format: ExportFormat,
   filename = "diagram",
   matte = "#ffffff",
+  scale = DEFAULT_SCALE,
 ): Promise<void> {
   if (format === "svg") {
     triggerDownload(new Blob([svg], { type: "image/svg+xml" }), `${filename}.svg`);
     return;
   }
-  const blob = await rasterize(svg, width, height, format, matte);
-  triggerDownload(blob, `${filename}.${format === "jpeg" ? "jpg" : "png"}`);
+  const blob = await rasterize(svg, width, height, format, matte, scale);
+  // Only mark the unusual size, so the ordinary retina export keeps a clean name.
+  const suffix = scale === DEFAULT_SCALE ? "" : `@${scale}x`;
+  triggerDownload(blob, `${filename}${suffix}.${format === "jpeg" ? "jpg" : "png"}`);
+}
+
+/** Save the diagram's own `.pwr` source, so an export can be edited back. */
+export function downloadSource(dsl: string, filename = "diagram"): void {
+  triggerDownload(
+    new Blob([`${dsl.trimEnd()}\n`], { type: "text/plain;charset=utf-8" }),
+    `${filename}.pwr`,
+  );
 }
