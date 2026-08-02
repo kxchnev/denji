@@ -42,7 +42,8 @@ export const arrows: ExampleData[] = [
   {
     id: "labeled",
     title: "Labeled",
-    description: "Add `: label` (or `|label|`) to annotate a connection.",
+    description:
+      "Add `: label` to annotate a connection. The label runs to the end of the line, so any directives go before the colon.",
     dsl: pair("->", " : http"),
     api: `architecture()\n  .app("a", "Service A")\n  .app("b", "Service B", { hint: { rightOf: "a" } })\n  .connect("a", "b", { label: "http" })\n  .build();`,
   },

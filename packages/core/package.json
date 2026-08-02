@@ -12,7 +12,8 @@
     "power": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "LANGUAGE.md"
   ],
   "scripts": {
     "build": "tsc",

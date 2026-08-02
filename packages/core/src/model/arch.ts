@@ -64,8 +64,11 @@ export interface StyleProps {
 /**
  * Named styles declared in one place and referenced by many elements. A key
  * that happens to be a {@link StyleSlot} acts as a selector over every element
- * of that kind instead of as a name. Insertion order is the cascade order:
- * when two styles set the same property, the later-declared one wins.
+ * of that kind instead of as a name.
+ *
+ * Declaration order here does **not** decide the cascade: when two styles set
+ * the same property, the one referenced later *on the element* wins. See
+ * {@link Styled.styleRefs}.
  */
 export type StyleSheet = Record<string, StyleProps>;
 
@@ -74,7 +77,11 @@ export type ThemeName = "light" | "dark";
 
 /** Style attachments shared by shapes, containers and connections. */
 export interface Styled {
-  /** Names of styles from the diagram's stylesheet, applied in declared order. */
+  /**
+   * Names of styles from the diagram's stylesheet, applied in the order they
+   * are listed here — that is, the order they were written on the element, not
+   * the order they were declared in the sheet. The last one wins a conflict.
+   */
   styleRefs?: string[];
   /** Properties written directly on this element; they beat every named style. */
   styleProps?: StyleProps;

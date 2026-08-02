@@ -2,10 +2,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
 import sharp from "sharp";
+import { checkDiagram } from "./check.js";
+import { ICON_ALIASES, ICON_NAMES } from "./model/icon.js";
 import { parseArchitecture } from "./dsl/arch-parse.js";
 import { DiagramParseError } from "./dsl/error.js";
 import { toSvg } from "./index.js";
 import { resolveTheme } from "./render/theme.js";
+import { watchDiagram } from "./watch.js";
 
 const program = new Command();
 
@@ -76,6 +79,118 @@ program
       } else {
         console.error(`power: ${(err as Error).message}`);
       }
+      process.exitCode = 1;
+    }
+  });
+
+/** `-` means stdin, so `check` can sit in a pipe without a temp file. */
+function readSource(input: string): string {
+  return readFileSync(input === "-" ? 0 : input, "utf8");
+}
+
+program
+  .command("watch")
+  .description("Serve a live preview of a .pwr file that re-renders as it is edited")
+  .argument("<input>", "input diagram file (.pwr DSL)")
+  .option("-p, --port <n>", "port to serve on (takes the next free one if busy)", "4400")
+  .option("-t, --theme <name>", "pin the palette to light or dark (default: follow the device)")
+  .option("--no-open", "do not open a browser")
+  .action(async (input: string, opts: { port: string; theme?: string; open: boolean }) => {
+    if (opts.theme !== undefined && opts.theme !== "light" && opts.theme !== "dark") {
+      console.error(`power: unknown theme "${opts.theme}" (use light or dark)`);
+      process.exitCode = 1;
+      return;
+    }
+    const port = Number(opts.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      console.error(`power: invalid port "${opts.port}"`);
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      await watchDiagram(input, { port, theme: opts.theme, open: opts.open });
+    } catch (err) {
+      console.error(`power: ${(err as Error).message}`);
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("check")
+  .description("Report errors and layout problems in a .pwr file without rendering it")
+  .argument("<input>", "input diagram file, or - for stdin")
+  .option("--json", "machine-readable diagnostics on stdout")
+  .option("--strict", "exit non-zero on warnings too")
+  .action((input: string, opts: { json?: boolean; strict?: boolean }) => {
+    let source: string;
+    try {
+      source = readSource(input);
+    } catch {
+      console.error(`power: cannot read "${input}"`);
+      process.exitCode = 1;
+      return;
+    }
+    const { diagnostics } = checkDiagram(source);
+    const errors = diagnostics.filter((d) => d.severity === "error").length;
+    const warnings = diagnostics.length - errors;
+    const where = input === "-" ? "<stdin>" : input;
+
+    if (opts.json) {
+      console.log(JSON.stringify({ file: where, errors, warnings, diagnostics }, null, 2));
+    } else if (diagnostics.length === 0) {
+      console.log(`${where}: ok`);
+    } else {
+      for (const d of diagnostics) {
+        const at = d.line === null ? where : `${where}:${d.line}:${d.col}`;
+        console.error(`${at}  ${d.severity}  ${d.message}  [${d.code}]`);
+        // The caret only means anything when the column is a real offset.
+        if (d.srcLine) {
+          console.error(`    ${d.srcLine}`);
+          console.error(`    ${" ".repeat(Math.max(0, (d.col ?? 1) - 1))}^`);
+        }
+      }
+      console.error(`\n${errors} error(s), ${warnings} warning(s)`);
+    }
+    if (errors > 0 || (opts.strict && warnings > 0)) process.exitCode = 1;
+  });
+
+program
+  .command("icons")
+  .description("List the bundled icon names, so you can pick one without guessing")
+  .action(() => {
+    console.log(`${ICON_NAMES.length} bundled marks:\n`);
+    // Four columns keeps the whole set on one screen.
+    const width = Math.max(...ICON_NAMES.map((n) => n.length)) + 2;
+    for (let i = 0; i < ICON_NAMES.length; i += 4) {
+      console.log(
+        "  " +
+          ICON_NAMES.slice(i, i + 4)
+            .map((n) => n.padEnd(width))
+            .join("")
+            .trimEnd(),
+      );
+    }
+    console.log("\naliases:\n");
+    for (const [alias, target] of Object.entries(ICON_ALIASES)) {
+      console.log(`  ${alias.padEnd(width)}→ ${target}`);
+    }
+    console.log(
+      "\nThese are technology and vendor marks only — there is no generic device,\n" +
+        "browser or person glyph. `power icon <slug>` emits a block for any other\n" +
+        "Simple Icons slug; see https://simpleicons.org.",
+    );
+  });
+
+program
+  .command("spec")
+  .description("Print the .pwr language reference — pipe it into any model that has no file access")
+  .action(() => {
+    // dist/cli.js → the package root. Shipped via `files` in package.json.
+    const spec = new URL("../LANGUAGE.md", import.meta.url);
+    try {
+      process.stdout.write(readFileSync(spec, "utf8"));
+    } catch {
+      console.error("power: LANGUAGE.md is missing from this install");
       process.exitCode = 1;
     }
   });

@@ -2,7 +2,7 @@ import type { ArchDiagram, StyleProps } from "../../model/arch.js";
 import { resolveStyle } from "../../model/style.js";
 import type { Size } from "../../model/geometry.js";
 import { HEADER_ICON_SIZE, ICON_GAP, measureLabelWidth, measureShape } from "./measure.js";
-import { layoutScope, type AxisGaps, type Placeable } from "./relative.js";
+import { layoutScope, type AxisGaps, type LayoutWarning, type Placeable } from "./relative.js";
 import { routeConnections } from "./route.js";
 
 /**
@@ -23,7 +23,18 @@ export interface ArchLayoutOptions {
   headerH?: number;
   /** Outer margin around the whole drawing. */
   margin?: number;
+  /**
+   * Called for anything the layout could not honour literally — today only a
+   * cycle in relative hints. Defaults to a `console.warn`, which is right for a
+   * person watching a build but useless to `power check`, which needs to collect
+   * them. Pass a sink (even an empty one) to take over.
+   */
+  onWarn?: (warning: LayoutWarning) => void;
 }
+
+const warnToConsole = (w: LayoutWarning): void => {
+  console.warn(`power: ${w.message}.`);
+};
 
 const DEFAULT_GAP = 40;
 const DEFAULT_PADDING = 24;
@@ -50,6 +61,7 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
   const padding = opts.padding ?? DEFAULT_PADDING;
   const headerH = opts.headerH ?? DEFAULT_HEADER_H;
   const margin = diagram.margin ?? opts.margin ?? DEFAULT_MARGIN;
+  const onWarn = opts.onWarn ?? warnToConsole;
 
   const nodes = new Map(diagram.nodes.map((n) => [n.id, n]));
 
@@ -90,7 +102,7 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     let contentW = 0;
     let contentH = 0;
     if (items.length > 0) {
-      const scope = layoutScope(items, gaps);
+      const scope = layoutScope(items, gaps, onWarn);
       childLocal.set(id, scope.pos);
       contentW = scope.width;
       contentH = scope.height;
@@ -114,7 +126,7 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     const s = sizeNode(id, rootGaps);
     return { id, width: s.width, height: s.height, hint: nodes.get(id)!.hint };
   });
-  const topScope = layoutScope(topItems, rootGaps);
+  const topScope = layoutScope(topItems, rootGaps, onWarn);
 
   // Top-down absolute placement.
   const place = (id: string, absX: number, absY: number): void => {

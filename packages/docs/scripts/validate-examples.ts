@@ -1,39 +1,7 @@
 // Renders every documented example through the core so a broken DSL fails CI
 // (and the docs) without needing a browser. Run: `npm run -w docs validate`.
-import { parseArchitecture, layoutArchitecture, renderArchitecture } from "power";
-import type { ArchDiagram, Rect } from "power";
+import { parseArchitecture, layoutArchitecture, renderArchitecture, checkDiagram } from "power";
 import { allExamples } from "../examples/index.js";
-
-function overlaps(a: Rect, b: Rect): boolean {
-  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-}
-
-/** Siblings must never be drawn on top of each other — a documented example
- *  showing an overlap is a layout bug, not a feature. */
-function overlappingSiblings(d: ArchDiagram): string[] {
-  const parent = new Map<string, string>();
-  for (const n of d.nodes) {
-    if (n.type === "container") for (const c of n.children) parent.set(c, n.id);
-  }
-  const scopes = new Map<string, typeof d.nodes>();
-  for (const n of d.nodes) {
-    const key = parent.get(n.id) ?? "<top>";
-    const list = scopes.get(key) ?? [];
-    list.push(n);
-    scopes.set(key, list);
-  }
-  const bad: string[] = [];
-  for (const list of scopes.values()) {
-    for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) {
-        const a = list[i]!;
-        const b = list[j]!;
-        if (a.rect && b.rect && overlaps(a.rect, b.rect)) bad.push(`${a.id}×${b.id}`);
-      }
-    }
-  }
-  return bad;
-}
 
 let failed = 0;
 for (const ex of allExamples) {
@@ -54,8 +22,17 @@ for (const ex of allExamples) {
       const bare = svg.match(/var\(--[a-z0-9-]+\)/g);
       if (bare) throw new Error(`var() without a fallback: ${bare.join(", ")}`);
     }
-    const bad = overlappingSiblings(d);
-    if (bad.length > 0) throw new Error(`overlapping siblings: ${bad.join(", ")}`);
+    // Siblings drawn on top of each other are a layout bug, not a feature. The
+    // check lives in the core so `power check` and the docs judge it the same
+    // way. Only this one code is fatal here: the others are authoring advice,
+    // and the examples are deliberately minimal — most have a single unconnected
+    // node, which is exactly what a one-shape example is.
+    const overlaps = checkDiagram(ex.dsl).diagnostics.filter(
+      (diag) => diag.code === "overlapping-siblings",
+    );
+    if (overlaps.length > 0) {
+      throw new Error(`overlapping siblings: ${overlaps.map((o) => o.message).join(", ")}`);
+    }
   } catch (e) {
     failed++;
     console.error(`✗ ${ex.id}: ${(e as Error).message}`);

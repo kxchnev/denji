@@ -29,7 +29,7 @@ export const styling: ExampleData[] = [
     id: "named",
     title: "Reusable styles",
     description:
-      "Declare a style once, attach it with `@style(name)` as many times as you like. Several styles stack: when two set the same property, the one declared later wins — the same rule CSS classes follow.",
+      "Declare a style once, attach it with `@style(name)` as many times as you like. Several styles stack: when two set the same property, the one written later **on the element** wins — where they sit in the document makes no difference.",
     dsl: `architecture\n  style hot {\n    fill: #fef2f2\n    stroke: #ef4444\n    text: #991b1b\n  }\n  app gw "Gateway" @style(hot)\n  app worker "Worker" @rightOf(gw)\n  database db "Hot store" @below(gw) @style(hot)`,
     api: `architecture()\n  .defineStyle("hot", { fill: "#fef2f2", stroke: "#ef4444", text: "#991b1b" })\n  .app("gw", "Gateway", { styleRefs: ["hot"] })\n  .app("worker", "Worker", { hint: { rightOf: "gw" } })\n  .database("db", "Hot store", { hint: { below: "gw" }, styleRefs: ["hot"] })\n  .build();`,
   },

@@ -10,6 +10,14 @@ export {
   type StyleValueKind,
 } from "./model/style.js";
 export { layoutArchitecture, type ArchLayoutOptions } from "./layout/arch/index.js";
+export { resolvedAnchors, type LayoutWarning } from "./layout/arch/relative.js";
+export {
+  checkDiagram,
+  type CheckResult,
+  type Diagnostic,
+  type DiagnosticCode,
+  type DiagnosticSeverity,
+} from "./check.js";
 export { renderArchitecture, type ArchRenderOptions, type ThemeMode } from "./render/arch-svg.js";
 export { lightTheme, darkTheme, themes, resolveTheme, type Theme } from "./render/theme.js";
 export {

@@ -29,7 +29,22 @@ package.json     workspace-root (скрипты-прокси)
   bottom-up sizing контейнеров), `route.ts` (overlap-роутинг связей), `measure.ts`.
 - `src/render/arch-svg.ts` — SVG-рендер без зависимостей.
 - `src/dsl/` — `arch-parse.ts` (парсер `.pwr`), `error.ts` (`DiagramParseError`).
-- `src/cli.ts` — CLI (`power render <in.pwr>`).
+- `src/check.ts` — статические проверки: ошибки парса/build плюс предупреждения
+  о раскладке (`loose-node`, `hint-cycle`, `overlapping-siblings`,
+  `unconnected-node`, `extreme-aspect-ratio`). Проверку пересечений
+  переиспользует `docs/scripts/validate-examples.ts` — не дублировать.
+- `src/watch.ts` — живое превью: `node:http` + SSE, следит за **директорией**
+  (atomic rename при сохранении убивает file-watcher), держит последний удачный
+  рендер и показывает ошибку оверлеем.
+- `src/cli.ts` — CLI: `render`, `check`, `watch`, `spec`, `icons`, `icon`.
+
+**Грамматика для моделей.** `packages/core/LANGUAGE.md` — единственный источник
+правды по языку (английский), печатается через `power spec`. `AGENTS.md` в корне
+и `.claude/skills/power-diagrams/SKILL.md` ссылаются на него и несут правила
+авторства. При правке `arch-parse.ts` синхронно обновляй `LANGUAGE.md`.
+
+⚠️ Цикл в хинтах теперь идёт в `ArchLayoutOptions.onWarn`; по умолчанию —
+`console.warn`, как раньше. `check` подставляет свой сборщик.
 
 ### packages/docs (дока)
 

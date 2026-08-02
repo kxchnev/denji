@@ -43,8 +43,26 @@ architecture
   }
 ```
 
-See [`packages/core/README.md`](./packages/core/README.md) for the full DSL and
-API reference, or run the docs site for live, interactive examples.
+## Working on a diagram
+
+```bash
+power check diagram.pwr    # syntax errors and layout problems, --json for tools
+power watch diagram.pwr    # live preview that re-renders as the file is edited
+power spec                 # print the language reference
+```
+
+`watch` plus an editor is the intended way to draw: keep the preview open on one
+side and the file on the other.
+
+## Reference
+
+- [`packages/core/LANGUAGE.md`](./packages/core/LANGUAGE.md) — the complete `.pwr`
+  grammar. The authoritative one; start here.
+- [`packages/core/README.md`](./packages/core/README.md) — the programmatic API
+  (Russian).
+- [`AGENTS.md`](./AGENTS.md) — for coding agents, both for authoring diagrams and
+  for working on the library.
+- The docs site, for live interactive examples.
 
 ## License
 

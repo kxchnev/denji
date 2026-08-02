@@ -20,6 +20,38 @@ export interface AxisGaps {
   y: number;
 }
 
+/** Something the layout could not honour literally, reported rather than thrown. */
+export interface LayoutWarning {
+  code: "hint-cycle";
+  message: string;
+  /** The nodes the cycle left unordered. */
+  nodes: string[];
+}
+
+/**
+ * The anchors of `hint` that actually resolve to a sibling in this scope.
+ *
+ * Exported because placement and diagnostics must agree on what counts as a
+ * resolvable hint: a self-reference, or one pointing into another container, is
+ * silently ignored here, and a checker that did not know that would report the
+ * node as anchored when the layout treats it as loose.
+ *
+ * `rightOf` beats `leftOf` and `below` beats `above` when both are written —
+ * one relation per axis.
+ */
+export function resolvedAnchors(
+  id: string,
+  hint: PlaceHint | undefined,
+  siblings: ReadonlyMap<string, unknown> | ReadonlySet<string>,
+): string[] {
+  const out: string[] = [];
+  const hx = hint?.rightOf ?? hint?.leftOf;
+  const vy = hint?.below ?? hint?.above;
+  if (hx && hx !== id && siblings.has(hx)) out.push(hx);
+  if (vy && vy !== id && siblings.has(vy)) out.push(vy);
+  return out;
+}
+
 /**
  * Resolve a single scope of siblings into local coordinates using relative
  * hints only. X comes from rightOf/leftOf, Y from above/below; the single given
@@ -35,24 +67,18 @@ export interface AxisGaps {
  * Every distance comes from `gaps`, picked by the axis it acts on; a node's
  * own `hint.gap` replaces it for that node's relation.
  */
-export function layoutScope(items: Placeable[], gaps: AxisGaps): ScopeResult {
+export function layoutScope(
+  items: Placeable[],
+  gaps: AxisGaps,
+  onWarn?: (warning: LayoutWarning) => void,
+): ScopeResult {
   const byId = new Map(items.map((it) => [it.id, it]));
-
-  /** Anchors that actually resolve to a sibling in this scope. */
-  const anchorIds = (it: Placeable): string[] => {
-    const h = it.hint;
-    const out: string[] = [];
-    const hx = h?.rightOf ?? h?.leftOf;
-    const vy = h?.below ?? h?.above;
-    if (hx && hx !== it.id && byId.has(hx)) out.push(hx);
-    if (vy && vy !== it.id && byId.has(vy)) out.push(vy);
-    return out;
-  };
+  const anchorIds = (it: Placeable): string[] => resolvedAnchors(it.id, it.hint, byId);
 
   const pos = new Map<string, { x: number; y: number }>();
   let prev: Rect | undefined;
   for (const members of buildBlocks(items, anchorIds)) {
-    const local = placeBlock(members, gaps, anchorIds);
+    const local = placeBlock(members, gaps, anchorIds, onWarn);
     // Blocks are laid out left to right, so this is a horizontal gap.
     const g = members[0]!.hint?.gap ?? gaps.x;
     // Blocks occupy strictly increasing, disjoint x-intervals, so nothing from
@@ -114,6 +140,7 @@ function placeBlock(
   members: Placeable[],
   gaps: AxisGaps,
   anchorIds: (it: Placeable) => string[],
+  onWarn?: (warning: LayoutWarning) => void,
 ): ScopeResult {
   const byId = new Map(members.map((it) => [it.id, it]));
   const prevOf = new Map<string, string>();
@@ -128,7 +155,7 @@ function placeBlock(
     return p ? [p] : [];
   };
 
-  const order = topoOrder(members, anchorsOf);
+  const order = topoOrder(members, anchorsOf, onWarn);
   const pos = new Map<string, { x: number; y: number }>();
   const placed: Rect[] = [];
 
@@ -223,7 +250,11 @@ function alignCoord(anchorPos: number, anchorSize: number, size: number, align: 
 }
 
 /** Kahn topological sort by anchor dependency; cycles fall back to input order. */
-function topoOrder(items: Placeable[], anchorsOf: (it: Placeable) => string[]): string[] {
+function topoOrder(
+  items: Placeable[],
+  anchorsOf: (it: Placeable) => string[],
+  onWarn?: (warning: LayoutWarning) => void,
+): string[] {
   const indeg = new Map<string, number>();
   const dependents = new Map<string, string[]>();
   for (const it of items) {
@@ -252,8 +283,13 @@ function topoOrder(items: Placeable[], anchorsOf: (it: Placeable) => string[]): 
   }
 
   if (order.length < items.length) {
-    console.warn("power: relative hints form a cycle; affected nodes fall back to declaration order.");
-    for (const it of items) if (!placed.has(it.id)) order.push(it.id);
+    const stuck = items.filter((it) => !placed.has(it.id)).map((it) => it.id);
+    onWarn?.({
+      code: "hint-cycle",
+      message: `relative hints form a cycle (${stuck.join(" → ")}); these nodes fall back to declaration order`,
+      nodes: stuck,
+    });
+    for (const id of stuck) order.push(id);
   }
   return order;
 }

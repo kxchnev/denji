@@ -209,7 +209,9 @@ export function setStyleProp(
 
 /**
  * Resolve the cascade for one element: kind selector, then each named style in
- * declaration order, then what is written on the element.
+ * the order the element references them, then what is written on the element.
+ * Note that is reference order, not the sheet's declaration order — `refs` is
+ * walked as given.
  *
  * Shared by the layout and the renderer. The layout needs it because `width`
  * and `height` decide a box's size, and sizing happens long before any paint —
