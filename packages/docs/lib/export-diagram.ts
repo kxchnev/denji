@@ -4,12 +4,16 @@ export type ExportFormat = "svg" | "png" | "jpeg";
 export const DEFAULT_SCALE = 2;
 
 /**
- * Browsers cap how large a canvas may be, and the limit is both per-side and by
- * total area — Safari is the strictest. Past it `toBlob` simply hands back null,
- * so a 5x export of a big diagram would fail with nothing to show for it.
- * Scaling down to fit gives a slightly smaller file instead of no file.
+ * Fallbacks tried, in order, when the browser refuses the requested scale.
+ *
+ * Browsers cap canvas size by side *and* by total area, and the ceiling differs
+ * per browser and per device — Chrome allows 65535 a side but only 2^28 pixels
+ * in total, while iOS Safari is far stricter. Rather than hard-coding a limit
+ * low enough for the worst case, ask for what was requested and step down only
+ * when it actually fails. These are whole numbers so the filename stays honest:
+ * an export labelled @5x really is 5x.
  */
-const MAX_DIMENSION = 8192;
+const FALLBACK_SCALES = [4, 3, 2, 1];
 
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -20,6 +24,43 @@ function triggerDownload(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+/** One attempt at one scale. Resolves to null when the browser will not give us
+ *  a canvas that big, which it signals by handing back no blob. */
+async function encodeAt(
+  img: HTMLImageElement,
+  width: number,
+  height: number,
+  format: "png" | "jpeg",
+  matte: string,
+  scale: number,
+): Promise<Blob | null> {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    if (format === "jpeg") {
+      // JPEG has no alpha channel — flatten onto the theme's own surface, or a
+      // dark diagram lands on white.
+      ctx.fillStyle = matte;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(
+        resolve,
+        format === "jpeg" ? "image/jpeg" : "image/png",
+        format === "jpeg" ? 0.92 : undefined,
+      );
+    });
+    return blob && blob.size > 0 ? blob : null;
+  } catch {
+    return null;
+  }
+}
+
 async function rasterize(
   svg: string,
   width: number,
@@ -27,8 +68,7 @@ async function rasterize(
   format: "png" | "jpeg",
   matte: string,
   scale: number,
-): Promise<Blob> {
-  const safe = Math.max(0.1, Math.min(scale, MAX_DIMENSION / Math.max(width, height, 1)));
+): Promise<{ blob: Blob; scale: number }> {
   const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
   try {
     const img = new Image();
@@ -39,26 +79,11 @@ async function rasterize(
     img.src = svgUrl;
     await loaded;
 
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(width * safe);
-    canvas.height = Math.round(height * safe);
-    const ctx = canvas.getContext("2d")!;
-    if (format === "jpeg") {
-      // JPEG has no alpha channel — flatten onto the theme's own surface, or a
-      // dark diagram lands on white.
-      ctx.fillStyle = matte;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    for (const s of [scale, ...FALLBACK_SCALES.filter((f) => f < scale)]) {
+      const blob = await encodeAt(img, width, height, format, matte, s);
+      if (blob) return { blob, scale: s };
     }
-    ctx.scale(safe, safe);
-    ctx.drawImage(img, 0, 0, width, height);
-
-    return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error("Failed to encode diagram"))),
-        format === "jpeg" ? "image/jpeg" : "image/png",
-        format === "jpeg" ? 0.92 : undefined,
-      );
-    });
+    throw new Error("Failed to encode diagram");
   } finally {
     URL.revokeObjectURL(svgUrl);
   }
@@ -77,10 +102,12 @@ export async function downloadDiagram(
     triggerDownload(new Blob([svg], { type: "image/svg+xml" }), `${filename}.svg`);
     return;
   }
-  const blob = await rasterize(svg, width, height, format, matte, scale);
-  // Only mark the unusual size, so the ordinary retina export keeps a clean name.
-  const suffix = scale === DEFAULT_SCALE ? "" : `@${scale}x`;
-  triggerDownload(blob, `${filename}${suffix}.${format === "jpeg" ? "jpg" : "png"}`);
+  const done = await rasterize(svg, width, height, format, matte, scale);
+  // Name it after the scale that was actually produced, not the one asked for:
+  // if the browser could not manage 5x, the file should not claim to be 5x.
+  // Only unusual sizes are marked, so the ordinary retina export stays clean.
+  const suffix = done.scale === DEFAULT_SCALE ? "" : `@${done.scale}x`;
+  triggerDownload(done.blob, `${filename}${suffix}.${format === "jpeg" ? "jpg" : "png"}`);
 }
 
 /** Save the diagram's own `.pwr` source, so an export can be edited back. */
