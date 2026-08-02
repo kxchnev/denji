@@ -12,6 +12,7 @@ import {
 import { EditorView, keymap } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import {
+  CORNERS,
   ICONS,
   ICON_NAMES,
   STYLE_PROPS,
@@ -70,7 +71,7 @@ const KIND_COMPLETIONS: Completion[] = [
  * packages/core/src/dsl/arch-parse.ts. Placement hints belong to a node;
  * spacing settings belong to the scope a line opens — containers are both.
  */
-type DirectiveCtx = "shape" | "container" | "diagram" | "connection";
+type DirectiveCtx = "shape" | "container" | "diagram" | "connection" | "text";
 
 /** `strokeWidth` → `stroke-width`: how a property reads inside a style block. */
 function displayProp(spec: StylePropSpec): string {
@@ -237,6 +238,12 @@ const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: Direct
     info: "Attach a style declared by a `style` block. Repeat it to stack several.",
     in: ["shape", "container", "connection"],
   },
+  {
+    name: "corner",
+    detail: "(topLeft|topRight|bottomLeft|bottomRight)",
+    info: "Which corner of the group this text is pinned to. Defaults to topLeft; repeat `text` to stack lines in one corner.",
+    in: ["text"],
+  },
   // One directive per style property, offered only where the core will accept
   // it — `@radius` is meaningless on a connection, `@header-fill` on a shape.
   ...Object.values(STYLE_PROPS).map((spec) => {
@@ -264,6 +271,7 @@ const DIRECTIVE_COMPLETIONS: Record<DirectiveCtx, Completion[]> = {
   container: [],
   diagram: [],
   connection: [],
+  text: [],
 };
 for (const [i, d] of DIRECTIVES.entries()) {
   const completion = snippetCompletion(`@${d.name}(\${})`, {
@@ -295,6 +303,14 @@ const ALIGN: Completion[] = ["start", "center", "end"].map((v, i) => ({
   boost: 30 - i,
 }));
 
+/** Straight from the core, so the four spellings cannot drift apart. */
+const CORNER_OPTIONS: Completion[] = CORNERS.map((v, i) => ({
+  label: v,
+  type: "enum",
+  detail: "corner",
+  boost: 30 - i,
+}));
+
 /** Suggested distances, with the engine's own default called out. */
 function pxValues(values: string[], fallback: string): Completion[] {
   return values.map((v, i) => ({
@@ -320,6 +336,24 @@ const LABEL_SNIPPET = snippetCompletion('"${Label}"', {
   detail: "display label",
   info: "Optional quoted label. Defaults to the id. Double quotes only, no escapes.",
   boost: 80,
+});
+
+const TEXT_SNIPPET = snippetCompletion('"${some text}"', {
+  label: '"text"',
+  type: "text",
+  detail: "the line to draw",
+  info: "One quoted line. Double quotes only, no escapes.",
+  boost: 80,
+});
+
+/** Offered only inside a `group` — a `service` has no place to put free text. */
+const TEXT_KEYWORD = snippetCompletion('text "${some text}"', {
+  label: "text",
+  type: "keyword",
+  detail: "corner text",
+  info: "A free line pinned to a corner of this group. `@corner(…)` moves it, repeating it stacks lines in one corner; it reserves a band of its own so it never lands on the children.",
+  section: DECLARE,
+  boost: 58,
 });
 
 const BRACE_SNIPPET = snippetCompletion("{\n\t${}\n}", {
@@ -405,6 +439,7 @@ function lineStartOptions(scan: PwrScan, lineNo: number): Completion[] {
   if (!scan.hasHeader && (scan.firstContentLine === 0 || lineNo <= scan.firstContentLine)) {
     out.push(HEADER);
   }
+  if (scan.symbols.find((s) => s.id === scan.scope)?.kind === "group") out.push(TEXT_KEYWORD);
   if (scan.depth > 0) {
     out.push({
       label: "}",
@@ -455,12 +490,24 @@ const DECL_HEAD = /^\s*(app|database|queue|rect|service|group)\s+([A-Za-z0-9_]+)
 const CONNECTION = /^\s*([A-Za-z0-9_]+)\s*(<->|-\.->|-\.-|->|<-|--)\s*([A-Za-z0-9_]*)(\s*)$/;
 const OP_POSITION = /^\s*([A-Za-z0-9_]+)\s*([<>.-]*)$/;
 const HEADER_LINE = /^\s*architecture\b/;
-const RESERVED = new Set(["architecture", "app", "database", "queue", "rect", "service", "group"]);
+/** `text "…"` — a free line in a group; it has no id, so the label comes first. */
+const TEXT_LINE = /^\s*text\s+("[^"]*")?(.*)$/;
+const RESERVED = new Set([
+  "architecture",
+  "app",
+  "database",
+  "queue",
+  "rect",
+  "service",
+  "group",
+  "text",
+]);
 const STYLE_SLOTS = ["app", "database", "queue", "rect", "service", "group", "edge"];
 
 /** Which set of directives the line being typed accepts. */
 function directiveCtx(masked: string): DirectiveCtx | null {
   if (HEADER_LINE.test(masked)) return "diagram";
+  if (TEXT_LINE.test(masked)) return "text";
   const kind = DECL_HEAD.exec(masked)?.[1];
   if (kind) return kind === "service" || kind === "group" ? "container" : "shape";
   // `a -> b @…` — directives sit before the colon, so the label never gets here.
@@ -514,6 +561,7 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     const name = args[1]!.toLowerCase(); // the parser lowercases too — @RightOf is legal
     const arg = args[2]!;
     if (name === "align") return result(ALIGN, wordFrom);
+    if (name === "corner") return result(CORNER_OPTIONS, wordFrom);
     const px = PX[name];
     if (px) {
       return arg.trim() === "" || ctx.explicit
@@ -569,7 +617,17 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     return result(DIRECTIVE_COMPLETIONS.diagram, wordFrom);
   }
 
-  // 5. Tail of a declaration: `<kind> <id> …`
+  // 5. Tail of a `text "…"` line — a quoted string first, then only @corner.
+  const text = TEXT_LINE.exec(masked);
+  if (text) {
+    if (!/\s$/.test(masked) && !ctx.explicit) return null;
+    const out: Completion[] = [];
+    if (!text[1]) out.push(TEXT_SNIPPET);
+    else out.push(...DIRECTIVE_COMPLETIONS.text);
+    return result(out, wordFrom);
+  }
+
+  // 6. Tail of a declaration: `<kind> <id> …`
   const decl = DECL_HEAD.exec(masked);
   if (decl) {
     const kind = decl[1]!;
@@ -584,7 +642,7 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     return result(out, wordFrom);
   }
 
-  // 6. Connection line.
+  // 7. Connection line.
   const conn = CONNECTION.exec(masked);
   if (conn) {
     const src = conn[1]!;
@@ -602,7 +660,7 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     return result(options, ctx.pos - target.length);
   }
 
-  // 7. Operator position: after an id, or part-way through an operator.
+  // 8. Operator position: after an id, or part-way through an operator.
   const op = OP_POSITION.exec(masked);
   if (op && !RESERVED.has(op[1]!)) {
     const partial = op[2]!;

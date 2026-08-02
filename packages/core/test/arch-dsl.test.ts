@@ -185,3 +185,89 @@ describe("architecture DSL", () => {
     expect(container(d, "orders").children).toEqual(["oapi", "odb"]);
   });
 });
+
+describe("free text inside a group", () => {
+  const reason = (src: string): string => {
+    try {
+      parseArchitecture(src);
+    } catch (e) {
+      return (e as DiagramParseError).reason;
+    }
+    throw new Error("expected throw");
+  };
+
+  it("pins a text to the top-left corner by default", () => {
+    const d = parseArchitecture(`
+      architecture
+      group edge "Edge" {
+        text "only in prod"
+        app cdn "CDN"
+      }
+    `);
+    expect(container(d, "edge").texts).toEqual([{ text: "only in prod", corner: "topLeft" }]);
+    // A text is not a node, so it stays out of the scope's children.
+    expect(container(d, "edge").children).toEqual(["cdn"]);
+  });
+
+  it("takes a corner, spelled camelCase, kebab-case or run together", () => {
+    for (const arg of ["bottomRight", "bottom-right", "bottomright", "BOTTOM_RIGHT"]) {
+      const d = parseArchitecture(`
+        architecture
+        group g "G" {
+          text "note" @corner(${arg})
+          app a "A"
+        }
+      `);
+      expect(container(d, "g").texts?.[0]?.corner).toBe("bottomRight");
+    }
+  });
+
+  it("keeps every text in source order, several to a corner", () => {
+    const d = parseArchitecture(`
+      architecture
+      group g "G" {
+        text "tl one"
+        text "tl two"
+        text "tr" @corner(topRight)
+        text "bl" @corner(bottomLeft)
+        text "br" @corner(bottomRight)
+        app a "A"
+      }
+    `);
+    expect(container(d, "g").texts).toEqual([
+      { text: "tl one", corner: "topLeft" },
+      { text: "tl two", corner: "topLeft" },
+      { text: "tr", corner: "topRight" },
+      { text: "bl", corner: "bottomLeft" },
+      { text: "br", corner: "bottomRight" },
+    ]);
+  });
+
+  it("leaves a container without texts alone", () => {
+    const d = parseArchitecture(`architecture\ngroup g "G" {\napp a "A"\n}`);
+    expect(container(d, "g").texts).toBeUndefined();
+  });
+
+  it("rejects text where it cannot be drawn", () => {
+    expect(reason(`architecture\ntext "loose"`)).toContain("only allowed inside a container");
+    expect(reason(`architecture\nservice s "S" {\ntext "x"\napp a "A"\n}`)).toContain(
+      "only allowed inside a `group`",
+    );
+    expect(reason(`architecture\ngroup g "G" {\ntext bare\napp a "A"\n}`)).toContain(
+      "malformed text",
+    );
+    expect(reason(`architecture\ngroup g "G" {\ntext "x" @corner(middle)\napp a "A"\n}`)).toContain(
+      "@corner expects",
+    );
+  });
+
+  it("keeps @corner to texts and other directives off them", () => {
+    expect(reason(`architecture\napp a "A" @corner(topLeft)`)).toContain("not allowed on a shape");
+    expect(reason(`architecture\ngroup g "G" @corner(topLeft) {\napp a "A"\n}`)).toContain(
+      "not allowed on a container",
+    );
+    expect(reason(`architecture\ngroup g "G" {\ntext "x" @padding(4)\napp a "A"\n}`)).toContain(
+      "not allowed on a text",
+    );
+  });
+});

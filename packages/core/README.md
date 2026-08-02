@@ -77,6 +77,11 @@ npx tsx src/cli.ts render diagram.pwr -o diagram.svg
   `queue` · `rect`.
 - **Контейнеры:** `service|group <id> "label" [@hints] {` … дети … `}` —
   вложенность блоками (можно вкладывать друг в друга).
+- **Текст в группе:** `text "любой текст" [@corner(topLeft|topRight|bottomLeft|
+  bottomRight)]` внутри тела `group`. Строка в углу внутренней области, по
+  умолчанию — левый верхний; несколько `text` в одном углу складываются в
+  стопку сверху вниз. Текст резервирует полосу, поэтому не наезжает на детей,
+  а раздвигает группу.
 - **Связи:** `<id> <op> <id> [: label]`, где op ∈ `->` (стрелка) · `<-` ·
   `<->` (обе) · `--` (линия) · `-.->` / `-.-` (пунктир).
 - **@-хинты** раскладки (на фигуре или контейнере): `@rightOf(id)` ·
@@ -86,6 +91,7 @@ npx tsx src/cli.ts render diagram.pwr -o diagram.svg
   `@spacing(n)` · `@spacingX(n)` · `@spacingY(n)` · `@padding(n)` (только
   контейнер) · `@margin(n)` (только `architecture`).
 - **@-иконки** (на фигуре или контейнере): `@icon(имя)`.
+- **@-угол** (только на `text`): `@corner(topLeft|topRight|bottomLeft|bottomRight)`.
 - **@-стили** (на фигуре, контейнере или связи): `@style(имя)` и любое свойство
   из таблицы ниже, например `@fill(#0f172a)`. На связи директивы пишутся **до**
   двоеточия: `a -> b @style(hot) : http` — метка забирает всё до конца строки.
@@ -152,7 +158,7 @@ architecture @spacingX(120) @spacingY(16) @margin(40)
 ```
 
 Те же значения есть и в программном API: `.spacing({ x, y })` / `.margin(n)` на
-билдере, `spacing` / `padding` в опциях `container()`, а `ArchLayoutOptions`
+билдере, `spacing` / `padding` / `texts` в опциях `container()`, а `ArchLayoutOptions`
 (`gap`, `gapX`, `gapY`, `padding`, `headerH`, `margin`) задаёт дефолты со
 стороны вызывающего — **написанное в документе важнее**.
 

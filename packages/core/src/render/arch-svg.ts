@@ -3,12 +3,14 @@ import type {
   ArchNode,
   Connection,
   Container,
+  ContainerText,
+  Corner,
   Shape,
   StyleProps,
   StyleSlot,
   ThemeName,
 } from "../model/arch.js";
-import { STYLE_SLOTS } from "../model/arch.js";
+import { CORNERS, STYLE_SLOTS } from "../model/arch.js";
 import { isStyleSlot, mergeStyle, STYLE_PROPS } from "../model/style.js";
 import { canonicalIconName, resolveIcon, type Icon } from "../model/icon.js";
 import { center, type Point, type Rect } from "../model/geometry.js";
@@ -19,6 +21,10 @@ import {
   ICON_GAP,
   ICON_SIZE,
   measureLabelWidth,
+  noteLines,
+  NOTE_FONT_SIZE,
+  NOTE_INSET,
+  NOTE_LINE_H,
 } from "../layout/arch/measure.js";
 import { DEFAULT_HEADER_H } from "../layout/arch/index.js";
 import { resolveTheme, type Theme } from "./theme.js";
@@ -578,8 +584,41 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
     `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
     headerIcon +
     `<text class="pwr-t" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}" text-anchor="start">${esc(n.label)}</text>` +
+    CORNERS.map((c) => cornerStack(noteLines(n.texts, c), c, r, headerH)).join("") +
     `</g>`
   );
+}
+
+/**
+ * The lines pinned to one corner, drawn on the band the layout reserved for
+ * them. A top stack hangs from under the title; a bottom one is flush with the
+ * bottom edge, so the corner keeps its meaning however many lines it holds.
+ *
+ * They wear `pwr-t` so the group's own text colour — theme, named style or
+ * `@text(…)` alike — reaches them with no extra plumbing; the opacity is an
+ * attribute so the stylesheet stays out of it.
+ */
+function cornerStack(
+  lines: readonly ContainerText[],
+  corner: Corner,
+  r: Rect,
+  headerH: number,
+): string {
+  if (lines.length === 0) return "";
+  const right = corner === "topRight" || corner === "bottomRight";
+  const top = corner === "topLeft" || corner === "topRight";
+  const x = right ? r.x + r.width - NOTE_INSET : r.x + NOTE_INSET;
+  const first = top ? r.y + headerH : r.y + r.height - lines.length * NOTE_LINE_H;
+  return lines
+    .map((t, i) => {
+      const y = first + i * NOTE_LINE_H + NOTE_LINE_H / 2;
+      return (
+        `<text class="pwr-t" x="${round(x)}" y="${round(y)}" dominant-baseline="central" ` +
+        `font-size="${NOTE_FONT_SIZE}" text-anchor="${right ? "end" : "start"}" opacity="0.72">` +
+        `${esc(t.text)}</text>`
+      );
+    })
+    .join("");
 }
 
 function renderConnection(c: Connection, index: number, styled: StyleModel): string {

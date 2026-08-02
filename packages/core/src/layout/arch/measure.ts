@@ -1,4 +1,4 @@
-import type { Shape, StyleProps } from "../../model/arch.js";
+import type { ContainerText, Corner, Shape, StyleProps } from "../../model/arch.js";
 import type { Size } from "../../model/geometry.js";
 
 /**
@@ -24,9 +24,43 @@ export const CAP_RX = 8;
 const MIN_WIDTH = 96;
 const BASE_HEIGHT = 46;
 
+/**
+ * A free text inside a container is secondary to its title, so it is set a
+ * couple of points smaller — the same size the connection labels use.
+ */
+export const NOTE_FONT_SIZE = 12;
+/** Height of one line of corner text; a band is as tall as its longest stack. */
+export const NOTE_LINE_H = 20;
+/** Inset from the container's edge; matches the lead-in of its title. */
+export const NOTE_INSET = 12;
+/** Breathing room between a left and a right text sharing one band. */
+export const NOTE_GAP = 16;
+
 export function measureLabelWidth(label: string): number {
   const longest = label.split("\n").reduce((m, l) => Math.max(m, l.length), 0);
   return longest * AVG_CHAR_WIDTH;
+}
+
+/** Same estimate as {@link measureLabelWidth}, at the smaller note size. */
+export function measureNoteWidth(text: string): number {
+  return text.length * NOTE_FONT_SIZE * 0.6;
+}
+
+/**
+ * The lines pinned to one corner, in the order they were written — which is the
+ * order they are stacked, top line first, whichever corner it is. The layout
+ * counts them and the renderer draws them, so both read the stack the same way.
+ */
+export function noteLines(
+  texts: ContainerText[] | undefined,
+  corner: Corner,
+): readonly ContainerText[] {
+  return texts?.filter((t) => t.corner === corner) ?? [];
+}
+
+/** Width of the widest line in a stack. */
+export function measureNoteStack(lines: readonly ContainerText[]): number {
+  return lines.reduce((m, t) => Math.max(m, measureNoteWidth(t.text)), 0);
 }
 
 /**

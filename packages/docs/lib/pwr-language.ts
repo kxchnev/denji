@@ -120,6 +120,14 @@ function startOfLine(stream: StringStream, state: PwrState): string | null {
     state.mode = "id";
     return "typeName";
   }
+  // `text "…" @corner(…)` — a free line inside a group. It has no id, so the
+  // quoted string comes straight after the keyword. Checked before the operator
+  // scan, exactly as the core dispatches it.
+  if (first === "text") {
+    stream.match(first);
+    state.mode = "decl";
+    return "keyword";
+  }
   if (hasOp(stream.string.slice(stream.pos))) {
     state.mode = "conn";
     return connection(stream, state);
@@ -236,6 +244,7 @@ function argument(stream: StringStream, state: PwrState): string | null {
     return Number.isFinite(n) && n >= 0 ? "number" : "invalid";
   }
   if (state.directive === "align" || state.directive === "theme") return "atom";
+  if (state.directive === "corner") return "atom";
   if (state.directive === "icon") return "atom";
   if (state.directive === "style") return "variableName";
   if (RELATIONAL.has(state.directive)) return "variableName";

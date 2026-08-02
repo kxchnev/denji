@@ -35,7 +35,8 @@ The short version:
   nothing points at silently lands to the right of everything else.
 - Group related nodes into containers; a long top-level row is unreadable.
 - ids are `[A-Za-z0-9_]+` — no hyphens — and must never be a keyword
-  (`app`, `database`, `queue`, `rect`, `service`, `group`, `architecture`).
+  (`app`, `database`, `queue`, `rect`, `service`, `group`, `text`,
+  `architecture`).
 - Connection directives go before the `:` label.
 
 ## B. Changing the library itself
@@ -66,9 +67,11 @@ category also needs a page under `packages/docs/app/(docs)/` and an entry in
 
 ⚠️ The `.pwr` grammar exists in more than one place: the parser
 (`packages/core/src/dsl/arch-parse.ts`), the editor tokenizer
-(`packages/docs/lib/pwr-language.ts`), the autocomplete
-(`packages/docs/lib/pwr-symbols.ts`) and the reference
-(`packages/core/LANGUAGE.md`). Change the parser and you must update the other
-three in the same commit.
+(`packages/docs/lib/pwr-language.ts`), the document scan
+(`packages/docs/lib/pwr-symbols.ts`), the autocomplete
+(`packages/docs/lib/pwr-complete.ts` — in practice the largest surface: the
+directive table, its per-context allow-list and the argument value lists) and
+the reference (`packages/core/LANGUAGE.md`). Change the parser and you must
+update the other four in the same commit.
 
 `CLAUDE.md` holds the same repo guidance in more detail, in Russian.

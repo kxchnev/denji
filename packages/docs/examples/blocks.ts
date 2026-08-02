@@ -16,6 +16,14 @@ export const blocks: ExampleData[] = [
     api: `architecture()\n  .app("cdn", "CDN")\n  .app("waf", "WAF", { hint: { rightOf: "cdn" } })\n  .container("edge", "Edge", { kind: "group", children: ["cdn", "waf"] })\n  .build();`,
   },
   {
+    id: "group-text",
+    title: "Text in a group",
+    description:
+      "A `text` line writes a free note in one of the group's corners — `@corner` picks which, `topLeft` by default. Repeat it to stack lines in one corner. Each band is reserved, so a note never lands on the children.",
+    dsl: `architecture\n  group edge "Edge" {\n    text "only in prod"\n    text "terraform-managed"\n    text "owner: platform" @corner(bottomRight)\n    app cdn "CDN"\n    app waf "WAF" @rightOf(cdn)\n  }`,
+    api: `architecture()\n  .app("cdn", "CDN")\n  .app("waf", "WAF", { hint: { rightOf: "cdn" } })\n  .container("edge", "Edge", {\n    kind: "group",\n    children: ["cdn", "waf"],\n    texts: [\n      { text: "only in prod" },\n      { text: "terraform-managed" },\n      { text: "owner: platform", corner: "bottomRight" },\n    ],\n  })\n  .build();`,
+  },
+  {
     id: "nested",
     title: "Nested",
     description: "Containers nest freely — a group holding a service holding shapes.",

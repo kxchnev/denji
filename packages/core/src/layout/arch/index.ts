@@ -1,7 +1,17 @@
-import type { ArchDiagram, StyleProps } from "../../model/arch.js";
+import type { ArchDiagram, ContainerText, Corner, StyleProps } from "../../model/arch.js";
 import { resolveStyle } from "../../model/style.js";
 import type { Size } from "../../model/geometry.js";
-import { ICON_GAP, ICON_SIZE, measureLabelWidth, measureShape } from "./measure.js";
+import {
+  ICON_GAP,
+  ICON_SIZE,
+  measureLabelWidth,
+  measureNoteStack,
+  measureShape,
+  noteLines,
+  NOTE_GAP,
+  NOTE_INSET,
+  NOTE_LINE_H,
+} from "./measure.js";
 import { layoutScope, type AxisGaps, type LayoutWarning, type Placeable } from "./relative.js";
 import { routeConnections } from "./route.js";
 
@@ -111,12 +121,18 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     }
     const iconW = n.icon ? ICON_SIZE + ICON_GAP : 0;
     const labelW = measureLabelWidth(n.label) + iconW + 24;
+    // Corner texts get bands of their own so they never land on the children:
+    // the top one pushes the content down, the bottom one grows the box.
+    const bands = noteBands(n.texts);
     // A container hugs its content, so an explicit size can only be a floor —
     // honouring it exactly would crop the children it is meant to hold.
     const own = styleOf(id);
-    const width = Math.max(contentW + pad * 2, labelW, own.width ?? 0);
-    const height = Math.max(contentH + pad * 2 + headerH, own.height ?? 0);
-    innerOffset.set(id, { x: pad, y: headerH + pad });
+    const width = Math.max(contentW + pad * 2, labelW, bands.width, own.width ?? 0);
+    const height = Math.max(
+      contentH + pad * 2 + headerH + bands.top + bands.bottom,
+      own.height ?? 0,
+    );
+    innerOffset.set(id, { x: pad, y: headerH + bands.top + pad });
     const size = { width, height };
     sizeMap.set(id, size);
     return size;
@@ -150,6 +166,39 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
   normalizeToOrigin(diagram, margin);
   routeConnections(diagram);
   return diagram;
+}
+
+/**
+ * The space a container's corner texts claim: a band per occupied edge, as tall
+ * as the longer of the two stacks that share it, and a width floor wide enough
+ * for the widest band. A left and a right stack share one band, so their widths
+ * add up.
+ */
+function noteBands(texts: ContainerText[] | undefined): {
+  top: number;
+  bottom: number;
+  width: number;
+} {
+  if (!texts || texts.length === 0) return { top: 0, bottom: 0, width: 0 };
+  const stack = (corner: Corner): readonly ContainerText[] => noteLines(texts, corner);
+  const band = (
+    left: readonly ContainerText[],
+    right: readonly ContainerText[],
+  ): { height: number; width: number } => {
+    const lw = measureNoteStack(left);
+    const rw = measureNoteStack(right);
+    return {
+      height: Math.max(left.length, right.length) * NOTE_LINE_H,
+      width: lw + rw + (lw > 0 && rw > 0 ? NOTE_GAP : 0),
+    };
+  };
+  const top = band(stack("topLeft"), stack("topRight"));
+  const bottom = band(stack("bottomLeft"), stack("bottomRight"));
+  return {
+    top: top.height,
+    bottom: bottom.height,
+    width: Math.max(top.width, bottom.width) + NOTE_INSET * 2,
+  };
 }
 
 function normalizeToOrigin(diagram: ArchDiagram, margin: number): void {

@@ -4,6 +4,8 @@ import type {
   Connection,
   Container,
   ContainerKind,
+  ContainerText,
+  Corner,
   PlaceHint,
   Shape,
   ShapeKind,
@@ -32,6 +34,8 @@ export interface ContainerOptions extends Styled {
   spacing?: Spacing;
   /** Inner padding between this container's border and its children. */
   padding?: number;
+  /** Free corner texts, at most one per corner. `corner` defaults to "topLeft". */
+  texts?: Array<{ text: string; corner?: Corner }>;
 }
 
 /** Connection direction: which ends get an arrowhead. */
@@ -94,12 +98,14 @@ export class ArchitectureBuilder {
 
   container(id: string, label?: string, opts: ContainerOptions = {}): this {
     if (this.nodes.has(id)) throw new Error(`Duplicate node id: "${id}"`);
+    const kind = opts.kind ?? "group";
     const container: Container = {
       type: "container",
       id,
       label: label ?? id,
-      kind: opts.kind ?? "group",
+      kind,
       icon: opts.icon,
+      texts: normalizeTexts(id, kind, opts.texts),
       children: opts.children ? [...opts.children] : [],
       hint: opts.hint,
       spacing: opts.spacing,
@@ -241,6 +247,23 @@ export class ArchitectureBuilder {
       icons,
     };
   }
+}
+
+/**
+ * Pin every free text to a corner. Several may share one — they stack there, in
+ * the order given. `service` is refused because it has no body text colour of
+ * its own: its whole text palette paints the title band.
+ */
+function normalizeTexts(
+  id: string,
+  kind: ContainerKind,
+  texts: ContainerOptions["texts"],
+): ContainerText[] | undefined {
+  if (!texts || texts.length === 0) return undefined;
+  if (kind !== "group") {
+    throw new Error(`Container "${id}" is a ${kind}: free text is only supported on a group`);
+  }
+  return texts.map((t) => ({ text: t.text, corner: t.corner ?? "topLeft" }));
 }
 
 /** Walk parent links from each container; a repeat means a nesting cycle. */

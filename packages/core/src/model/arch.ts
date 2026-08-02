@@ -130,6 +130,21 @@ export interface Shape extends Styled {
   rect?: Rect;
 }
 
+/** Which corner of a container's inner area a free text is pinned to. */
+export type Corner = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+
+export const CORNERS: readonly Corner[] = ["topLeft", "topRight", "bottomLeft", "bottomRight"];
+
+/**
+ * A free line of text pinned to a corner inside a container. It reserves a band
+ * of its own — under the title for a top corner, along the bottom edge for a
+ * bottom one — so it can never land on top of the children.
+ */
+export interface ContainerText {
+  text: string;
+  corner: Corner;
+}
+
 export interface Container extends Styled {
   type: "container";
   id: string;
@@ -137,6 +152,11 @@ export interface Container extends Styled {
   kind: ContainerKind;
   /** Icon drawn before the container's title. */
   icon?: string;
+  /**
+   * Free corner texts. A model field rather than anything style-ish because
+   * each one reserves layout space, and layout runs before styles are resolved.
+   */
+  texts?: ContainerText[];
   /** Ids of child nodes (shapes or nested containers). */
   children: string[];
   hint?: PlaceHint;

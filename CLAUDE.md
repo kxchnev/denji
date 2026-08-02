@@ -83,8 +83,9 @@ Next.js App Router + Tailwind + shadcn-компоненты. Ядро подкл
 `--code-*` в `globals.css`, **вне `@layer base`** (Tailwind иначе вычищает эти
 классы, т.к. они не встречаются как литералы в файлах из `content`).
 ⚠️ Токенайзер `.pwr` дублирует грамматику ядра — при правках
-`core/src/dsl/arch-parse.ts` синхронно обновляй `lib/pwr-language.ts` и
-`lib/pwr-symbols.ts`.
+`core/src/dsl/arch-parse.ts` синхронно обновляй `lib/pwr-language.ts`,
+`lib/pwr-symbols.ts` и `lib/pwr-complete.ts` (там же таблица директив с
+разрешёнными контекстами и списки значений аргументов — самый большой кусок).
 
 ## Команды (из корня)
 

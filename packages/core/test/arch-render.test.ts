@@ -226,6 +226,65 @@ describe("output shape", () => {
     expect(app.y).toBe(app.middle);
   });
 
+  it("draws a group's corner texts in their own corners", () => {
+    const out = svg(`
+      architecture
+      group g "G" {
+        text "tl"
+        text "tr" @corner(topRight)
+        text "bl" @corner(bottomLeft)
+        text "br" @corner(bottomRight)
+        app a "A"
+      }
+    `);
+    const at = (text: string) => {
+      const m = new RegExp(
+        `<text class="pwr-t" x="([\\d.]+)" y="([\\d.]+)"[^>]*text-anchor="(start|end)"[^>]*>${text}</text>`,
+      ).exec(out)!;
+      return { x: Number(m[1]), y: Number(m[2]), anchor: m[3] };
+    };
+    const g = /<rect class="pwr-b" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/.exec(
+      out,
+    )!;
+    const [x, y, w, h] = g.slice(1, 5).map(Number) as [number, number, number, number];
+
+    expect(at("tl")).toEqual({ x: x + 12, y: y + 28 + 10, anchor: "start" });
+    expect(at("tr")).toEqual({ x: x + w - 12, y: y + 28 + 10, anchor: "end" });
+    expect(at("bl")).toEqual({ x: x + 12, y: y + h - 10, anchor: "start" });
+    expect(at("br")).toEqual({ x: x + w - 12, y: y + h - 10, anchor: "end" });
+  });
+
+  it("stacks several texts in one corner, hanging from the edge they are pinned to", () => {
+    const out = svg(`
+      architecture
+      group g "G" {
+        text "t1"
+        text "t2"
+        text "t3"
+        text "b1" @corner(bottomRight)
+        text "b2" @corner(bottomRight)
+        app a "A"
+      }
+    `);
+    const yOf = (text: string) =>
+      Number(new RegExp(`<text class="pwr-t" x="[\\d.]+" y="([\\d.]+)"[^>]*>${text}</text>`).exec(out)![1]);
+    const g = /<rect class="pwr-b" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(out)!;
+    const [y, h] = g.slice(1, 3).map(Number) as [number, number];
+
+    // Source order reads downwards, and a line box is 20 tall.
+    expect(yOf("t1")).toBe(y + 28 + 10);
+    expect(yOf("t2")).toBe(yOf("t1") + 20);
+    expect(yOf("t3")).toBe(yOf("t2") + 20);
+    // The bottom stack is flush with the bottom edge, so its *last* line is.
+    expect(yOf("b2")).toBe(y + h - 10);
+    expect(yOf("b1")).toBe(yOf("b2") - 20);
+  });
+
+  it("escapes a corner text like any other label", () => {
+    const out = svg(`architecture\ngroup g "G" {\ntext "a & <b>"\napp a "A"\n}`);
+    expect(out).toContain("a &amp; &lt;b&gt;");
+  });
+
   it("is deterministic", () => {
     expect(svg(SAMPLE)).toEqual(svg(SAMPLE));
   });

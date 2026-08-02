@@ -1,6 +1,8 @@
 import type {
   ArchDiagram,
   ContainerKind,
+  ContainerText,
+  Corner,
   PlaceHint,
   ShapeKind,
   Spacing,
@@ -31,6 +33,7 @@ interface Frame {
   label: string;
   kind: ContainerKind;
   children: string[];
+  texts: ContainerText[];
   hint?: PlaceHint;
   spacing?: Spacing;
   padding?: number;
@@ -55,7 +58,7 @@ interface BlockFrame {
  * settings belong to the scope a node opens, so the two lists only overlap on
  * containers — which are both at once.
  */
-type DirectiveCtx = "shape" | "container" | "diagram" | "connection";
+type DirectiveCtx = "shape" | "container" | "diagram" | "connection" | "text";
 
 interface Directives {
   hint?: PlaceHint;
@@ -66,6 +69,7 @@ interface Directives {
   styleRefs?: string[];
   styleProps?: StyleProps;
   icon?: string;
+  corner?: Corner;
 }
 
 /**
@@ -163,6 +167,7 @@ export function parseArchitecture(src: string): ArchDiagram {
         styleRefs: frame.styleRefs,
         styleProps: frame.styleProps,
         icon: frame.icon,
+        texts: frame.texts,
       });
       addChildToScope(frame.id);
       continue;
@@ -170,7 +175,28 @@ export function parseArchitecture(src: string): ArchDiagram {
 
     const first = line.match(/^(\S+)/)?.[1] ?? "";
 
-    if (SHAPE_KINDS.has(first as ShapeKind)) {
+    if (first === "text") {
+      const frame = frames[frames.length - 1];
+      if (!frame) {
+        throw new DiagramParseError(
+          "`text` is only allowed inside a container",
+          lineNo,
+          indentCol(raw),
+          raw,
+        );
+      }
+      // The builder guards this too, for the programmatic API; repeating it
+      // here is what buys the author a line number instead of the closing `}`.
+      if (frame.kind !== "group") {
+        throw new DiagramParseError(
+          "`text` is only allowed inside a `group`",
+          lineNo,
+          indentCol(raw),
+          raw,
+        );
+      }
+      frame.texts.push(parseTextLine(line, lineNo, raw));
+    } else if (SHAPE_KINDS.has(first as ShapeKind)) {
       parseShapeLine(line, lineNo, raw, b, addChildToScope);
     } else if (CONTAINER_KINDS.has(first as ContainerKind)) {
       frames.push(parseContainerOpen(line, lineNo, raw));
@@ -292,6 +318,21 @@ function parseShapeLine(
   addChild(id);
 }
 
+/** `text "Only in prod" @corner(bottomRight)` — a free line inside a group. */
+function parseTextLine(line: string, lineNo: number, raw: string): ContainerText {
+  const m = line.match(/^text\s+"([^"]*)"\s*(.*)$/);
+  if (!m) {
+    throw new DiagramParseError(
+      'malformed text (expected `text "some text"`)',
+      lineNo,
+      indentCol(raw),
+      raw,
+    );
+  }
+  const d = parseDirectives(m[2] ?? "", lineNo, raw, "text");
+  return { text: m[1]!, corner: d.corner ?? "topLeft" };
+}
+
 function parseContainerOpen(line: string, lineNo: number, raw: string): Frame {
   const m = line.match(/^(service|group)\s+([A-Za-z0-9_]+)\s*(?:"([^"]*)")?\s*(.*)\{\s*$/);
   if (!m) {
@@ -309,6 +350,7 @@ function parseContainerOpen(line: string, lineNo: number, raw: string): Frame {
     label: m[3] ?? m[2]!,
     kind,
     children: [],
+    texts: [],
     hint: d.hint,
     spacing: d.spacing,
     padding: d.padding,
@@ -356,6 +398,14 @@ const RELATIONAL: Record<string, keyof PlaceHint> = {
   below: "below",
 };
 
+/** Corner spellings, normalized to lower case with `-`/`_` stripped. */
+const CORNER_NAMES: Record<string, Corner | undefined> = {
+  topleft: "topLeft",
+  topright: "topRight",
+  bottomleft: "bottomLeft",
+  bottomright: "bottomRight",
+};
+
 /** Which directives each position accepts, for the "not allowed here" message. */
 const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
   shape: new Set(["rightof", "leftof", "above", "below", "gap", "align", "style", "icon"]),
@@ -375,6 +425,7 @@ const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
   ]),
   diagram: new Set(["spacing", "spacingx", "spacingy", "margin", "theme"]),
   connection: new Set(["style"]),
+  text: new Set(["corner"]),
 };
 
 /** Positions where an inline style property such as `@fill(#fff)` is accepted. */
@@ -388,6 +439,7 @@ const KNOWN = new Set([
   ...ALLOWED.container,
   ...ALLOWED.diagram,
   ...ALLOWED.connection,
+  ...ALLOWED.text,
 ]);
 
 const WHERE: Record<DirectiveCtx, string> = {
@@ -395,6 +447,7 @@ const WHERE: Record<DirectiveCtx, string> = {
   container: "on a container",
   diagram: "on the architecture line",
   connection: "on a connection",
+  text: "on a text",
 };
 
 /** `@name(arg)`, tolerating one level of nesting so `@fill(rgb(1,2,3))` works. */
@@ -505,6 +558,19 @@ function parseDirectives(
       // settled by build(), which sees `icon` blocks declared further down —
       // exactly how @style already behaves.
       out.icon = arg;
+    } else if (name === "corner") {
+      // `topLeft`, `top-left` and `topleft` are the same corner; the model keeps
+      // the camelCase spelling.
+      const corner = CORNER_NAMES[arg.toLowerCase().replace(/[-_]/g, "")];
+      if (!corner) {
+        throw new DiagramParseError(
+          "@corner expects topLeft|topRight|bottomLeft|bottomRight",
+          lineNo,
+          indentCol(raw),
+          raw,
+        );
+      }
+      out.corner = corner;
     } else if (name === "style") {
       if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(arg)) {
         throw new DiagramParseError("@style expects a style name", lineNo, indentCol(raw), raw);

@@ -51,7 +51,8 @@ architecture
 Shapes: `app` (rounded box), `database` (cylinder), `queue` (horizontal
 cylinder), `rect` (plain box). Containers: `service` (accented title band),
 `group` (dashed frame). Arrows: `->`, `<-`, `<->`, `--`, `-.->`, `-.-`, with an
-optional `: label`.
+optional `: label`. Inside a `group`, `text "…" @corner(topLeft|topRight|
+bottomLeft|bottomRight)` writes a free line in that corner.
 
 ## Rules that decide whether it reads well
 
@@ -84,14 +85,18 @@ These are the ones that actually bite. All verified against the parser.
 
 - **ids are `[A-Za-z0-9_]+`** — `order_api`, never `order-api`.
 - **Never use a keyword as an id.** `app`, `database`, `queue`, `rect`,
-  `service`, `group`, `architecture` are dispatched on the first word, so
-  `rect -> db` is read as a shape declaration and fails.
+  `service`, `group`, `text`, `architecture` are dispatched on the first word,
+  so `rect -> db` is read as a shape declaration and fails.
 - **Directives go before the `:` label**: `a -> b @style(hot) : login`.
 - **`{` must end the line; `}` sits alone on its own line.**
 - **Comments are whole-line only** (`#` or `%%`). No trailing comments.
 - **Sizes are unitless** — `@width(150)`, not `150px`. There is no `fontSize`.
 - `@theme` and `@margin` only on the `architecture` line; `@padding` only on a
-  container.
+  container; `@corner` only on a `text`.
+- **`text` lives inside a `group` only** and its string must be quoted. Repeat
+  it to stack lines in one corner — there is no `\n`. It reserves a band, so it
+  grows the group rather than overlapping the children: a long note makes a wide
+  box, a tall stack a tall one.
 
 ## When you are asked to change an existing diagram
 

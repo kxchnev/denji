@@ -79,6 +79,27 @@ service|group  <id>  ["<label>"]  <directives…>  {
   only as a floor.
 - Connections may be written inside a container body, but they are always global.
 
+### Free text in a group
+
+```
+group <id> ["<label>"] {
+  text "<some text>" [@corner(topLeft|topRight|bottomLeft|bottomRight)]
+  …
+}
+```
+
+- One line of text pinned to a corner of the group's inner area. `@corner`
+  defaults to `topLeft`; the spellings `topLeft`, `top-left` and `topleft` are
+  the same corner.
+- It **reserves a band** — under the title for a top corner, along the bottom
+  edge for a bottom one — so it never lands on the children, and it widens the
+  group if it is longer than the content.
+- Repeat `text` to stack several lines in one corner. They read downwards in the
+  order written; the band grows a line at a time, and a bottom stack stays flush
+  with the bottom edge. There is no `\n` — one `text` is one line.
+- A text has no id and takes part in no connection.
+- `group` only: a `service` spends its whole text palette on the title band.
+
 ---
 
 ## 4. Connections
@@ -262,6 +283,7 @@ a bundled name replaces that mark.
 | shape | `@rightOf` `@leftOf` `@above` `@below` `@gap` `@align` `@style` `@icon` + style properties |
 | container | the shape set, plus `@spacing` `@spacingX` `@spacingY` `@padding` |
 | connection | `@style` + style properties |
+| `text` line | `@corner` |
 
 Directive names are case-insensitive: `@rightOf` and `@rightof` are the same.
 
@@ -271,8 +293,8 @@ Directive names are case-insensitive: `@rightOf` and `@rightof` are the same.
 
 1. **ids cannot contain `-`.** Use `order_api`, not `order-api`.
 2. **Never name a node after a keyword.** `app`, `database`, `queue`, `rect`,
-   `service`, `group`, `architecture` are dispatched on the first word, so
-   `rect -> db` is read as a shape declaration and fails.
+   `service`, `group`, `text`, `architecture` are dispatched on the first word,
+   so `rect -> db` is read as a shape declaration and fails.
 3. **Directives come before the `:` label** on a connection.
 4. **`{` ends the line; `}` sits alone on its own.**
 5. **Comments are whole-line only.**

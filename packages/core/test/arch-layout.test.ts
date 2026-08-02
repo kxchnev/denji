@@ -577,6 +577,67 @@ describe("spacing control", () => {
     expect(svc.y + svc.height - (child.y + child.height)).toBeCloseTo(60, 5);
   });
 
+  it("reserves a band for a corner text instead of letting it fall on the children", () => {
+    const plain = parse(`architecture\ngroup g "G" {\napp a "A"\n}`);
+    const top = parse(`architecture\ngroup g "G" {\ntext "note"\napp a "A"\n}`);
+    const bottom = parse(`architecture\ngroup g "G" {\ntext "note" @corner(bottomLeft)\napp a "A"\n}`);
+    const both = parse(
+      `architecture\ngroup g "G" {\ntext "top"\ntext "bottom" @corner(bottomRight)\napp a "A"\n}`,
+    );
+    for (const d of [plain, top, bottom, both]) layoutArchitecture(d);
+
+    const band = 20;
+    // A top text pushes the content down; a bottom one only grows the box.
+    expect(rectOf(top, "a").y - rectOf(top, "g").y).toBeCloseTo(
+      rectOf(plain, "a").y - rectOf(plain, "g").y + band,
+      5,
+    );
+    expect(rectOf(bottom, "a").y - rectOf(bottom, "g").y).toBeCloseTo(
+      rectOf(plain, "a").y - rectOf(plain, "g").y,
+      5,
+    );
+    for (const [d, bands] of [
+      [top, 1],
+      [bottom, 1],
+      [both, 2],
+    ] as const) {
+      expect(rectOf(d, "g").height).toBeCloseTo(rectOf(plain, "g").height + band * bands, 5);
+      expect(contains(rectOf(d, "g"), rectOf(d, "a"))).toBe(true);
+    }
+  });
+
+  it("grows a band by one line per text stacked in the same corner", () => {
+    const one = parse(`architecture\ngroup g "G" {\ntext "one"\napp a "A"\n}`);
+    const three = parse(`architecture\ngroup g "G" {\ntext "one"\ntext "two"\ntext "three"\napp a "A"\n}`);
+    // A shorter stack in the facing corner rides along in the same band.
+    const facing = parse(
+      `architecture\ngroup g "G" {\ntext "one"\ntext "two"\ntext "three"\ntext "solo" @corner(topRight)\napp a "A"\n}`,
+    );
+    for (const d of [one, three, facing]) layoutArchitecture(d);
+
+    const band = 20;
+    expect(rectOf(three, "g").height).toBeCloseTo(rectOf(one, "g").height + band * 2, 5);
+    expect(rectOf(three, "a").y - rectOf(three, "g").y).toBeCloseTo(
+      rectOf(one, "a").y - rectOf(one, "g").y + band * 2,
+      5,
+    );
+    expect(rectOf(facing, "g").height).toBeCloseTo(rectOf(three, "g").height, 5);
+    for (const d of [three, facing]) expect(contains(rectOf(d, "g"), rectOf(d, "a"))).toBe(true);
+  });
+
+  it("widens a group so a long corner text fits inside it", () => {
+    const note = "a note far longer than the group would otherwise be";
+    const narrow = parse(`architecture\ngroup g "G" {\napp a "A"\n}`);
+    const d = parse(`architecture\ngroup g "G" {\ntext "${note}"\napp a "A"\n}`);
+    layoutArchitecture(narrow);
+    layoutArchitecture(d);
+    const g = rectOf(d, "g");
+    expect(g.width).toBeGreaterThan(rectOf(narrow, "g").width);
+    // 12px inset either side, ~7.2px per glyph at the note size.
+    expect(g.width).toBeGreaterThanOrEqual(note.length * 12 * 0.6 + 24);
+    expect(contains(g, rectOf(d, "a"))).toBe(true);
+  });
+
   it("uses the margin for the whole drawing, on every side of the SVG", () => {
     const d = architecture().app("a", "A").margin(50).build();
     layoutArchitecture(d);
