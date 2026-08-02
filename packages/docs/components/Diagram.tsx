@@ -36,6 +36,8 @@ interface Rendered {
   height: number;
   /** Set when the document names a theme, which no export may override. */
   pinned?: ThemeName;
+  /** The source this render came from — not always the current `dsl`, see below. */
+  dsl: string;
 }
 
 function render(dsl: string): Rendered {
@@ -56,10 +58,11 @@ function render(dsl: string): Rendered {
       width: Number(m?.[1] ?? 0),
       height: Number(m?.[2] ?? 0),
       pinned: diagram.theme,
+      dsl,
     };
   } catch (e) {
     const error = e instanceof DiagramParseError ? e.message : (e as Error).message;
-    return { svg: null, error, width: 0, height: 0 };
+    return { svg: null, error, width: 0, height: 0, dsl };
   }
 }
 
@@ -82,21 +85,38 @@ export function Diagram({
   name?: string;
   className?: string;
 }) {
-    const { svg, error, width, height, pinned } = useMemo(() => render(dsl), [dsl]);
+  const current = useMemo(() => render(dsl), [dsl]);
+  // Editing spends most of its keystrokes on a document that is momentarily
+  // incomplete. Swapping the whole preview for a red box each time — losing the
+  // pan and zoom with it — makes the playground unusable, so the last render that
+  // parsed stays on screen and the error is reported over it.
+  const lastGood = useRef(current);
+  useEffect(() => {
+    if (current.svg) lastGood.current = current;
+  }, [current]);
+  // Updated in an effect rather than during render: a render React discards must
+  // not poison the fallback. On an error commit the ref still holds the previous
+  // good value, which is exactly what we want to show.
+  const shown = current.svg ? current : lastGood.current;
+  const { svg, width, height, pinned } = shown;
+  const error = current.error;
+
   // An export must not react to anything: it captures the palette the reader is
-  // looking at right now and bakes it in, media query and all removed.
+  // looking at right now and bakes it in, media query and all removed. It follows
+  // what is on screen, so it re-parses `shown.dsl` — re-parsing a broken document
+  // would only throw.
   const exportSvg = useCallback((): { svg: string; matte: string } => {
     const dark =
       pinned === "dark" ||
       (!pinned && document.documentElement.classList.contains("dark"));
     const theme = dark ? "dark" : "light";
-    const diagram = parseArchitecture(dsl);
+    const diagram = parseArchitecture(shown.dsl);
     layoutArchitecture(diagram);
     return {
       svg: renderArchitecture(diagram, { theme, themeMode: "fixed" }),
       matte: resolveTheme(theme).surface,
     };
-  }, [dsl, pinned]);
+  }, [shown.dsl, pinned]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   // Until the first measurement the diagram is centred in CSS instead of by
   // transform, so the markup that ships from the server is already centred and
@@ -194,7 +214,8 @@ export function Diagram({
     drag.current = null;
   };
 
-  if (error) {
+  // Nothing has ever parsed, so there is no diagram to fall back to.
+  if (!svg) {
     return (
       <pre className="w-full overflow-auto rounded-md bg-destructive/10 p-4 text-sm text-destructive">
         {error}
@@ -202,11 +223,18 @@ export function Diagram({
     );
   }
 
+  const errorOverlay = error && (
+    <div className="pointer-events-none absolute inset-x-2 top-2 z-10 overflow-hidden rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive backdrop-blur">
+      {error}
+    </div>
+  );
+
   if (!interactive) {
     return (
       <div
         className={cn("group relative flex w-full items-center justify-center", className)}
       >
+        {errorOverlay}
         {grid && <DiagramGrid x={0} y={0} scale={1} />}
         <div
           className="relative [&_svg]:h-auto [&_svg]:max-w-full"
@@ -225,6 +253,7 @@ export function Diagram({
 
   return (
     <div className={cn("relative h-full w-full overflow-hidden", className)}>
+      {errorOverlay}
       {grid && (
         <DiagramGrid
           x={fitted ? view.x : 0}

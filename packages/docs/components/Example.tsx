@@ -3,14 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Diagram } from "@/components/Diagram";
 import { CodeBlock } from "@/components/CodeBlock";
 import type { ExampleData } from "@/examples/types";
-
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+import { slugify } from "@/lib/utils";
 
 export function Example({ title, description, dsl, api }: ExampleData) {
   return (

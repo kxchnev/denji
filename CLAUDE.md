@@ -35,8 +35,20 @@ package.json     workspace-root (скрипты-прокси)
 
 Next.js App Router + Tailwind + shadcn-компоненты. Ядро подключено как пакет
 `power` (собранный `dist`) и рендерит диаграммы в браузере. Ключевое:
-`components/Diagram.tsx` (parse→layout→render→SVG, pan/zoom), `Example.tsx`
+`components/Diagram.tsx` (parse→layout→render→SVG, pan/zoom; при ошибке парса
+держит последний удачный рендер и показывает ошибку оверлеем), `Example.tsx`
 (превью + табы DSL/API), `examples/*` (датасет), `app/**/page.tsx` (страницы).
+
+Роутинг разделён на две обвязки: `app/(docs)/layout.tsx` — шапка и сайдбар
+справочника, `app/playground/` — полноэкранный редактор без них. В корневом
+`app/layout.tsx` остаётся только `<html>`, тема и `globals.css`. Плейграунд:
+`lib/playground-store.ts` (диаграммы в `localStorage` под одним ключом
+`power.playground.diagrams.v1`, наружу — external store для
+`useSyncExternalStore`), `lib/use-playground.ts` (сессия, дебаунс-автосейв,
+дип-линк `#<id>`), `lib/playground-templates.ts` (стартовые шаблоны — берут DSL
+из `examples/*` **по id**), `components/playground/*` (тулбар, список, пикер
+шаблонов). `/playground` всегда открывает новый пустой черновик; черновик
+попадает в список только когда в нём появляется контент.
 
 Подсветка синтаксиса и автокомплит — на CodeMirror 6: `lib/pwr-language.ts`
 (токенайзер `.pwr`, `StreamLanguage`), `lib/ts-language.ts` (обёртка над
