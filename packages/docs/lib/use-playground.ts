@@ -6,8 +6,11 @@ import {
   get,
   getServerSnapshot,
   getSnapshot,
+  getTrashSnapshot,
   newId,
+  purge,
   remove,
+  restore,
   save,
   subscribe,
   uniqueName,
@@ -21,16 +24,10 @@ export interface Session {
   id: string;
   name: string;
   dsl: string;
-  /**
-   * Whether this diagram is in the list yet. A fresh draft starts out `false` so
-   * that merely opening the playground does not litter the list with empty
-   * "Untitled" entries; the first real content promotes it.
-   */
-  persisted: boolean;
 }
 
 const DEFAULT_NAME = "Untitled";
-/** Matches the names `startDraft` hands out, i.e. a name the user never chose. */
+/** Matches the names `blank` hands out, i.e. a name the user never chose. */
 const isDefaultName = (name: string) => /^Untitled( \d+)?$/.test(name);
 
 const readHash = () => window.location.hash.slice(1);
@@ -38,20 +35,31 @@ const readHash = () => window.location.hash.slice(1);
  *  so our own navigation never loops back through the listener. A bare `"#id"` is
  *  resolved against the current path, which keeps `trailingSlash` intact. */
 const setHash = (id: string) => window.history.replaceState(null, "", `#${id}`);
-const clearHash = () =>
-  window.history.replaceState(null, "", window.location.pathname + window.location.search);
 
-function startDraft(): Session {
+/** Deliberately not `get`, which also sees the trash: a link to a deleted diagram
+ *  should land on a new diagram rather than quietly resurrect it. */
+const live = (id: string): SavedDiagram | undefined =>
+  getSnapshot().find((d) => d.id === id);
+
+/**
+ * A diagram to start writing in, saved and listed straight away.
+ *
+ * An untouched empty one is reused rather than stacked on, so pressing New twice
+ * does not leave a column of identical "Untitled" rows. The list is newest-first,
+ * so this picks the most recent blank.
+ */
+function blank(): SavedDiagram {
+  const existing = getSnapshot().find((d) => d.dsl.trim() === "");
+  if (existing) return existing;
   const names = getSnapshot().map((d) => d.name);
-  return { id: newId(), name: uniqueName(DEFAULT_NAME, names), dsl: "", persisted: false };
+  return save({ id: newId(), name: uniqueName(DEFAULT_NAME, names), dsl: "" });
 }
 
-const open = (d: SavedDiagram): Session => ({
-  id: d.id,
-  name: d.name,
-  dsl: d.dsl,
-  persisted: true,
-});
+/** What to open when nothing specific was asked for: pick up where the last
+ *  session left off, or start a first diagram. */
+const firstOrBlank = (): SavedDiagram => getSnapshot()[0] ?? blank();
+
+const open = (d: SavedDiagram): Session => ({ id: d.id, name: d.name, dsl: d.dsl });
 
 /**
  * Owns the diagram being edited and keeps it in sync with `localStorage`.
@@ -59,13 +67,10 @@ const open = (d: SavedDiagram): Session => ({
  * `session` is `null` until the mount effect runs. That is deliberate: the page
  * is prerendered at build time, so neither `localStorage` nor `location.hash` may
  * be touched during a render pass without breaking hydration.
- *
- * The id is minted when the draft is created, not when it is first saved, because
- * the page keys `PwrEditor` and `Diagram` on it. An id that only appeared on the
- * first save would remount CodeMirror mid-keystroke.
  */
 export function usePlayground() {
   const diagrams = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const trash = useSyncExternalStore(subscribe, getTrashSnapshot, getServerSnapshot);
   const [session, setSession] = useState<Session | null>(null);
 
   // Event handlers and timers need the current session without being rebuilt on
@@ -89,34 +94,26 @@ export function usePlayground() {
     cancel();
     const s = latest.current;
     if (!s) return;
-    // An untouched draft stays out of the list until it has content. Emptying an
-    // already-saved diagram does not remove it — deletion is always explicit.
-    if (!s.persisted && s.dsl.trim() === "") return;
     const stored = get(s.id);
     // Nothing changed — skip, so that merely opening a diagram does not bump its
     // `updatedAt` and reshuffle the list.
     if (stored && stored.name === s.name && stored.dsl === s.dsl) return;
     save({ id: s.id, name: s.name, dsl: s.dsl });
-    if (!s.persisted) {
-      latest.current = { ...s, persisted: true };
-      setSession((cur) => (cur && cur.id === s.id ? { ...cur, persisted: true } : cur));
-      setHash(s.id);
-    }
   }, [cancel]);
 
+  const start = useCallback((d: SavedDiagram) => {
+    setSession(open(d));
+    setHash(d.id);
+  }, []);
+
   // Resolve `#<id>` once, after hydration. An id that no longer exists (deleted,
-  // or from someone else's browser) falls back to a fresh draft rather than an
-  // error state.
+  // or from someone else's browser) falls back to the newest diagram rather than
+  // to an error.
   useEffect(() => {
     const id = readHash();
-    const found = id ? get(id) : undefined;
-    if (found) {
-      setSession(open(found));
-      return;
-    }
-    if (id) clearHash();
-    setSession(startDraft());
-  }, []);
+    const found = id ? live(id) : undefined;
+    start(found ?? firstOrBlank());
+  }, [start]);
 
   // Autosave.
   useEffect(() => {
@@ -144,17 +141,12 @@ export function usePlayground() {
       const id = readHash();
       if (id === latest.current?.id) return;
       flush();
-      const found = id ? get(id) : undefined;
-      if (found) {
-        setSession(open(found));
-        return;
-      }
-      if (id) clearHash();
-      setSession(startDraft());
+      const found = id ? live(id) : undefined;
+      start(found ?? firstOrBlank());
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
-  }, [flush]);
+  }, [flush, start]);
 
   const setDsl = useCallback((dsl: string) => {
     setSession((s) => (s ? { ...s, dsl } : s));
@@ -180,39 +172,50 @@ export function usePlayground() {
     (id: string) => {
       if (latest.current?.id === id) return;
       flush();
-      const found = get(id);
-      if (!found) return;
-      setSession(open(found));
-      setHash(id);
+      const found = live(id);
+      if (found) start(found);
     },
-    [flush],
+    [flush, start],
   );
 
   const create = useCallback(() => {
     flush();
-    setSession(startDraft());
-    clearHash();
-  }, [flush]);
+    start(blank());
+  }, [flush, start]);
 
+  /** Move on to whatever is left once the open diagram goes away. */
+  const stepAway = useCallback(() => {
+    start(firstOrBlank());
+  }, [start]);
+
+  /** Soft delete — the diagram moves to the trash, where it can be brought back
+   *  for the next 30 days. */
   const destroy = useCallback(
     (id: string) => {
-      const cur = latest.current;
-      const isCurrent = cur?.id === id;
-      // Flushing the diagram we are about to delete would resurrect it.
+      const isCurrent = latest.current?.id === id;
+      // A pending autosave would write the diagram straight back out of the
+      // trash, so drop it rather than flushing it.
       if (isCurrent) cancel();
       else flush();
       remove(id);
-      if (!isCurrent) return;
-      const next = getSnapshot()[0];
-      if (next) {
-        setSession(open(next));
-        setHash(next.id);
-      } else {
-        setSession(startDraft());
-        clearHash();
-      }
+      if (isCurrent) stepAway();
     },
-    [cancel, flush],
+    [cancel, flush, stepAway],
+  );
+
+  const undelete = useCallback((id: string) => {
+    restore(id);
+  }, []);
+
+  /** Hard delete, ahead of the 30 days. */
+  const destroyForever = useCallback(
+    (id: string) => {
+      const isCurrent = latest.current?.id === id;
+      if (isCurrent) cancel();
+      purge(id);
+      if (isCurrent) stepAway();
+    },
+    [cancel, stepAway],
   );
 
   const copy = useCallback(
@@ -220,12 +223,23 @@ export function usePlayground() {
       // Flush first so the copy picks up unsaved edits, not the last autosave.
       if (latest.current?.id === id) flush();
       const made = duplicate(id);
-      if (!made) return;
-      setSession(open(made));
-      setHash(made.id);
+      if (made) start(made);
     },
-    [flush],
+    [flush, start],
   );
 
-  return { diagrams, session, setDsl, setName, applyTemplate, select, create, destroy, copy };
+  return {
+    diagrams,
+    trash,
+    session,
+    setDsl,
+    setName,
+    applyTemplate,
+    select,
+    create,
+    destroy,
+    undelete,
+    destroyForever,
+    copy,
+  };
 }

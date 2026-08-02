@@ -25,9 +25,9 @@ export function TemplatePicker({ onPick }: { onPick: (label: string, dsl: string
             onClick={() => onPick(t.label, t.dsl)}
             className="flex flex-col overflow-hidden rounded-lg border bg-card text-left transition-colors hover:border-foreground/25 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {/* The preview is decoration: the card is the button, and the
-                non-interactive Diagram would otherwise offer its own hover
-                download control inside it. */}
+            {/* The preview is decoration — the card itself is the button, so the
+                diagram must not bring its own download control along: a <button>
+                inside a <button> is invalid markup and breaks hydration. */}
             <div className="pointer-events-none grid h-32 place-items-center overflow-hidden border-b">
               {t.id === "empty" ? (
                 <Plus className="h-6 w-6 text-muted-foreground" />
@@ -38,6 +38,7 @@ export function TemplatePicker({ onPick }: { onPick: (label: string, dsl: string
                 <Diagram
                   dsl={t.dsl}
                   grid={false}
+                  controls={false}
                   className="h-32 w-full items-stretch p-3 [&_svg]:!h-full [&_svg]:!w-full"
                 />
               )}

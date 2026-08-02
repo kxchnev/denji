@@ -70,7 +70,7 @@ export function Diagram({
   dsl,
   interactive = false,
   grid = true,
-  controls,
+  controls = true,
   name,
   className,
 }: {
@@ -79,7 +79,11 @@ export function Diagram({
   interactive?: boolean;
   /** Draw the dot grid behind the diagram. */
   grid?: boolean;
-  /** Show zoom/fit buttons. Defaults to `interactive`. */
+  /**
+   * Show the overlay controls — the download button, plus zoom and fit when
+   * interactive. Turn off when the diagram sits inside something clickable: the
+   * controls are buttons, and a button may not nest inside another one.
+   */
   controls?: boolean;
   /** Base filename (without extension) used when downloading this diagram. */
   name?: string;
@@ -240,13 +244,15 @@ export function Diagram({
           className="relative [&_svg]:h-auto [&_svg]:max-w-full"
           dangerouslySetInnerHTML={{ __html: svg! }}
         />
-        <DownloadButton
-          exportSvg={exportSvg}
-          width={width}
-          height={height}
-          name={name}
-          className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
-        />
+        {controls && (
+          <DownloadButton
+            exportSvg={exportSvg}
+            width={width}
+            height={height}
+            name={name}
+            className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
+          />
+        )}
       </div>
     );
   }
@@ -284,7 +290,7 @@ export function Diagram({
           dangerouslySetInnerHTML={{ __html: svg! }}
         />
       </div>
-      {(controls ?? interactive) && (
+      {controls && (
         <div className="absolute bottom-2 right-2 flex items-center gap-1">
           <span className="mr-1 rounded bg-background/80 px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
             {Math.round(view.scale * 100)}%

@@ -10,8 +10,20 @@ import { usePlayground } from "@/lib/use-playground";
 import { cn, slugify } from "@/lib/utils";
 
 export default function Playground() {
-  const { diagrams, session, setDsl, setName, applyTemplate, select, create, destroy, copy } =
-    usePlayground();
+  const {
+    diagrams,
+    trash,
+    session,
+    setDsl,
+    setName,
+    applyTemplate,
+    select,
+    create,
+    destroy,
+    undelete,
+    destroyForever,
+    copy,
+  } = usePlayground();
   const [listOpen, setListOpen] = useState(false);
   // Only meaningful below `md`, where the two panes take turns. It starts on the
   // preview because that is where the template picker lives — otherwise a new
@@ -29,7 +41,8 @@ export default function Playground() {
   const list = (
     <DiagramList
       items={diagrams}
-      activeId={session.persisted ? session.id : null}
+      trash={trash}
+      activeId={session.id}
       onSelect={(id) => {
         select(id);
         closeList();
@@ -39,6 +52,8 @@ export default function Playground() {
         closeList();
       }}
       onDelete={destroy}
+      onRestore={undelete}
+      onDeleteForever={destroyForever}
       onDuplicate={copy}
     />
   );
