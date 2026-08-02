@@ -325,7 +325,15 @@ export function Diagram({
           >
             <Maximize2 className="h-4 w-4" />
           </Button>
-          <DownloadButton exportSvg={exportSvg} width={width} height={height} name={name} />
+          {/* This control cluster is pinned to the bottom edge, so the menu has
+              to open upwards to stay on screen. */}
+          <DownloadButton
+            exportSvg={exportSvg}
+            width={width}
+            height={height}
+            name={name}
+            openTo="up"
+          />
         </div>
       )}
     </div>

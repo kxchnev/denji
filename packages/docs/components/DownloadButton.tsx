@@ -17,6 +17,7 @@ export function DownloadButton({
   width,
   height,
   name = "diagram",
+  openTo = "down",
   className,
 }: {
   /**
@@ -27,6 +28,12 @@ export function DownloadButton({
   width: number;
   height: number;
   name?: string;
+  /**
+   * Which way the menu opens. Use `"up"` when the button sits at the bottom of
+   * its container: opening downwards there puts the menu past the edge, where
+   * `overflow-hidden` — or the viewport — swallows it and no click can land.
+   */
+  openTo?: "up" | "down";
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -53,7 +60,12 @@ export function DownloadButton({
         <Download className="h-4 w-4" />
       </Button>
       {open && (
-        <div className="absolute right-0 top-full z-10 mt-1 flex flex-col overflow-hidden rounded-md border bg-popover py-1 text-popover-foreground shadow-md">
+        <div
+          className={cn(
+            "absolute right-0 z-10 flex flex-col overflow-hidden rounded-md border bg-popover py-1 text-popover-foreground shadow-md",
+            openTo === "up" ? "bottom-full mb-1" : "top-full mt-1",
+          )}
+        >
           {FORMATS.map((f) => (
             <button
               key={f.value}
