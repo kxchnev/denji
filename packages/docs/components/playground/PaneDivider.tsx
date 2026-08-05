@@ -68,7 +68,11 @@ export function PaneDivider({
       aria-valuenow={Math.round(ratio * 100)}
       tabIndex={0}
       className={cn(
-        "relative hidden w-px shrink-0 cursor-col-resize bg-border transition-colors md:block",
+        // `z-10`: the grab area below overflows the 1px line into both panes, and
+        // the preview's own positioned content (the diagram surface) comes later in
+        // the DOM — without a layer of its own the seam would only be catchable on
+        // the left of the line.
+        "group relative z-10 hidden w-px shrink-0 cursor-col-resize bg-border transition-colors md:block",
         "hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none",
         dragging && "bg-primary",
       )}
@@ -106,6 +110,21 @@ export function PaneDivider({
           the line — which is what keeps the seam catchable once a pane has been
           squeezed shut. */}
       <span className="absolute inset-y-0 -left-1 -right-1" />
+      {/* And a grip in the middle: somewhere you can aim for without aiming at a
+          hairline. Its box is transparent and wider than the pill it draws, so the
+          catchable area around the middle of the seam is 20px rather than 9. */}
+      <span
+        aria-hidden
+        className="absolute left-1/2 top-1/2 flex h-14 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+      >
+        <span
+          className={cn(
+            "h-10 w-1.5 rounded-full bg-muted-foreground/40 transition-colors",
+            "group-hover:bg-primary group-focus-visible:bg-primary",
+            dragging && "bg-primary",
+          )}
+        />
+      </span>
     </div>
   );
 }
