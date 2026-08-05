@@ -168,14 +168,18 @@ function spillTo(side: Side, own: Rect, other: Rect): Side {
 }
 
 /**
- * Where on `side` a connector to `other` should aim: the other box's centre
- * projected onto that side, kept clear of the corners.
+ * Where on `side` a connector that spilled onto it should sit: the middle.
+ *
+ * Projecting the other box's centre onto the side instead — which this did at
+ * first — puts the dock wherever that box happens to be, and for anything far
+ * away that is hard against the corner inset. An arrow leaving a corner reads as a
+ * misplaced arrow, not as a hint about direction; the curve's control points
+ * already carry the direction. Two connectors that land on the same side are
+ * spread, and ordered by where they are going, by the fan-out pass below.
  */
-function aimAt(own: Rect, side: Side, other: Rect): number {
+function sideMiddle(own: Rect, side: Side): number {
   const { min, max } = sideSpan(own, side);
-  const inset = Math.min(DOCK_INSET, (max - min) / 2);
-  const c = center(other);
-  return clamp(horizontal(side) ? c.y : c.x, min + inset, max - inset);
+  return min + (max - min) / 2;
 }
 
 /** Order within a crowded side: by where the other box sits along that side. */
@@ -239,8 +243,8 @@ export function curveConnections(diagram: ArchDiagram): void {
       for (const end of ranked.slice(0, list.length - room)) {
         end.dock.side = spillTo(end.dock.side, end.rect, end.other);
         // The new side runs along the other axis, so the old coordinate would be
-        // read as a position on it and land in a corner. Re-aim at the other box.
-        end.dock.at = aimAt(end.rect, end.dock.side, end.other);
+        // read as a position on it and land in a corner. Start from the middle.
+        end.dock.at = sideMiddle(end.rect, end.dock.side);
         moved = true;
       }
     }

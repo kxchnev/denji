@@ -128,7 +128,8 @@ group <id> ["<label>"] {
 A connection is a single curve. It leaves one box and enters the other
 perpendicular to a side, near the middle of it; several connections on one side
 fan out, and a side with no room left hands the overflow to a side that also
-points at the other box.
+points at the other box — where it docks in the middle again, not off in the
+corner nearest whatever it is pointing at.
 
 The curve never bends and never routes *around* anything: a box that sits between
 two connected boxes **will be crossed**. Leave room, or put the pair in the same

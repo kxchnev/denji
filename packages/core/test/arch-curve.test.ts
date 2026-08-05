@@ -141,6 +141,36 @@ describe("curved connectors", () => {
     }
   });
 
+  it("keeps a spilled connector near the middle of its new side", () => {
+    // `a`'s right side holds one dock, so two of these three spill onto a
+    // perpendicular one. A spilled dock used to aim at the far box's centre, which
+    // for anything distant clamped hard against a corner and read as a misplaced
+    // arrow.
+    const d = parse(
+      [
+        "architecture",
+        '  app a "A"',
+        '  app b "B" @at(600, 0)',
+        '  app c "C" @at(600, 300)',
+        '  app e "E" @at(600, 600)',
+        "  a -> b",
+        "  a -> c",
+        "  a -> e",
+      ].join("\n"),
+    );
+    layoutArchitecture(d);
+    const a = rectOf(d, "a");
+    for (const c of d.connections) {
+      const dock = dockOf(ends(c)[0], a);
+      const middle =
+        dock.side === "left" || dock.side === "right"
+          ? a.y + a.height / 2
+          : a.x + a.width / 2;
+      // Within one pitch of the middle: a fan-out step, never a corner.
+      expect(Math.abs(dock.along - middle)).toBeLessThanOrEqual(DOCK_PITCH);
+    }
+  });
+
   it("puts the label on the curve", () => {
     const d = parse(
       [
