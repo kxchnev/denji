@@ -1,0 +1,103 @@
+/**
+ * Small, surgical edits to `.pwr` source — what an interactive editor writes back
+ * after the reader has dragged something.
+ *
+ * Deliberately a line rewriter rather than a printer over the model. Printing the
+ * model back out would reformat the whole document on every drag, taking the
+ * author's blank lines, declaration order and comments with it — unacceptable
+ * next to a live text editor with a cursor and an undo history in it.
+ *
+ * ⚠️ This leans on the shape of the language as `arch-parse.ts` reads it: a node is
+ * declared on exactly one line, its directives sit in that line's tail, and `#` /
+ * `%%` comments own a whole line rather than trailing one. If a declaration ever
+ * grows across lines, this module needs a real parse with source spans instead.
+ */
+
+import type { Point } from "../model/geometry.js";
+
+/** A line that declares a node — everything that can carry `@at`. */
+const DECLARATION = /^(\s*)(app|database|queue|rect|service|group)(\s+)([A-Za-z0-9_]+)(.*)$/;
+
+/** A leading `"label"` in a declaration's tail. */
+const LABEL = /^\s*("[^"]*")/;
+
+/** A trailing `{`, i.e. this declaration opens a container. */
+const OPEN_BRACE = /\{\s*$/;
+
+/** One directive, tolerating the nesting `@fill(rgb(1,2,3))` needs. */
+const directive = (names: string): RegExp =>
+  new RegExp(`@(?:${names})\\((?:[^()]|\\([^()]*\\))*\\)`, "gi");
+
+const AT = directive("at");
+/**
+ * The node's *own* placement relations, which exact coordinates make dead. Other
+ * nodes pointing *at* this one are untouched — that is how a dragged node keeps
+ * dragging its followers along.
+ */
+const OWN_RELATIONS = directive("rightOf|leftOf|above|below|align|gap");
+
+/**
+ * Pin `id` to `at`, returning the new source — or `null` if the document has no
+ * such declaration, which is all a caller racing against an edit can do about it.
+ *
+ * Any coordinates already on the node are replaced, its own relative hints are
+ * dropped, and everything else on the line (label, `@style`, `@icon`, inline
+ * properties) is kept in place.
+ */
+/**
+ * Several nodes at once, for the moment a drag has to freeze a whole scope: the
+ * node being moved gets its new coordinates, and its siblings get the ones they
+ * already have, so that leaving the flow moves nothing but the node in hand.
+ *
+ * `null` when not one of them could be found.
+ */
+export function setNodePositions(
+  src: string,
+  entries: ReadonlyArray<{ id: string; at: Point }>,
+): string | null {
+  let out = src;
+  let touched = false;
+  for (const e of entries) {
+    const next = setNodePosition(out, e.id, e.at);
+    if (next !== null) {
+      out = next;
+      touched = true;
+    }
+  }
+  return touched ? out : null;
+}
+
+export function setNodePosition(src: string, id: string, at: Point): string | null {
+  // Split on "\n" and keep any "\r" as part of the line, so a CRLF document does
+  // not silently come back with every line ending rewritten.
+  const lines = src.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const eol = line.endsWith("\r") ? "\r" : "";
+    const text = eol === "" ? line : line.slice(0, -1);
+    const m = text.match(DECLARATION);
+    if (!m || m[4] !== id) continue;
+
+    let tail = m[5]!;
+    let suffix = "";
+    const brace = tail.match(OPEN_BRACE);
+    if (brace) {
+      suffix = " {";
+      tail = tail.slice(0, brace.index);
+    }
+
+    const label = tail.match(LABEL);
+    const labelPart = label ? ` ${label[1]}` : "";
+    const rest = (label ? tail.slice(label[0].length) : tail)
+      .replace(AT, " ")
+      .replace(OWN_RELATIONS, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const coords = `@at(${Math.round(at.x)}, ${Math.round(at.y)})`;
+    const directives = rest === "" ? coords : `${coords} ${rest}`;
+    lines[i] = `${m[1]}${m[2]}${m[3]}${id}${labelPart} ${directives}${suffix}${eol}`;
+    return lines.join("\n");
+  }
+  return null;
+}

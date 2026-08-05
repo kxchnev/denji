@@ -84,6 +84,8 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
   const sizeMap = new Map<string, Size>();
   const childLocal = new Map<string, Map<string, Local>>();
   const innerOffset = new Map<string, Local>();
+  /** Per scope: what normalizing it subtracted, i.e. the space `@at` speaks in. */
+  const scopeOffset = new Map<string, Local>();
 
   // Bottom-up sizing: a container's size depends on its laid-out children.
   // `inherited` flows down the container tree so a diagram-level spacing reaches
@@ -114,10 +116,12 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     if (items.length > 0) {
       const scope = layoutScope(items, gaps, onWarn);
       childLocal.set(id, scope.pos);
+      scopeOffset.set(id, scope.offset);
       contentW = scope.width;
       contentH = scope.height;
     } else {
       childLocal.set(id, new Map());
+      scopeOffset.set(id, { x: 0, y: 0 });
     }
     const iconW = n.icon ? ICON_SIZE + ICON_GAP : 0;
     const labelW = measureLabelWidth(n.label) + iconW + 24;
@@ -144,26 +148,42 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
   });
   const topScope = layoutScope(topItems, rootGaps, onWarn);
 
-  // Top-down absolute placement.
-  const place = (id: string, absX: number, absY: number): void => {
+  // Top-down absolute placement. `local` travels alongside: it is the same
+  // position expressed in the scope's own space, which `rect` cannot recover
+  // because every scope was normalized to its own origin on the way up.
+  const place = (id: string, absX: number, absY: number, local: Local): void => {
     const n = nodes.get(id)!;
     const s = sizeMap.get(id)!;
     n.rect = { x: absX, y: absY, width: s.width, height: s.height };
+    n.local = local;
     if (n.type === "container") {
       const off = innerOffset.get(id)!;
       const locs = childLocal.get(id)!;
+      const scope = scopeOffset.get(id)!;
       for (const cid of n.children) {
         const lp = locs.get(cid);
-        if (lp) place(cid, absX + off.x + lp.x, absY + off.y + lp.y);
+        if (lp) {
+          place(cid, absX + off.x + lp.x, absY + off.y + lp.y, {
+            x: lp.x + scope.x,
+            y: lp.y + scope.y,
+          });
+        }
       }
     }
   };
   for (const id of topLevel) {
     const p = topScope.pos.get(id)!;
-    place(id, p.x, p.y);
+    place(id, p.x, p.y, { x: p.x + topScope.offset.x, y: p.y + topScope.offset.y });
   }
 
-  normalizeToOrigin(diagram, margin);
+  const framed = normalizeToOrigin(diagram, margin);
+  // From document coordinates to rects: what the top scope subtracted on the way up,
+  // then what framing the drawing added. A viewer that pans in document coordinates
+  // undoes exactly this.
+  diagram.originShift = {
+    x: framed.x - topScope.offset.x,
+    y: framed.y - topScope.offset.y,
+  };
   curveConnections(diagram);
   return diagram;
 }
@@ -201,7 +221,8 @@ function noteBands(texts: ContainerText[] | undefined): {
   };
 }
 
-function normalizeToOrigin(diagram: ArchDiagram, margin: number): void {
+/** Moves every rect into the box the renderer will draw, and reports by how much. */
+function normalizeToOrigin(diagram: ArchDiagram, margin: number): Local {
   let minX = Infinity;
   let minY = Infinity;
   for (const n of diagram.nodes) {
@@ -209,12 +230,17 @@ function normalizeToOrigin(diagram: ArchDiagram, margin: number): void {
     minX = Math.min(minX, n.rect.x);
     minY = Math.min(minY, n.rect.y);
   }
-  if (!isFinite(minX)) return;
-  const dx = margin - minX;
-  const dy = margin - minY;
+  if (!isFinite(minX)) return { x: 0, y: 0 };
+  // Only pull the drawing back when it starts before the origin. A relative scope
+  // already begins at 0, so this is the same margin it always was; a scope placed by
+  // coordinates keeps whatever space its own numbers asked for, instead of sliding
+  // the whole picture every time the leftmost node moves.
+  const dx = margin - Math.min(0, minX);
+  const dy = margin - Math.min(0, minY);
   for (const n of diagram.nodes) {
     if (!n.rect) continue;
     n.rect.x += dx;
     n.rect.y += dy;
   }
+  return { x: dx, y: dy };
 }

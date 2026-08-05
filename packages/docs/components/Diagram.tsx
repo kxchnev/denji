@@ -6,7 +6,12 @@ import {
   layoutArchitecture,
   renderArchitecture,
   resolveTheme,
+  setNodePositions,
+  DEFAULT_HEADER_H,
   DiagramParseError,
+  type ArchDiagram,
+  type ArchNode,
+  type Point,
   type ThemeName,
 } from "power";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
@@ -19,8 +24,14 @@ const MIN_SCALE = 0.2;
 const MAX_SCALE = 4;
 /** Breathing room left around the diagram when fitting it to the viewport. */
 const FIT_MARGIN = 16;
+/**
+ * Dragging lands on this lattice — half the grid's own pitch, so a drop reads as
+ * aligned and the coordinate written into the document stays a round number.
+ */
+const SNAP = 8;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const snap = (v: number) => Math.round(v / SNAP) * SNAP;
 
 /**
  * The first fit has to land before the browser paints, or the diagram is visible
@@ -38,6 +49,8 @@ interface Rendered {
   pinned?: ThemeName;
   /** The source this render came from — not always the current `dsl`, see below. */
   dsl: string;
+  /** The laid-out model behind the SVG, for hit-testing a pointer against nodes. */
+  diagram: ArchDiagram | null;
 }
 
 function render(dsl: string): Rendered {
@@ -59,11 +72,46 @@ function render(dsl: string): Rendered {
       height: Number(m?.[2] ?? 0),
       pinned: diagram.theme,
       dsl,
+      diagram,
     };
   } catch (e) {
     const error = e instanceof DiagramParseError ? e.message : (e as Error).message;
-    return { svg: null, error, width: 0, height: 0, dsl };
+    return { svg: null, error, width: 0, height: 0, dsl, diagram: null };
   }
+}
+
+/**
+ * Every node that has no coordinates yet, at the coordinates it currently sits on.
+ *
+ * A drag writes all of these before it writes the move itself, which turns the
+ * whole document into one placed by coordinates. Anything less does not hold still:
+ * take one node out of a relative scope and everything left in it re-arranges, and
+ * a child that grows its container re-arranges that container's scope in turn — so
+ * the one thing that visibly would not move is the node under the pointer.
+ */
+function pinsFor(diagram: ArchDiagram, movingId: string): Array<{ id: string; at: Point }> {
+  return diagram.nodes
+    .filter((n) => n.id !== movingId && !n.hint?.at && n.local)
+    .map((n) => ({ id: n.id, at: n.local! }));
+}
+
+/**
+ * How deep each node sits in the container tree. A pointer over a child is also
+ * over its parents, so the deepest hit is the one that meant it.
+ */
+function depthMap(diagram: ArchDiagram | null): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!diagram) return out;
+  const kids = new Map<string, readonly string[]>();
+  for (const n of diagram.nodes) if (n.type === "container") kids.set(n.id, n.children);
+  const child = new Set<string>();
+  for (const list of kids.values()) for (const id of list) child.add(id);
+  const walk = (id: string, depth: number): void => {
+    out.set(id, depth);
+    for (const c of kids.get(id) ?? []) walk(c, depth + 1);
+  };
+  for (const n of diagram.nodes) if (!child.has(n.id)) walk(n.id, 0);
+  return out;
 }
 
 export function Diagram({
@@ -72,11 +120,19 @@ export function Diagram({
   grid = true,
   controls = true,
   name,
+  onMoveNodes,
   className,
 }: {
   dsl: string;
   /** Enable pan and zoom. Off by default so doc pages keep scrolling normally. */
   interactive?: boolean;
+  /**
+   * Makes nodes draggable, reporting a drop as coordinates in each node's own
+   * scope — ready to be written into the document as `@at`. It is a list because a
+   * drag also nails down the siblings the moved node was arranged against; without
+   * it the diagram is read-only, which is what every doc page wants.
+   */
+  onMoveNodes?: (moves: ReadonlyArray<{ id: string; at: Point }>) => void;
   /** Draw the dot grid behind the diagram. */
   grid?: boolean;
   /**
@@ -89,7 +145,14 @@ export function Diagram({
   name?: string;
   className?: string;
 }) {
-  const current = useMemo(() => render(dsl), [dsl]);
+  // While a node is being dragged, this holds the document as it would be *after*
+  // the drop. Rendering that instead of a floating ghost means the preview is the
+  // real outcome: containers resize, connectors re-aim, siblings reflow.
+  const [preview, setPreview] = useState<string | null>(null);
+  /** Set on drop: the preview has to outlive the commit, see the effect below. */
+  const awaitingCommit = useRef(false);
+  const source = preview ?? dsl;
+  const current = useMemo(() => render(source), [source]);
   // Editing spends most of its keystrokes on a document that is momentarily
   // incomplete. Swapping the whole preview for a red box each time — losing the
   // pan and zoom with it — makes the playground unusable, so the last render that
@@ -104,6 +167,15 @@ export function Diagram({
   const shown = current.svg ? current : lastGood.current;
   const { svg, width, height, pinned } = shown;
   const error = current.error;
+  const depths = useMemo(() => depthMap(shown.diagram), [shown.diagram]);
+  /**
+   * `view` pans in *document* coordinates, not in the rendered SVG's. The layout
+   * shifts every rect to frame the drawing, and that shift changes the moment a
+   * drag grows the diagram — panning in rendered coordinates would then slide the
+   * whole picture, and the grid with it, instead of moving the node. Undoing the
+   * shift right here is what keeps the canvas still.
+   */
+  const shift = shown.diagram?.originShift ?? { x: 0, y: 0 };
 
   // An export must not react to anything: it captures the palette the reader is
   // looking at right now and bakes it in, media query and all removed. It follows
@@ -130,6 +202,30 @@ export function Diagram({
   const drag = useRef<{ x: number; y: number } | null>(null);
   // Once the view has been moved by hand, stop auto-fitting it out from under the user.
   const touched = useRef(false);
+  /** The node being dragged: where it started, in both spaces, and where it is now. */
+  const nodeDrag = useRef<{
+    id: string;
+    /** The document as it was before this drag — every preview is written from it,
+     *  so the edits of one drag never pile up on each other. */
+    src: string;
+    /** The node's own coordinates at the start, i.e. what `@at` would have said. */
+    base: Point;
+    /**
+     * The grab point and the zoom, in screen terms. Screen rather than diagram
+     * coordinates because the drag rewrites the document under itself; measuring
+     * against pixels keeps the delta honest whatever the layout does with it.
+     */
+    fromCursor: Point;
+    /** Whether this node lives inside a container, whose corner it may not cross. */
+    boxed: boolean;
+    scale: number;
+    at: Point;
+    /** Everything else in the document, nailed down where it already is. */
+    freeze: Array<{ id: string; at: Point }>;
+    /** The pointer, relative to the surface. */
+    cursor: Point;
+  } | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   // Whether a fit has ever landed, and the size it landed at. Both are refs: the
   // resize handler below reads them without wanting to be rebuilt.
   const everFit = useRef(false);
@@ -147,11 +243,18 @@ export function Diagram({
       MIN_SCALE,
       1,
     );
-    setView({ scale, x: (cw - width * scale) / 2, y: (ch - height * scale) / 2 });
+    // `+ shift * scale`: the view pans in document coordinates, so centring the
+    // drawing has to put its framed top-left corner — not the document's origin —
+    // in the middle of the viewport.
+    setView({
+      scale,
+      x: (cw - width * scale) / 2 + shift.x * scale,
+      y: (ch - height * scale) / 2 + shift.y * scale,
+    });
     setFitted(true);
     everFit.current = true;
     size.current = { w: cw, h: ch };
-  }, [width, height]);
+  }, [width, height, shift.x, shift.y]);
 
   useIsomorphicLayoutEffect(() => {
     if (!interactive) return;
@@ -227,23 +330,139 @@ export function Diagram({
     });
   };
 
+  /** Where the rendered drawing's own origin sits on screen. */
+  const pan = { x: view.x - shift.x * view.scale, y: view.y - shift.y * view.scale };
+
+  /** Pointer position in the rendered drawing's coordinates, i.e. in `rect` terms. */
+  const toDiagram = (e: React.PointerEvent<HTMLDivElement>): Point => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left - pan.x) / view.scale,
+      y: (e.clientY - rect.top - pan.y) / view.scale,
+    };
+  };
+
+  /**
+   * The node a pointer at `p` would pick up, or null for empty canvas.
+   *
+   * A shape is grabbable anywhere; a container only by its title band, so that its
+   * body stays free for panning and for the children sitting in it.
+   */
+  const grabbable = (p: Point): ArchNode | null => {
+    if (!onMoveNodes || !fitted) return null;
+    let best: ArchNode | null = null;
+    for (const n of shown.diagram?.nodes ?? []) {
+      const r = n.rect;
+      if (!r || !n.local) continue;
+      const bottom = n.type === "container" ? r.y + DEFAULT_HEADER_H : r.y + r.height;
+      if (p.x < r.x || p.x > r.x + r.width || p.y < r.y || p.y > bottom) continue;
+      if (!best || (depths.get(n.id) ?? 0) >= (depths.get(best.id) ?? 0)) best = n;
+    }
+    return best;
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault(); // otherwise the browser starts selecting text and SVG
     touched.current = true;
-    drag.current = { x: e.clientX - view.x, y: e.clientY - view.y };
     // Capture on the surface, not on e.target: the SVG subtree is replaced
     // wholesale whenever the DSL changes, which would drop the capture mid-drag.
     e.currentTarget.setPointerCapture(e.pointerId);
+
+    const p = toDiagram(e);
+    const hit = grabbable(p);
+    if (hit?.local && hit.rect && shown.diagram) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      nodeDrag.current = {
+        id: hit.id,
+        src: source,
+        base: hit.local,
+        fromCursor: cursor,
+        boxed: shown.diagram.nodes.some(
+          (n) => n.type === "container" && n.children.includes(hit.id),
+        ),
+        scale: view.scale,
+        at: hit.local,
+        freeze: pinsFor(shown.diagram, hit.id),
+        cursor,
+      };
+      return; // this pointer moves a node, not the viewport
+    }
+    drag.current = { x: e.clientX - view.x, y: e.clientY - view.y };
   };
+
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const nd = nodeDrag.current;
+    if (nd) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      nd.cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      // A child may not cross its container's inner corner: a negative coordinate
+      // there pushes the whole scope over to make room, and its siblings would slide.
+      // At the top level there is no box and no wall — the drawing simply grows.
+      const floor = nd.boxed ? 0 : -Infinity;
+      const at = {
+        x: Math.max(floor, snap(nd.base.x + (nd.cursor.x - nd.fromCursor.x) / nd.scale)),
+        y: Math.max(floor, snap(nd.base.y + (nd.cursor.y - nd.fromCursor.y) / nd.scale)),
+      };
+      // Most frames land on the same lattice point as the last one; re-rendering
+      // for them would mean parsing and laying the document out for nothing.
+      if (at.x === nd.at.x && at.y === nd.at.y) return;
+      nd.at = at;
+      setPreview(setNodePositions(nd.src, [...nd.freeze, { id: nd.id, at }]));
+      return;
+    }
     const d = drag.current;
-    if (!d) return;
-    setView((v) => ({ ...v, x: e.clientX - d.x, y: e.clientY - d.y }));
+    if (d) {
+      setView((v) => ({ ...v, x: e.clientX - d.x, y: e.clientY - d.y }));
+      return;
+    }
+    setHoverId(grabbable(toDiagram(e))?.id ?? null);
   };
+
   const endDrag = () => {
     drag.current = null;
+    const nd = nodeDrag.current;
+    if (!nd) return;
+    nodeDrag.current = null;
+    // A click that moved nothing is not an edit. Committing here rather than on
+    // every frame is what keeps a whole drag to one undo step in the editor.
+    if (nd.at.x === nd.base.x && nd.at.y === nd.base.y) {
+      setPreview(null);
+      return;
+    }
+    // The preview stays up until the committed document arrives. Dropping it here
+    // would show the pre-drag layout for however many frames the owner takes to
+    // hand the new source back — in the playground that is a deferred value, so the
+    // node visibly snapped home and then jumped to where it was let go.
+    awaitingCommit.current = true;
+    onMoveNodes?.([...nd.freeze, { id: nd.id, at: nd.at }]);
   };
+
+  useEffect(() => {
+    if (!awaitingCommit.current) return;
+    // Any change to the incoming document supersedes the drag's own preview: either
+    // it is the commit landing, or someone typed — and typing wins.
+    awaitingCommit.current = false;
+    setPreview(null);
+  }, [dsl]);
+
+  // Nothing compensates the viewport during a drag, and nothing has to: with every
+  // node placed by coordinates and none of them allowed before the origin, the
+  // drawing's own origin never moves. The grid stays where it is, and so does
+  // everything the drag did not touch.
+
+  // Bailing out mid-drag has to leave the document alone, preview and all.
+  useEffect(() => {
+    if (!onMoveNodes) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !nodeDrag.current) return;
+      nodeDrag.current = null;
+      setPreview(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onMoveNodes]);
 
   // Nothing has ever parsed, so there is no diagram to fall back to.
   if (!svg) {
@@ -253,6 +472,13 @@ export function Diagram({
       </pre>
     );
   }
+
+  // Outlining the node under the pointer is the only hint that dragging is a thing
+  // one can do here. A container is outlined whole, even though only its title band
+  // is the handle — what moves is the container, children and all.
+  const hoverRect = hoverId
+    ? (shown.diagram?.nodes.find((n) => n.id === hoverId)?.rect ?? null)
+    : null;
 
   const errorOverlay = error && (
     <div className="pointer-events-none absolute inset-x-2 top-2 z-10 overflow-hidden rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive backdrop-blur">
@@ -297,12 +523,18 @@ export function Diagram({
       )}
       <div
         ref={surface}
-        className="relative h-full w-full cursor-grab select-none touch-none active:cursor-grabbing"
+        className={cn(
+          "relative h-full w-full select-none touch-none",
+          // Over a draggable node the cursor says "this moves"; everywhere else the
+          // canvas still says "this pans".
+          hoverId ? "cursor-move" : "cursor-grab active:cursor-grabbing",
+        )}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onLostPointerCapture={endDrag}
+        onPointerLeave={() => setHoverId(null)}
       >
         <div
           className={
@@ -312,11 +544,32 @@ export function Diagram({
           }
           style={
             fitted
-              ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }
+              ? { transform: `translate(${pan.x}px, ${pan.y}px) scale(${view.scale})` }
               : undefined
           }
           dangerouslySetInnerHTML={{ __html: svg! }}
         />
+        {hoverRect && (
+          // A second layer under the same transform, because the SVG one is written
+          // with innerHTML and cannot take React children.
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-0 top-0 origin-top-left"
+            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${view.scale})` }}
+          >
+            <div
+              className="absolute rounded-sm outline-dashed outline-primary/70"
+              style={{
+                left: hoverRect.x,
+                top: hoverRect.y,
+                width: hoverRect.width,
+                height: hoverRect.height,
+                // Undo the layer's scale, so the hint is a hairline at every zoom.
+                outlineWidth: 1 / view.scale,
+              }}
+            />
+          </div>
+        )}
       </div>
       {controls && (
         <div className="absolute bottom-2 right-2 flex items-center gap-1">

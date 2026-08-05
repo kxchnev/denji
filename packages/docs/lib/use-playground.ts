@@ -148,8 +148,10 @@ export function usePlayground() {
     return () => window.removeEventListener("hashchange", onHash);
   }, [flush, start]);
 
-  const setDsl = useCallback((dsl: string) => {
-    setSession((s) => (s ? { ...s, dsl } : s));
+  /** Takes an updater as well as a value: a drag has to edit whatever the document
+   *  says *now*, not what it said when the handler was created. */
+  const setDsl = useCallback((dsl: string | ((prev: string) => string)) => {
+    setSession((s) => (s ? { ...s, dsl: typeof dsl === "function" ? dsl(s.dsl) : dsl } : s));
   }, []);
 
   const setName = useCallback((name: string) => {

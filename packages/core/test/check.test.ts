@@ -153,3 +153,26 @@ describe("checkDiagram — layout warnings", () => {
     expect(codes('architecture\n  app a "A"\n  app b "B" @rightOf(a)\n  a -> b\n')).toEqual([]);
   });
 });
+
+describe("checkDiagram — exact coordinates", () => {
+  it("does not call a pinned node loose", () => {
+    // Without coordinates this is the textbook loose node.
+    expect(codes('architecture\n  app a "A"\n  app b "B"\n')).toContain("loose-node");
+    expect(codes('architecture\n  app a "A"\n  app b "B" @at(0, 200)\n')).not.toContain(
+      "loose-node",
+    );
+  });
+
+  it("flags a relation that coordinates have made dead", () => {
+    const { diagnostics } = checkDiagram(
+      'architecture\n  app a "A"\n  app b "B" @rightOf(a) @at(0, 200)\n',
+    );
+    const dead = diagnostics.find((d) => d.code === "at-overrides-hint")!;
+    expect(dead).toMatchObject({ severity: "warning", nodes: ["b"] });
+    expect(dead.message).toContain("@rightOf");
+    // Pointing *at* a pinned node is fine, and stays unflagged.
+    expect(codes('architecture\n  app a "A" @at(0, 0)\n  app b "B" @rightOf(a)\n')).not.toContain(
+      "at-overrides-hint",
+    );
+  });
+});

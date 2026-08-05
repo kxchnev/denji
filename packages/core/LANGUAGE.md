@@ -17,6 +17,7 @@ it cannot see. Run it before handing a diagram to anyone.
 | `loose-node` | warning | a node with no hint that nothing points at, so it is parked to the right of everything |
 | `unconnected-node` | warning | a shape with no connections, in a diagram that otherwise has them |
 | `overlapping-siblings` | warning | two siblings drawn on top of each other |
+| `at-overrides-hint` | warning | a node has `@at` and a relation; the relation does nothing |
 | `extreme-aspect-ratio` | warning | the drawing is a strip more than 4:1 — usually a missing container |
 
 `--json` prints `{ file, errors, warnings, diagnostics }`, where each diagnostic
@@ -140,8 +141,9 @@ never run along its border.
 
 ## 5. Placement
 
-There are no coordinates. A node is positioned against a **sibling in the same
-scope** — hints pointing into another container are ignored.
+Placement is relative by default: a node is positioned against a **sibling in the
+same scope** — hints pointing into another container are ignored. `@at` is the
+escape hatch, and the playground writes it for you when you drag something.
 
 ```
 app b "B" @rightOf(a)
@@ -170,6 +172,46 @@ reports the rest as `loose-node`.
 A cycle (`a @rightOf(b)` and `b @rightOf(a)`) does not fail; the nodes fall back
 to declaration order and `power check` reports `hint-cycle`.
 
+### Exact coordinates
+
+```
+app api "API" @at(0, 0)
+service edge "Edge" @at(320, 80) {
+  app cdn "CDN" @at(0, 0)
+}
+```
+
+- `@at(x, y)` puts the node's **top-left corner** at those coordinates, in the
+  coordinate space of **its own scope**: its parent container's inner area, or the
+  diagram itself at the top level. So moving a container moves its children with it
+  and leaves their coordinates alone.
+- A scope that has coordinates in it **keeps its origin**: it is measured from
+  (0, 0) rather than packed against its leftmost node, so moving one node moves
+  nothing else. A relative-only scope still hugs its content, exactly as before.
+- Coordinates may be negative or fractional. At the top level the drawing simply
+  extends to hold them. Inside a container the box has to contain its children, so
+  content reaching before the container's corner pushes the rest of that scope over
+  — which is why the playground stops a child at the corner and lets a top-level
+  node go wherever it likes.
+- `@at` **beats every relation on the same node** — `@rightOf`, `@align` and
+  `@gap` there do nothing, and `power check` reports `at-overrides-hint`.
+- Other nodes may still point **at** a pinned node, and they follow it. That is
+  what lets one part of a diagram be dragged into place while the rest keeps
+  arranging itself.
+- A pinned node leaves the sibling flow but stays an **obstacle** in it: blocks of
+  relative nodes step around it instead of landing on top of it.
+
+In the playground, dragging a shape or a container (by its title band) writes
+exactly this directive, snapped to 8px — and editing the numbers by hand moves the
+diagram. It is the same source either way; there is no hidden layout state.
+
+The first drag also pins **everything else in the document** at the coordinates it
+already had. It has to: a node leaving a relative scope re-arranges everything left
+in it, and a child that grows its container re-arranges that container's scope in
+turn — so without this the one thing that visibly would not move is the node you
+are dragging. From then on the document is placed by coordinates and nothing
+arranges itself; delete the `@at`s to hand a scope back to the hints.
+
 ---
 
 ## 6. Spacing
@@ -182,6 +224,7 @@ to declaration order and `power check` reports `hint-cycle`.
 | `@padding(n)` | — | ✅ | — | border to content |
 | `@margin(n)` | ✅ | — | — | whitespace around the whole drawing |
 | `@gap(n)` | — | ✅ | ✅ | this node's distance to **its own anchor** |
+| `@at(x, y)` | — | ✅ | ✅ | exact position in the node's own scope (§5) |
 
 A container's spacing governs its whole subtree until another container
 overrides it. Defaults: gap 40, padding 24, margin 24.

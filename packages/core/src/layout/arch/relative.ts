@@ -12,6 +12,13 @@ export interface ScopeResult {
   pos: Map<string, { x: number; y: number }>;
   width: number;
   height: number;
+  /**
+   * What placing the scope subtracted from its raw coordinates. Adding it back to a
+   * position in `pos` recovers the space `hint.at` is written in, which is the only
+   * space an editor can write a dragged node's position in. Zero for a scope with
+   * coordinates in it, which is the whole point of them.
+   */
+  offset: { x: number; y: number };
 }
 
 /** Resolved spacing for one scope: horizontal and vertical gaps between siblings. */
@@ -37,13 +44,15 @@ export interface LayoutWarning {
  * node as anchored when the layout treats it as loose.
  *
  * `rightOf` beats `leftOf` and `below` beats `above` when both are written —
- * one relation per axis.
+ * one relation per axis. A node placed by `at` has no anchors at all: exact
+ * coordinates leave nothing for a relation to decide.
  */
 export function resolvedAnchors(
   id: string,
   hint: PlaceHint | undefined,
   siblings: ReadonlyMap<string, unknown> | ReadonlySet<string>,
 ): string[] {
+  if (hint?.at) return [];
   const out: string[] = [];
   const hx = hint?.rightOf ?? hint?.leftOf;
   const vy = hint?.below ?? hint?.above;
@@ -53,16 +62,28 @@ export function resolvedAnchors(
 }
 
 /**
- * Resolve a single scope of siblings into local coordinates using relative
- * hints only. X comes from rightOf/leftOf, Y from above/below; the single given
- * relation also aligns the cross axis.
+ * Resolve a single scope of siblings into local coordinates. X comes from
+ * rightOf/leftOf, Y from above/below; the single given relation also aligns the
+ * cross axis. A node carrying `hint.at` skips all of that and sits exactly where
+ * it says.
  *
  * Siblings tied together by hints form one block, solved on its own. A node
  * with no resolvable hint is its own block, parked `rightOf` the previous one
  * and centered on it — so it can never land on top of a hinted structure.
  * Within a block, a node whose slot is already taken slides clear along the
  * cross axis of the relation that placed it. The result is normalized to
- * origin (0,0).
+ * origin (0,0), and `offset` says by how much.
+ *
+ * Blocks come in two flavours once coordinates are in play. One holding a pinned
+ * node is *anchored*: its positions are already in the scope's own coordinates,
+ * so it is placed first and never moved. The rest flow left to right as they
+ * always have, routing around everything anchored — which is what keeps a
+ * half-dragged diagram from landing on top of itself.
+ *
+ * A scope with coordinates in it also keeps its origin: it is measured from (0, 0)
+ * rather than packed against its leftmost node. Re-anchoring would mean that moving
+ * one child slides every other one — the whole reason coordinates exist is that
+ * they do not do that.
  *
  * Every distance comes from `gaps`, picked by the axis it acts on; a node's
  * own `hint.gap` replaces it for that node's relation.
@@ -74,25 +95,55 @@ export function layoutScope(
 ): ScopeResult {
   const byId = new Map(items.map((it) => [it.id, it]));
   const anchorIds = (it: Placeable): string[] => resolvedAnchors(it.id, it.hint, byId);
+  const rectOf = (it: Placeable, p: { x: number; y: number }): Rect => ({
+    x: p.x,
+    y: p.y,
+    width: it.width,
+    height: it.height,
+  });
+
+  const blocks = buildBlocks(items, anchorIds);
+  const anchored = (members: Placeable[]): boolean => members.some((it) => it.hint?.at);
+  // Every pinned rect is known before anything is placed, so an anchored block's
+  // own followers can route around pins belonging to other blocks too.
+  const pinned: Rect[] = items
+    .filter((it) => it.hint?.at)
+    .map((it) => rectOf(it, it.hint!.at!));
 
   const pos = new Map<string, { x: number; y: number }>();
+  const obstacles: Rect[] = [...pinned];
+
+  for (const members of blocks.filter(anchored)) {
+    const solved = placeBlock(members, gaps, anchorIds, onWarn, pinned);
+    for (const it of members) {
+      const p = solved.pos.get(it.id)!;
+      pos.set(it.id, p);
+      // A follower of a pinned node is as immovable as the pin itself, so the
+      // flow has to route around it as well.
+      obstacles.push(rectOf(it, p));
+    }
+  }
+
   let prev: Rect | undefined;
-  for (const members of buildBlocks(items, anchorIds)) {
-    const local = placeBlock(members, gaps, anchorIds, onWarn);
+  for (const members of blocks.filter((m) => !anchored(m))) {
+    const local = placeBlock(members, gaps, anchorIds, onWarn, obstacles);
     // Blocks are laid out left to right, so this is a horizontal gap.
     const g = members[0]!.hint?.gap ?? gaps.x;
     // Blocks occupy strictly increasing, disjoint x-intervals, so nothing from
-    // one block can ever overlap another.
+    // one block can ever overlap another…
     const dx = prev ? prev.x + prev.width + g : 0;
     const dy = prev ? prev.y + (prev.height - local.height) / 2 : 0;
+    // …but an anchored block sits wherever its coordinates say, so the flow steps
+    // past it. With nothing pinned `obstacles` is empty and this is a no-op.
+    const box = slideClear({ x: dx, y: dy, width: local.width, height: local.height }, obstacles, "right", gaps.x);
     for (const it of members) {
       const p = local.pos.get(it.id)!;
-      pos.set(it.id, { x: p.x + dx, y: p.y + dy });
+      pos.set(it.id, { x: p.x - local.min.x + box.x, y: p.y - local.min.y + box.y });
     }
-    prev = { x: dx, y: dy, width: local.width, height: local.height };
+    prev = box;
   }
 
-  return normalize(items, pos);
+  return settle(items, pos, pinned.length > 0);
 }
 
 /**
@@ -135,13 +186,30 @@ function buildBlocks(items: Placeable[], anchorIds: (it: Placeable) => string[])
   return out;
 }
 
-/** Solve one block of hint-connected siblings into local coordinates. */
+interface BlockResult {
+  pos: Map<string, { x: number; y: number }>;
+  width: number;
+  height: number;
+  /** Top-left of the block's bounding box, in the space the block was solved in. */
+  min: { x: number; y: number };
+}
+
+/**
+ * Solve one block of hint-connected siblings. Positions come back in the space
+ * the block happened to be solved in — around a pinned node that is the scope's
+ * own space, otherwise it is arbitrary — so the caller decides whether to move
+ * the block, using `min`.
+ *
+ * `obstacles` are rects already claimed elsewhere in the scope; a node that would
+ * land on one slides clear of it exactly as it does of its own block's members.
+ */
 function placeBlock(
   members: Placeable[],
   gaps: AxisGaps,
   anchorIds: (it: Placeable) => string[],
   onWarn?: (warning: LayoutWarning) => void,
-): ScopeResult {
+  obstacles: readonly Rect[] = [],
+): BlockResult {
   const byId = new Map(members.map((it) => [it.id, it]));
   const prevOf = new Map<string, string>();
   for (let i = 1; i < members.length; i++) prevOf.set(members[i]!.id, members[i - 1]!.id);
@@ -157,11 +225,20 @@ function placeBlock(
 
   const order = topoOrder(members, anchorsOf, onWarn);
   const pos = new Map<string, { x: number; y: number }>();
-  const placed: Rect[] = [];
+  const placed: Rect[] = [...obstacles];
 
   for (const id of order) {
     const it = byId.get(id)!;
     const h = it.hint;
+
+    // Exact coordinates are the author's own decision — nothing is aligned,
+    // nothing slides. The rect still joins `placed`, so siblings route around it.
+    if (h?.at) {
+      pos.set(id, { x: h.at.x, y: h.at.y });
+      placed.push({ x: h.at.x, y: h.at.y, width: it.width, height: it.height });
+      continue;
+    }
+
     // Center on the cross axis by default so connected nodes share an axis and
     // their connectors stay straight. Override per node with @align(start|end).
     const align = h?.align ?? "center";
@@ -222,7 +299,7 @@ function placeBlock(
     placed.push(rect);
   }
 
-  return normalize(members, pos);
+  return bbox(members, pos);
 }
 
 /**
@@ -294,7 +371,11 @@ function topoOrder(
   return order;
 }
 
-function normalize(items: Placeable[], pos: Map<string, { x: number; y: number }>): ScopeResult {
+/** Where `items` at `pos` begin and end, measured without moving anything. */
+function bounds(
+  items: Placeable[],
+  pos: Map<string, { x: number; y: number }>,
+): { min: { x: number; y: number }; max: { x: number; y: number } } {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -306,10 +387,37 @@ function normalize(items: Placeable[], pos: Map<string, { x: number; y: number }
     maxX = Math.max(maxX, p.x + it.width);
     maxY = Math.max(maxY, p.y + it.height);
   }
-  if (!isFinite(minX)) return { pos, width: 0, height: 0 };
+  if (!isFinite(minX)) return { min: { x: 0, y: 0 }, max: { x: 0, y: 0 } };
+  return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
+}
+
+/** The extent of one block, for packing it against its neighbours. */
+function bbox(items: Placeable[], pos: Map<string, { x: number; y: number }>): BlockResult {
+  const { min, max } = bounds(items, pos);
+  return { pos, width: max.x - min.x, height: max.y - min.y, min };
+}
+
+/**
+ * Finish a scope: move it flush against its origin and measure it from there.
+ *
+ * Which origin depends on whether coordinates are involved. A relative-only scope
+ * has no opinion about where it starts, so it is packed against its own content, as
+ * it always has been. A scope with an `@at` in it does have one — the coordinates
+ * are counted from its (0, 0), the container's inner corner — and that point has to
+ * stay put, or moving one child would slide all the others. Only content that
+ * reaches *before* the origin still shifts, because nothing may be drawn outside
+ * the box that holds it.
+ */
+function settle(
+  items: Placeable[],
+  pos: Map<string, { x: number; y: number }>,
+  pinned: boolean,
+): ScopeResult {
+  const { min, max } = bounds(items, pos);
+  const shift = pinned ? { x: Math.min(0, min.x), y: Math.min(0, min.y) } : min;
   for (const it of items) {
     const p = pos.get(it.id)!;
-    pos.set(it.id, { x: p.x - minX, y: p.y - minY });
+    pos.set(it.id, { x: p.x - shift.x, y: p.y - shift.y });
   }
-  return { pos, width: maxX - minX, height: maxY - minY };
+  return { pos, width: max.x - shift.x, height: max.y - shift.y, offset: shift };
 }

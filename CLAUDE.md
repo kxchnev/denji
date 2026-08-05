@@ -25,13 +25,16 @@ package.json     workspace-root (скрипты-прокси)
 Слои: `DSL (.pwr) → Model → Layout (relative + контейнеры) → Renderer → SVG`.
 
 - `src/model/` — `geometry.ts`, `arch.ts` (типы), `arch-builder.ts` (билдер).
-- `src/layout/arch/` — `relative.ts` (relative-solver), `index.ts` (оркестрация,
-  bottom-up sizing контейнеров), `curve.ts` (кривые связи: грань + точка стыковки + кубическая кривая), `measure.ts`.
+- `src/layout/arch/` — `relative.ts` (relative-solver + прибитые `@at`-узлы:
+  ставятся точно, для потока — препятствия), `index.ts` (оркестрация, bottom-up
+  sizing контейнеров, заполняет `node.local`), `curve.ts` (кривые связи: грань +
+  точка стыковки + кубическая кривая), `measure.ts`.
 - `src/render/arch-svg.ts` — SVG-рендер без зависимостей.
-- `src/dsl/` — `arch-parse.ts` (парсер `.pwr`), `error.ts` (`DiagramParseError`).
+- `src/dsl/` — `arch-parse.ts` (парсер `.pwr`), `arch-edit.ts` (запись `@at` в
+  исходник построчно — для драга в плейграунде), `error.ts` (`DiagramParseError`).
 - `src/check.ts` — статические проверки: ошибки парса/build плюс предупреждения
   о раскладке (`loose-node`, `hint-cycle`, `overlapping-siblings`,
-  `unconnected-node`, `extreme-aspect-ratio`). Проверку пересечений
+  `unconnected-node`, `extreme-aspect-ratio`, `at-overrides-hint`). Проверку пересечений
   переиспользует `docs/scripts/validate-examples.ts` — не дублировать.
 - `src/watch.ts` — живое превью: `node:http` + SSE, следит за **директорией**
   (atomic rename при сохранении убивает file-watcher), держит последний удачный
@@ -45,6 +48,25 @@ package.json     workspace-root (скрипты-прокси)
 
 ⚠️ Цикл в хинтах теперь идёт в `ArchLayoutOptions.onWarn`; по умолчанию —
 `console.warn`, как раньше. `check` подставляет свой сборщик.
+
+⚠️ `@at` — координаты в локальном пространстве своего скоупа, а `node.rect` —
+абсолютный (каждый скоуп нормализован к своему нулю). Обратный ход — `node.local`,
+которую раскладка заполняет для **всех** узлов: это то, что должно стоять в `@at`,
+чтобы узел не сдвинулся. Драг считает новую координату как `local + delta` и пишет
+её только через `setNodePosition`/`setNodePositions` (`src/dsl/arch-edit.ts`), а не
+сериализацией модели — иначе форматирование и комментарии автора умрут.
+
+⚠️ Три вещи, без которых драг в плейграунде (`Diagram.tsx`) разъезжается:
+
+1. Скоуп с координатами **не пере-нормализуется** (`settle` в `relative.ts`): он
+   мерится от своего нуля, а не поджимается к самому левому узлу. Иначе сдвиг
+   одного ребёнка переставляет всех остальных — именно так и выглядел баг «двигается
+   всё, кроме того, что тащишь».
+2. Первый драг **прибивает весь документ** (`pinsFor`), а не только соседей: рост
+   контейнера переставляет и его собственный скоуп.
+3. Вид панорамируется в координатах **документа**: раскладка отдаёт
+   `diagram.originShift` (сдвиг рамки), а `Diagram` его вычитает. Поэтому сетка
+   (`DiagramGrid`) получает чистый `view` и не ползёт, когда рисунок растёт.
 
 ### packages/docs (дока)
 

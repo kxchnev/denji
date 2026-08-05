@@ -9,7 +9,11 @@ export {
   type StylePropSpec,
   type StyleValueKind,
 } from "./model/style.js";
-export { layoutArchitecture, type ArchLayoutOptions } from "./layout/arch/index.js";
+export {
+  layoutArchitecture,
+  DEFAULT_HEADER_H,
+  type ArchLayoutOptions,
+} from "./layout/arch/index.js";
 export { resolvedAnchors, type LayoutWarning } from "./layout/arch/relative.js";
 export {
   checkDiagram,
@@ -34,6 +38,7 @@ export {
   type SimpleIconLike,
 } from "./model/icon.js";
 export { parseArchitecture } from "./dsl/arch-parse.js";
+export { setNodePosition, setNodePositions } from "./dsl/arch-edit.js";
 export { DiagramParseError } from "./dsl/error.js";
 
 import type { ArchDiagram } from "./model/arch.js";

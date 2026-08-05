@@ -1,6 +1,7 @@
 "use client";
 
-import { useDeferredValue, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useRef, useState } from "react";
+import { setNodePositions, type Point } from "power";
 import { CopyButton } from "@/components/CopyButton";
 import { Diagram } from "@/components/Diagram";
 import { PwrEditor } from "@/components/PwrEditor";
@@ -38,6 +39,16 @@ export default function Playground() {
   // Keep typing responsive: the preview lags a frame behind rather than blocking
   // keystrokes on a parse/layout/render pass.
   const preview = useDeferredValue(session?.dsl ?? "");
+
+  // Dropping a node writes its coordinates into the document — the diagram has no
+  // state of its own, so the source is the only place a position can live. One
+  // write per drag, which is one undo step in the editor.
+  const moveNodes = useCallback(
+    (moves: ReadonlyArray<{ id: string; at: Point }>) => {
+      setDsl((dsl) => setNodePositions(dsl, moves) ?? dsl);
+    },
+    [setDsl],
+  );
 
   // `session` is null for exactly one commit — the prerendered markup and the
   // hydration pass, both of which happen before storage may be read.
@@ -164,6 +175,7 @@ export default function Playground() {
                 dsl={preview}
                 name={slugify(session.name) || "diagram"}
                 interactive
+                onMoveNodes={moveNodes}
               />
             )}
           </div>

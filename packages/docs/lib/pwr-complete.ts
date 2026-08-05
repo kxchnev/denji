@@ -185,6 +185,12 @@ const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: Direct
     in: ["shape", "container"],
   },
   {
+    name: "at",
+    detail: "(x, y)",
+    info: "Exact top-left position in this node's own scope. Beats every relation on the same node; drag in the playground to write it.",
+    in: ["shape", "container"],
+  },
+  {
     name: "align",
     detail: "(start|center|end)",
     info: "Cross-axis alignment against the anchor. Defaults to center.",

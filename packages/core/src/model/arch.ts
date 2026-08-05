@@ -88,12 +88,23 @@ export interface Styled {
 }
 
 /**
- * Relative-only placement. There are no absolute coordinates — a node is
- * positioned against a sibling. One horizontal relation (rightOf/leftOf) sets
- * X, one vertical relation (above/below) sets Y; the single given relation also
- * decides cross-axis alignment to the anchor (`align`, default "center").
+ * Where a node goes. Normally relative: positioned against a sibling, with one
+ * horizontal relation (rightOf/leftOf) setting X, one vertical relation
+ * (above/below) setting Y, and the single given relation also deciding
+ * cross-axis alignment to the anchor (`align`, default "center").
+ *
+ * `at` opts out of all that for this one node — see its own comment. Siblings may
+ * still anchor *to* a node placed by `at`, which is what lets a diagram be part
+ * dragged-into-place and part relative.
  */
 export interface PlaceHint {
+  /**
+   * Exact position, in the coordinate space of the node's own scope: the parent
+   * container's inner area, or the diagram's content box at the top level. Beats
+   * every relation on the same node, and the node drops out of the sibling flow
+   * entirely — the flow then treats it as an obstacle to route around.
+   */
+  at?: Point;
   rightOf?: string;
   leftOf?: string;
   above?: string;
@@ -128,6 +139,8 @@ export interface Shape extends Styled {
   hint?: PlaceHint;
   /** Filled in by the layout engine. Absent until laid out. */
   rect?: Rect;
+  /** Filled in by the layout engine. See {@link Container.local}. */
+  local?: Point;
 }
 
 /** Which corner of a container's inner area a free text is pinned to. */
@@ -165,6 +178,17 @@ export interface Container extends Styled {
   /** Inner padding between this container's border and its children. */
   padding?: number;
   rect?: Rect;
+  /**
+   * Filled in by the layout engine: this node's position in the coordinate space
+   * its own `hint.at` is written in. For a node that has one it *is* that
+   * position; for a node the flow placed it is the `at` that would pin it exactly
+   * where it already sits.
+   *
+   * `rect` cannot answer that question — it is absolute, and every scope is
+   * normalized to its own origin — so an editor that turns a drag into source
+   * text needs this to have anything to add its delta to.
+   */
+  local?: Point;
 }
 
 export type ArchNode = Shape | Container;
@@ -203,4 +227,15 @@ export interface ArchDiagram {
   styles?: StyleSheet;
   /** Icons declared by the document; they shadow the bundled ones. */
   icons?: Record<string, Icon>;
+  /**
+   * Filled in by the layout engine: what it added to every `rect` to get the
+   * drawing into the top-left corner of its own box, margin included.
+   *
+   * Subtract it from a `rect` and you are back in the coordinates the document
+   * speaks (`hint.at`, {@link Shape.local}). An interactive viewer needs that: it
+   * pans in document coordinates, so that growing the drawing — dragging a node
+   * past what used to be its left edge — moves that node instead of sliding
+   * everything else out from under the reader.
+   */
+  originShift?: Point;
 }

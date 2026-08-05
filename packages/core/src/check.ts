@@ -26,7 +26,8 @@ export type DiagnosticCode =
   | "hint-cycle"
   | "loose-node"
   | "unconnected-node"
-  | "extreme-aspect-ratio";
+  | "extreme-aspect-ratio"
+  | "at-overrides-hint";
 
 export interface Diagnostic {
   severity: DiagnosticSeverity;
@@ -80,6 +81,7 @@ export function checkDiagram(source: string): CheckResult {
     });
   }
   diagnostics.push(...overlapDiagnostics(diagram));
+  diagnostics.push(...pinnedHintDiagnostics(diagram));
   diagnostics.push(...looseNodeDiagnostics(diagram));
   diagnostics.push(...unconnectedDiagnostics(diagram));
   diagnostics.push(...aspectDiagnostics(diagram));
@@ -173,6 +175,31 @@ function overlapDiagnostics(diagram: ArchDiagram): Diagnostic[] {
 }
 
 /**
+ * A node carrying both exact coordinates and a relation to a sibling. The
+ * coordinates win and the relation does nothing — never what someone writing both
+ * meant. The playground's drag strips the relations it replaces, so this only
+ * catches source written by hand.
+ */
+function pinnedHintDiagnostics(diagram: ArchDiagram): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const n of diagram.nodes) {
+    const h = n.hint;
+    if (!h?.at) continue;
+    const dead = (["rightOf", "leftOf", "above", "below"] as const).filter((k) => h[k]);
+    if (dead.length === 0) continue;
+    out.push({
+      severity: "warning",
+      code: "at-overrides-hint",
+      message: `"${n.id}" has @at, so @${dead[0]} on it is ignored`,
+      line: null,
+      col: null,
+      nodes: [n.id],
+    });
+  }
+  return out;
+}
+
+/**
  * Nodes with no resolvable hint that nothing else anchors to. Each starts its
  * own block, and blocks are packed left to right — so such a node silently lands
  * to the right of everything, which is the single most common surprise in this
@@ -190,8 +217,10 @@ function looseNodeDiagnostics(diagram: ArchDiagram): Diagnostic[] {
     const ids = new Set(scope.map((n) => n.id));
     const anchored = new Set<string>();
     for (const n of scope) for (const a of resolvedAnchors(n.id, n.hint, ids)) anchored.add(a);
+    // Exact coordinates are the opposite of loose: the node is not parked
+    // anywhere, it is where it was put.
     const isLoose = (n: ArchNode): boolean =>
-      resolvedAnchors(n.id, n.hint, ids).length === 0 && !anchored.has(n.id);
+      !n.hint?.at && resolvedAnchors(n.id, n.hint, ids).length === 0 && !anchored.has(n.id);
     const loose = scope.filter(isLoose);
     const origin = scope[0] !== undefined && isLoose(scope[0]) ? 1 : 0;
     for (const n of loose.slice(origin)) {
