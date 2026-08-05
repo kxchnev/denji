@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { architecture } from "../src/model/arch-builder.js";
 import { layoutArchitecture } from "../src/layout/arch/index.js";
 import { renderArchitecture } from "../src/render/arch-svg.js";
-import { ROUTE_GRID } from "../src/layout/arch/route.js";
 import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
 import type { ArchDiagram, ArchNode } from "../src/model/arch.js";
-import type { Rect } from "../src/model/geometry.js";
+import type { Point, Rect } from "../src/model/geometry.js";
+import { cubicAt, sideNormal, type Side } from "../src/layout/arch/curve.js";
 
 function node(d: ArchDiagram, id: string): ArchNode {
   const n = d.nodes.find((x) => x.id === id);
@@ -17,6 +17,20 @@ function rectOf(d: ArchDiagram, id: string): Rect {
   if (!r) throw new Error(`node ${id} not laid out`);
   return r;
 }
+/** A cubic is a straight line exactly when its four points are collinear. */
+function isStraight(a: Point, c1: Point, c2: Point, b: Point): boolean {
+  const cross = (p: Point, q: Point): number => (q.x - a.x) * (p.y - a.y) - (q.y - a.y) * (p.x - a.x);
+  return Math.abs(cross(c1, b)) < 0.5 && Math.abs(cross(c2, b)) < 0.5;
+}
+
+/** The side a point sits on, by which border it touches. */
+function sideOf(p: Point, r: Rect): Side {
+  if (Math.abs(p.x - r.x) < 0.6) return "left";
+  if (Math.abs(p.x - (r.x + r.width)) < 0.6) return "right";
+  if (Math.abs(p.y - r.y) < 0.6) return "top";
+  return "bottom";
+}
+
 function contains(outer: Rect, inner: Rect): boolean {
   return (
     inner.x >= outer.x &&
@@ -114,46 +128,35 @@ describe("architecture layout", () => {
     expect(start.x).toBeLessThanOrEqual(a.x + a.width + 0.5);
   });
 
-  it("leaves and enters diagonally-placed nodes perpendicular to their edges", () => {
+  it("leaves and enters diagonally-placed nodes along their side normals", () => {
     const d = architecture()
       .app("a", "A")
       .app("b", "B", { hint: { rightOf: "a", below: "a" } }) // offset on both axes → diagonal
       .connect("a", "b")
       .build();
     layoutArchitecture(d);
-    const path = d.connections[0]!.path!;
-    const a = rectOf(d, "a");
-    const b = rectOf(d, "b");
-    const outside = (p: { x: number; y: number }, r: Rect) =>
-      p.x < r.x - 0.5 || p.x > r.x + r.width + 0.5 || p.y < r.y - 0.5 || p.y > r.y + r.height + 0.5;
-    const axisAligned = (p: { x: number; y: number }, q: { x: number; y: number }) =>
-      Math.abs(p.x - q.x) < 0.5 || Math.abs(p.y - q.y) < 0.5;
-
-    expect(path.length).toBeGreaterThanOrEqual(3);
-    // first segment is a perpendicular stub that leaves A's rect
-    expect(axisAligned(path[0]!, path[1]!)).toBe(true);
-    expect(outside(path[1]!, a)).toBe(true);
-    // last segment is a perpendicular stub that enters B from outside
-    const n = path.length;
-    expect(axisAligned(path[n - 2]!, path[n - 1]!)).toBe(true);
-    expect(outside(path[n - 2]!, b)).toBe(true);
-  });
-
-  it("snaps connector jogs to the routing grid", () => {
-    const d = architecture()
-      .app("a", "A")
-      .app("b", "B", { hint: { rightOf: "a", below: "a" } }) // diagonal → vertical jog
-      .connect("a", "b")
-      .build();
-    layoutArchitecture(d);
-    const path = d.connections[0]!.path!;
-    const jogX = path[1]!.x; // x of the vertical jog lane
-    expect(jogX % ROUTE_GRID).toBe(0);
+    const c = d.connections[0]!;
+    const [start, end] = [c.path![0]!, c.path![1]!];
+    const { c1, c2 } = c.curve!;
+    // The tangent at each end is the outward normal of the side it docks on —
+    // which is what makes the arrowhead meet the box square on.
+    const na = sideNormal(sideOf(start, rectOf(d, "a")));
+    const nb = sideNormal(sideOf(end, rectOf(d, "b")));
+    expect(c1.x - start.x).toBeCloseTo(na.x * Math.hypot(c1.x - start.x, c1.y - start.y), 3);
+    expect(c1.y - start.y).toBeCloseTo(na.y * Math.hypot(c1.x - start.x, c1.y - start.y), 3);
+    expect(c2.x - end.x).toBeCloseTo(nb.x * Math.hypot(c2.x - end.x, c2.y - end.y), 3);
+    expect(c2.y - end.y).toBeCloseTo(nb.y * Math.hypot(c2.x - end.x, c2.y - end.y), 3);
   });
 
   it("distributes multiple connections entering the same side", () => {
+    // A tall target, so its left side has room for both docks at the pitch: a
+    // 46px-high shape would only fit one, and the second would spill to another
+    // side rather than crowd the first.
     const d = architecture()
-      .app("t", "Target")
+      .app("t1", "One")
+      .app("t2", "Two", { hint: { below: "t1" } })
+      .app("t3", "Three", { hint: { below: "t2" } })
+      .container("t", "Target", { kind: "service", children: ["t1", "t2", "t3"] })
       .app("a", "A", { hint: { leftOf: "t" } })
       .app("b", "B", { hint: { leftOf: "t", above: "a" } })
       .connect("a", "t")
@@ -170,28 +173,30 @@ describe("architecture layout", () => {
     expect(Math.abs(end0.y - end1.y)).toBeGreaterThan(5);
   });
 
-  it("routes a stacked connection as a straight vertical line", () => {
+  it("draws a stacked connection as a straight vertical line", () => {
     const d = architecture()
       .app("a", "Orders API")
       .database("b", "DB", { hint: { below: "a" } })
       .connect("a", "b")
       .build();
     layoutArchitecture(d);
-    const path = d.connections[0]!.path!;
-    expect(path).toHaveLength(2); // no bend
-    expect(path[0]!.x).toBeCloseTo(path[1]!.x, 5); // perfectly vertical
+    const c = d.connections[0]!;
+    const [start, end] = [c.path![0]!, c.path![1]!];
+    expect(start.x).toBeCloseTo(end.x, 5); // perfectly vertical
+    expect(isStraight(start, c.curve!.c1, c.curve!.c2, end)).toBe(true);
   });
 
-  it("routes a side-by-side connection as a straight horizontal line", () => {
+  it("draws a side-by-side connection as a straight horizontal line", () => {
     const d = architecture()
       .app("a", "A")
       .database("b", "Wide Postgres Store", { hint: { rightOf: "a" } })
       .connect("a", "b")
       .build();
     layoutArchitecture(d);
-    const path = d.connections[0]!.path!;
-    expect(path).toHaveLength(2);
-    expect(path[0]!.y).toBeCloseTo(path[1]!.y, 5); // perfectly horizontal
+    const c = d.connections[0]!;
+    const [start, end] = [c.path![0]!, c.path![1]!];
+    expect(start.y).toBeCloseTo(end.y, 5); // perfectly horizontal
+    expect(isStraight(start, c.curve!.c1, c.curve!.c2, end)).toBe(true);
   });
 
   // Both of these come from a real diagram whose arrows looked wrong.
@@ -227,73 +232,40 @@ describe("architecture layout", () => {
       expect(offCentre(path[path.length - 1]!, rectOf(d, "b"))).toBeLessThan(0.6);
     });
 
-    it("merges centres that differ by less than half a grid step", () => {
+    it("merges centres that differ by a few px into one straight line", () => {
       // An app and a taller database sharing a bottom edge are 7px apart —
-      // close enough that a dogleg would read as a wobble, so one straight line.
+      // close enough that a visible S-bend would read as a wobble.
       const d = parse(
         'architecture\n  app a "A"\n  database b "Store" @rightOf(a) @align(end)\n  a -> b\n',
       );
       layoutArchitecture(d);
-      expect(d.connections[0]!.path!).toHaveLength(2);
+      const c = d.connections[0]!;
+      expect(isStraight(c.path![0]!, c.curve!.c1, c.curve!.c2, c.path![1]!)).toBe(true);
     });
 
-    it("keeps the jog out of both nodes when the corridor is narrower than the grid", () => {
-      // A gap under ROUTE_GRID let `snap` round the lane past the far port, so
-      // the connector ran through the target and pointed at its border from
-      // inside. The gap here is deliberately a fraction of one grid step.
-      const gap = Math.round(ROUTE_GRID / 2) - 1;
+    it("keeps the curve out of both nodes in a corridor a few px wide", () => {
+      // With the control reach capped at half the dock distance, a gap this small
+      // gives a nearly straight hop; without the cap the controls reach past each
+      // other and the curve bulges out through both boxes.
       const d = parse(
         [
           "architecture",
           '  app a "A"',
-          `  database b "Locks" @rightOf(a) @below(a) @gap(${gap})`,
+          '  database b "Locks" @rightOf(a) @below(a) @gap(7)',
           "  a -> b",
         ].join("\n"),
       );
       layoutArchitecture(d);
-      const path = d.connections[0]!.path!;
+      const c = d.connections[0]!;
       const rects = [rectOf(d, "a"), rectOf(d, "b")];
-      for (const p of path.slice(1, -1)) {
+      for (let i = 1; i < 32; i++) {
+        const p = cubicAt(c.path![0]!, c.curve!.c1, c.curve!.c2, c.path![1]!, i / 32);
         for (const r of rects) {
-          const insideX = p.x > r.x + 0.01 && p.x < r.x + r.width - 0.01;
-          const insideY = p.y > r.y + 0.01 && p.y < r.y + r.height - 0.01;
-          expect(insideX && insideY).toBe(false);
+          const inside =
+            p.x > r.x + 0.01 && p.x < r.x + r.width - 0.01 && p.y > r.y + 0.01 && p.y < r.y + r.height - 0.01;
+          expect(inside).toBe(false);
         }
       }
-      // and no hairline segment left over from a lane that overshot
-      for (let i = 0; i + 1 < path.length; i++) {
-        const len = Math.hypot(path[i + 1]!.x - path[i]!.x, path[i + 1]!.y - path[i]!.y);
-        expect(len).toBeGreaterThan(1);
-      }
-    });
-
-    it("leaves the arrowhead a straight run even in a cramped corridor", () => {
-      // The head is markerWidth 7 in strokeWidth units; at the theme's 1.5 that
-      // is 10.5 units, of which refX=9/10 sits behind the endpoint. A shorter
-      // approach than 9.45 puts the bend inside the head and the line appears
-      // to join the arrow from the side.
-      const ARROWHEAD_REACH = 9.45;
-      // A 16px corridor is the interesting width: one grid step, so the lane
-      // used to snap to 8px of approach — under the head. Anything under ~13px
-      // of corridor cannot fit the head at all, whatever the lane.
-      const d = parse(
-        [
-          "architecture",
-          '  app a "A"',
-          '  service b "B" @rightOf(a) @align(start) @gap(16) {',
-          '    app b1 "One"',
-          '    app b2 "Two" @below(b1)',
-          "  }",
-          "  a -> b",
-        ].join("\n"),
-      );
-      layoutArchitecture(d);
-      const path = d.connections[0]!.path!;
-      const last = Math.hypot(
-        path[path.length - 1]!.x - path[path.length - 2]!.x,
-        path[path.length - 1]!.y - path[path.length - 2]!.y,
-      );
-      expect(last).toBeGreaterThan(ARROWHEAD_REACH);
     });
 
     it("still merges near-aligned centres into one straight line", () => {
@@ -301,7 +273,8 @@ describe("architecture layout", () => {
       // dogleg just because their heights differ.
       const d = parse('architecture\n  app a "A"\n  database b "Store" @rightOf(a)\n  a -> b\n');
       layoutArchitecture(d);
-      expect(d.connections[0]!.path!).toHaveLength(2);
+      const c = d.connections[0]!;
+      expect(isStraight(c.path![0]!, c.curve!.c1, c.curve!.c2, c.path![1]!)).toBe(true);
     });
   });
 
@@ -328,6 +301,10 @@ describe("architecture layout", () => {
     const d1 = layoutArchitecture(make());
     const d2 = layoutArchitecture(make());
     expect(d1.nodes.map((n) => n.rect)).toEqual(d2.nodes.map((n) => n.rect));
+    expect(d1.connections.map((c) => [c.path, c.curve, c.labelPos])).toEqual(
+      d2.connections.map((c) => [c.path, c.curve, c.labelPos]),
+    );
+    expect(renderArchitecture(d1)).toBe(renderArchitecture(d2));
     expect(() => renderArchitecture(d1)).not.toThrow();
   });
 

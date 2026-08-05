@@ -177,8 +177,15 @@ export interface Connection extends Styled {
   fromArrow: boolean;
   toArrow: boolean;
   style: "solid" | "dashed";
-  /** Filled in by the layout engine. */
+  /** Filled in by the layout engine: the two points where the connector meets
+   *  its boxes. */
   path?: Point[];
+  /**
+   * Cubic control points for `path[0] → path[1]`, filled in by the layout. Each
+   * one sits on the outward normal of its dock's side, which is what makes the
+   * arrowhead meet the box square on.
+   */
+  curve?: { c1: Point; c2: Point };
   labelPos?: Point;
 }
 

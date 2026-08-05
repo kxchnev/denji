@@ -123,6 +123,18 @@ group <id> ["<label>"] {
 - There is **no `|label|` form.**
 - Endpoints may be shapes or containers.
 
+### How a connector is drawn
+
+A connection is a single curve. It leaves one box and enters the other
+perpendicular to a side, near the middle of it; several connections on one side
+fan out, and a side with no room left hands the overflow to a side that also
+points at the other box.
+
+The curve never bends and never routes *around* anything: a box that sits between
+two connected boxes **will be crossed**. Leave room, or put the pair in the same
+container — that is the price of connectors that always meet a box square on and
+never run along its border.
+
 ---
 
 ## 5. Placement

@@ -13,7 +13,7 @@ import {
   NOTE_LINE_H,
 } from "./measure.js";
 import { layoutScope, type AxisGaps, type LayoutWarning, type Placeable } from "./relative.js";
-import { routeConnections } from "./route.js";
+import { curveConnections } from "./curve.js";
 
 /**
  * Caller-side defaults. Anything the diagram itself declares (`@spacing`,
@@ -164,7 +164,7 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
   }
 
   normalizeToOrigin(diagram, margin);
-  routeConnections(diagram);
+  curveConnections(diagram);
   return diagram;
 }
 

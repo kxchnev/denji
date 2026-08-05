@@ -26,7 +26,7 @@ package.json     workspace-root (скрипты-прокси)
 
 - `src/model/` — `geometry.ts`, `arch.ts` (типы), `arch-builder.ts` (билдер).
 - `src/layout/arch/` — `relative.ts` (relative-solver), `index.ts` (оркестрация,
-  bottom-up sizing контейнеров), `route.ts` (overlap-роутинг связей), `measure.ts`.
+  bottom-up sizing контейнеров), `curve.ts` (кривые связи: грань + точка стыковки + кубическая кривая), `measure.ts`.
 - `src/render/arch-svg.ts` — SVG-рендер без зависимостей.
 - `src/dsl/` — `arch-parse.ts` (парсер `.pwr`), `error.ts` (`DiagramParseError`).
 - `src/check.ts` — статические проверки: ошибки парса/build плюс предупреждения

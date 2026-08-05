@@ -625,9 +625,19 @@ function renderConnection(c: Connection, index: number, styled: StyleModel): str
   if (!c.path || c.path.length < 2) return "";
   const cls = styled.classesFor("edge", `e${index}`, c.styleRefs, c.styleProps);
   const marker = styled.arrowMarker(c.styleRefs, c.styleProps);
-  // Rounded here rather than in the model: `simplify` needs the exact values to
-  // recognise collinear points, but the file does not need `217.66666666666666`.
-  const d = c.path.map((p, i) => `${i === 0 ? "M" : "L"} ${round(p.x)} ${round(p.y)}`).join(" ");
+  // Rounded here rather than in the model: the layout compares exact values, but
+  // the file does not need `217.66666666666666`.
+  //
+  // A laid-out connection is one cubic whose controls sit on the docks' normals,
+  // so the arrowhead — oriented by the tangent at the endpoint — meets the box
+  // square on. The polyline form is kept for a model built through the builder
+  // API and never laid out.
+  const a = c.path[0]!;
+  const b = c.path[c.path.length - 1]!;
+  const d = c.curve
+    ? `M ${round(a.x)} ${round(a.y)} C ${round(c.curve.c1.x)} ${round(c.curve.c1.y)} ` +
+      `${round(c.curve.c2.x)} ${round(c.curve.c2.y)} ${round(b.x)} ${round(b.y)}`
+    : c.path.map((p, i) => `${i === 0 ? "M" : "L"} ${round(p.x)} ${round(p.y)}`).join(" ");
   const dashed = c.style === "dashed" ? " pwr-dashed" : "";
   const start = c.fromArrow ? ` marker-start="url(#{{ID}}-a${marker})"` : "";
   const end = c.toArrow ? ` marker-end="url(#{{ID}}-a${marker})"` : "";
