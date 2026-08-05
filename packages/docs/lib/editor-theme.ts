@@ -26,6 +26,14 @@ export const codeEditorTheme = EditorView.theme({
     // `contain` on a non-scrolling element blocks the wheel event from
     // chaining to that wrapper, breaking scroll entirely.)
     backgroundColor: "hsl(var(--code-bg))",
+    // Handle only, no track. Whenever the system shows classic scrollbars — a
+    // mouse plugged in, or "Show scroll bars: always" — the default track paints
+    // a grey band along the edge of the code, which reads as chrome rather than
+    // as part of the editor. The standard properties are deliberate: styling
+    // `::-webkit-scrollbar` instead would opt every reader out of the overlay
+    // scrollbars they get today and reserve the band permanently.
+    scrollbarWidth: "thin",
+    scrollbarColor: "hsl(var(--foreground) / 0.25) transparent",
   },
   ".cm-content": { padding: "0.75rem 0", caretColor: "hsl(var(--code-fg))" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "hsl(var(--code-fg))" },
@@ -33,15 +41,36 @@ export const codeEditorTheme = EditorView.theme({
   "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
     { backgroundColor: "hsl(var(--foreground) / 0.16)" },
   ".cm-gutters": {
-    backgroundColor: "transparent",
+    // Opaque, not transparent: the gutter is sticky, so with wrapping off the
+    // code scrolls underneath it and would show through the line numbers.
+    backgroundColor: "hsl(var(--code-bg))",
     borderRight: "none",
     color: "hsl(var(--muted-foreground))",
   },
-  ".cm-activeLine": { backgroundColor: "hsl(var(--foreground) / 0.04)" },
+  // The gap that keeps code scrolled underneath from touching the digits. It sits
+  // on the number itself rather than on `.cm-gutters`, so the active line's tint
+  // covers it and the highlight runs into the code without a pale seam.
+  ".cm-lineNumbers .cm-gutterElement": { paddingRight: "0.5rem" },
+  ".cm-activeLine": { backgroundColor: "hsl(var(--foreground) / 0.06)" },
+  // The same tint as the line itself, so the highlight reads as one band across
+  // the gutter and the code rather than as two separate stripes.
   ".cm-activeLineGutter": {
-    backgroundColor: "transparent",
+    backgroundColor: "hsl(var(--foreground) / 0.06)",
     color: "hsl(var(--code-fg))",
   },
+  // Whitespace marks (playground only — the read-only viewers leave the extension
+  // out). Faint on purpose: `.pwr` labels are prose, so a dot between every word
+  // has to stay quieter than the words.
+  // The dot is a background gradient with a hard-coded grey in CodeMirror's base
+  // theme, not a coloured glyph, so it is the gradient that has to be redrawn to
+  // quieten it. `--foreground` at a low alpha rather than `--muted-foreground`,
+  // which is itself light in the dark theme and would make the dots louder there
+  // than in the light one. The tab arrow is a baked-in image, so it is just faded.
+  ".cm-highlightSpace": {
+    backgroundImage:
+      "radial-gradient(circle at 50% 55%, hsl(var(--foreground) / 0.15) 14%, transparent 5%)",
+  },
+  ".cm-highlightTab": { opacity: "0.2" },
   ".cm-matchingBracket, &.cm-focused .cm-matchingBracket": {
     backgroundColor: "hsl(var(--foreground) / 0.12)",
     outline: "1px solid hsl(var(--border))",

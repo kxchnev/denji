@@ -7,6 +7,7 @@ import {
   drawSelection,
   highlightActiveLine,
   highlightActiveLineGutter,
+  highlightWhitespace,
   keymap,
   lineNumbers,
 } from "@codemirror/view";
@@ -21,12 +22,18 @@ const extensions = [
   lineNumbers(),
   highlightActiveLineGutter(),
   highlightActiveLine(),
+  // Spaces and tabs are visible here but not in the read-only viewers: indentation
+  // is what nesting in `.pwr` is made of, so it is worth seeing while you type.
+  highlightWhitespace(),
   drawSelection(),
   history(),
   bracketMatching(),
   indentOnInput(),
   indentUnit.of("  "),
-  EditorView.lineWrapping,
+  // No `lineWrapping` on purpose, unlike the read-only viewers: this editor
+  // lives in a pane whose width is dragged around, and reflowing every line on
+  // every pixel of that drag is unreadable. The text keeps its own width and
+  // `.cm-scroller` scrolls sideways instead.
   keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
   pwrLanguage,
   syntaxHighlighting(classHighlighter),

@@ -130,6 +130,10 @@ export function Diagram({
   const drag = useRef<{ x: number; y: number } | null>(null);
   // Once the view has been moved by hand, stop auto-fitting it out from under the user.
   const touched = useRef(false);
+  // Whether a fit has ever landed, and the size it landed at. Both are refs: the
+  // resize handler below reads them without wanting to be rebuilt.
+  const everFit = useRef(false);
+  const size = useRef<{ w: number; h: number } | null>(null);
 
   const fit = useCallback(() => {
     const el = surface.current;
@@ -145,6 +149,8 @@ export function Diagram({
     );
     setView({ scale, x: (cw - width * scale) / 2, y: (ch - height * scale) / 2 });
     setFitted(true);
+    everFit.current = true;
+    size.current = { w: cw, h: ch };
   }, [width, height]);
 
   useIsomorphicLayoutEffect(() => {
@@ -152,8 +158,29 @@ export function Diagram({
     const el = surface.current;
     if (!el) return;
     if (!touched.current) fit();
+    // Resizing the viewport must not rescale the diagram: dragging the
+    // playground's divider reveals or hides part of it, it does not zoom it. So
+    // the scale is left alone and only the offset moves, by half the change in
+    // each axis — whatever was in the middle of the pane stays in the middle.
     const ro = new ResizeObserver(() => {
-      if (!touched.current) fit();
+      const cw = el.clientWidth;
+      const ch = el.clientHeight;
+      // A pane squeezed shut has nothing to centre on, and recording its zero
+      // size would make the next resize jump. Wait for it to come back.
+      if (!cw || !ch) return;
+      const prev = size.current;
+      size.current = { w: cw, h: ch };
+      // Nothing to preserve yet — this is the first measurement that has a size
+      // to fit into, e.g. the pane the diagram was born in was collapsed.
+      if (!everFit.current) {
+        fit();
+        return;
+      }
+      if (!prev) return;
+      const dx = (cw - prev.w) / 2;
+      const dy = (ch - prev.h) / 2;
+      if (!dx && !dy) return;
+      setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
     });
     ro.observe(el);
     return () => ro.disconnect();

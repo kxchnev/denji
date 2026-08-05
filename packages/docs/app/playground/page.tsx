@@ -1,13 +1,15 @@
 "use client";
 
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useRef, useState } from "react";
 import { CopyButton } from "@/components/CopyButton";
 import { Diagram } from "@/components/Diagram";
 import { PwrEditor } from "@/components/PwrEditor";
 import { DiagramList } from "@/components/playground/DiagramList";
+import { PaneDivider } from "@/components/playground/PaneDivider";
 import { PlaygroundToolbar, type Pane } from "@/components/playground/PlaygroundToolbar";
 import { TemplatePicker } from "@/components/playground/TemplatePicker";
 import { usePlayground } from "@/lib/use-playground";
+import { useSplit } from "@/lib/use-split";
 import { cn, slugify } from "@/lib/utils";
 
 export default function Playground() {
@@ -30,6 +32,9 @@ export default function Playground() {
   // preview because that is where the template picker lives — otherwise a new
   // diagram would open on an empty editor with no way to reach the templates.
   const [pane, setPane] = useState<Pane>("preview");
+  // How the two panes divide the width from `md` up. Remembered across sessions.
+  const { ratio, drag, commit, reset } = useSplit();
+  const split = useRef<HTMLDivElement>(null);
   // Keep typing responsive: the preview lags a frame behind rather than blocking
   // keystrokes on a parse/layout/render pass.
   const preview = useDeferredValue(session?.dsl ?? "");
@@ -100,44 +105,68 @@ export default function Playground() {
             problem with its pan/zoom, which would carry over from the diagram you
             just left. Keying on the id resets both on a switch and on nothing
             else; typing never remounts. */}
+        {/* The panes get a flex row of their own so the divider's ratio is a
+            share of the two of them rather than of the whole window, sidebar
+            included. `min-w-0` on both: their automatic minimum size would
+            otherwise be their content's, and a wide diagram would squeeze the
+            editor down to nothing. */}
         <div
-          className={cn(
-            "group relative min-h-0 flex-1 bg-code md:block",
-            pane === "code" ? "block" : "hidden",
-          )}
+          ref={split}
+          className="flex min-h-0 min-w-0 flex-1"
+          style={{ "--split-code": `${ratio * 100}%` } as React.CSSProperties}
         >
-          <PwrEditor
-            key={`editor-${session.id}`}
-            value={session.dsl}
-            onChange={setDsl}
-            className="h-full overflow-hidden"
+          <div
+            className={cn(
+              "group relative min-h-0 min-w-0 shrink-0 grow-0 basis-full overflow-hidden bg-code",
+              // Below `md` the visible pane takes the full width; from `md` up
+              // the divider decides. Going through a custom property is what
+              // lets one media query hand the width back to the breakpoint.
+              "md:block md:basis-[var(--split-code)]",
+              pane === "code" ? "block" : "hidden",
+            )}
+          >
+            <PwrEditor
+              key={`editor-${session.id}`}
+              value={session.dsl}
+              onChange={setDsl}
+              className="h-full overflow-hidden"
+            />
+            <CopyButton code={session.dsl} />
+          </div>
+
+          <PaneDivider
+            ratio={ratio}
+            containerRef={split}
+            onDrag={drag}
+            onCommit={commit}
+            onReset={reset}
           />
-          <CopyButton code={session.dsl} />
-        </div>
-        <div
-          className={cn(
-            "min-h-0 flex-1 border-l bg-card md:block",
-            pane === "preview" ? "block" : "hidden",
-          )}
-        >
-          {/* Both branches read the deferred value, so the pane never shows a
-              half-applied state: an empty document and the picker that replaces
-              it always change over together. */}
-          {preview.trim() === "" ? (
-            <TemplatePicker
-              onPick={(label, dsl) => {
-                applyTemplate(label, dsl);
-                setPane("code"); // hand a mobile reader straight to the editor
-              }}
-            />
-          ) : (
-            <Diagram
-              key={`preview-${session.id}`}
-              dsl={preview}
-              name={slugify(session.name) || "diagram"}
-              interactive
-            />
-          )}
+
+          <div
+            className={cn(
+              "min-h-0 min-w-0 flex-1 overflow-hidden bg-card md:block",
+              pane === "preview" ? "block" : "hidden",
+            )}
+          >
+            {/* Both branches read the deferred value, so the pane never shows a
+                half-applied state: an empty document and the picker that replaces
+                it always change over together. */}
+            {preview.trim() === "" ? (
+              <TemplatePicker
+                onPick={(label, dsl) => {
+                  applyTemplate(label, dsl);
+                  setPane("code"); // hand a mobile reader straight to the editor
+                }}
+              />
+            ) : (
+              <Diagram
+                key={`preview-${session.id}`}
+                dsl={preview}
+                name={slugify(session.name) || "diagram"}
+                interactive
+              />
+            )}
+          </div>
         </div>
       </div>
     </>
