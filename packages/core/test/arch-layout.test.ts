@@ -644,6 +644,61 @@ function delta(d: ArchDiagram, from: string, to: string): Point {
 }
 const laid = (src: string): ArchDiagram => layoutArchitecture(parse(src));
 
+describe("the grid", () => {
+  /** Every diagram shape a document can hold, laid out several ways. */
+  const corpus = [
+    `architecture\napp a "A"\ndatabase b "Postgres" @below(a)\nqueue c "Events" @rightOf(a)\nrect d "D" @below(b)`,
+    // Odd-length labels are what used to produce the half pixels: the widths came
+    // out of glyph advances, and centring halved the difference between them.
+    `architecture\napp a "Gateway"\napp b "X" @below(a)\napp c "Orders API" @below(b)\napp d "Iiii" @below(c)`,
+    `architecture\napp hub "Hub"\napp x "X" @rightOf(hub)\napp y "Yyyyyy" @rightOf(hub)\napp z "Z" @rightOf(hub)`,
+    `architecture\nservice s "A service with a long title" {\napp a "A"\ndatabase b "B" @below(a)\n}`,
+    `architecture\ngroup g "G" {\ntext "a note of odd length"\napp a "Aaa"\napp b "B" @rightOf(a)\n}`,
+    `architecture\napp a "A" @icon(postgres)\napp b "" @icon(redis) @below(a)\nqueue q "Q" @icon(kafka) @rightOf(a)`,
+    `architecture\nservice o "Orders" {\napp api "API"\ndatabase db "Db" @below(api)\n}\ngroup i "Infra" @rightOf(o) {\napp k "K8s"\n}`,
+  ];
+
+  it("puts every unsized shape's width and height on the 8 lattice", () => {
+    for (const src of corpus) {
+      for (const n of laid(src).nodes) {
+        if (n.type !== "shape") continue;
+        const r = rectOf(laid(src), n.id);
+        expect(r.width % 8, `${n.id} width ${r.width} in ${src}`).toBe(0);
+        expect(r.height % 8, `${n.id} height ${r.height} in ${src}`).toBe(0);
+      }
+    }
+  });
+
+  it("puts every coordinate on the 4 lattice", () => {
+    for (const src of corpus) {
+      const d = laid(src);
+      for (const n of d.nodes) {
+        const r = rectOf(d, n.id);
+        expect(r.x % 4, `${n.id} x ${r.x} in ${src}`).toBe(0);
+        expect(r.y % 4, `${n.id} y ${r.y} in ${src}`).toBe(0);
+      }
+    }
+  });
+
+  it("leaves an explicit size exactly as written, lattice or not", () => {
+    const d = laid(`architecture\napp a "A" @width(150) @height(45)\napp b "B" @rightOf(a)`);
+    const a = rectOf(d, "a");
+    expect(a.width).toBe(150);
+    expect(a.height).toBe(45);
+    // And it is allowed to carry its neighbour off the lattice with it — the
+    // author asked for 150, so the gap after it starts at 150.
+    expect(rectOf(d, "b").x - a.x).toBe(150 + 40);
+  });
+
+  it("leaves fractional coordinates fractional", () => {
+    const d = laid(`architecture\napp a "A" @at(10.5, 3.25)\napp b "B" @below(a)`);
+    expect(localOf(d, "a")).toEqual({ x: 10.5, y: 3.25 });
+    // The centring offset is snapped, not the result, so the follower keeps the
+    // author's fraction instead of being quietly pulled onto the lattice.
+    expect(localOf(d, "b").x % 1).toBeCloseTo(0.5, 5);
+  });
+});
+
 describe("exact coordinates", () => {
   it("places a pinned node exactly where its coordinates say", () => {
     const d = laid('architecture\napp a "A" @at(0, 0)\napp b "B" @at(200, 80)');

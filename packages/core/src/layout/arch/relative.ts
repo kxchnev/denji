@@ -1,5 +1,6 @@
 import type { PlaceHint } from "../../model/arch.js";
 import { intersects, type Rect } from "../../model/geometry.js";
+import { snapHalf } from "./grid.js";
 
 export interface Placeable {
   id: string;
@@ -132,7 +133,7 @@ export function layoutScope(
     // Blocks occupy strictly increasing, disjoint x-intervals, so nothing from
     // one block can ever overlap another…
     const dx = prev ? prev.x + prev.width + g : 0;
-    const dy = prev ? prev.y + (prev.height - local.height) / 2 : 0;
+    const dy = prev ? prev.y + snapHalf((prev.height - local.height) / 2) : 0;
     // …but an anchored block sits wherever its coordinates say, so the flow steps
     // past it. With nothing pinned `obstacles` is empty and this is a no-op.
     const box = slideClear({ x: dx, y: dy, width: local.width, height: local.height }, obstacles, "right", gaps.x);
@@ -266,7 +267,7 @@ function placeBlock(
       const pit = p ? byId.get(p) : undefined;
       if (pa && pit) {
         x = pa.x + pit.width + gx; // the implicit flow is horizontal
-        y = pa.y + (pit.height - it.height) / 2; // center on the previous sibling
+        y = pa.y + snapHalf((pit.height - it.height) / 2); // center on the previous sibling
       }
     } else {
       if (hx) {
@@ -320,8 +321,13 @@ function slideClear(r: Rect, placed: Rect[], dir: "down" | "right", gap: number)
   return out;
 }
 
+/**
+ * The cross-axis coordinate one relation implies. The centring offset is snapped
+ * rather than the result, so a node following an author's fractional `@at` keeps
+ * that fraction instead of being dragged onto the lattice behind their back.
+ */
 function alignCoord(anchorPos: number, anchorSize: number, size: number, align: string): number {
-  if (align === "center") return anchorPos + (anchorSize - size) / 2;
+  if (align === "center") return anchorPos + snapHalf((anchorSize - size) / 2);
   if (align === "end") return anchorPos + anchorSize - size;
   return anchorPos; // start
 }

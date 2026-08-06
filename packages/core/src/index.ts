@@ -15,6 +15,7 @@ export {
   type ArchLayoutOptions,
 } from "./layout/arch/index.js";
 export { resolvedAnchors, type LayoutWarning } from "./layout/arch/relative.js";
+export { GRID, HALF_GRID, ceilToGrid, snapHalf } from "./layout/arch/grid.js";
 export {
   checkDiagram,
   type CheckResult,

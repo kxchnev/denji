@@ -8,6 +8,7 @@ import {
   resolveTheme,
   setNodePositions,
   DEFAULT_HEADER_H,
+  GRID,
   DiagramParseError,
   type ArchDiagram,
   type ArchNode,
@@ -24,14 +25,13 @@ const MIN_SCALE = 0.2;
 const MAX_SCALE = 4;
 /** Breathing room left around the diagram when fitting it to the viewport. */
 const FIT_MARGIN = 16;
-/**
- * Dragging lands on this lattice — half the grid's own pitch, so a drop reads as
- * aligned and the coordinate written into the document stays a round number.
- */
-const SNAP = 8;
-
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-const snap = (v: number) => Math.round(v / SNAP) * SNAP;
+/**
+ * A drop lands on the same lattice the layout sizes boxes on, so a dragged node
+ * stays aligned with the ones still placed by hints, and the coordinate written
+ * into the document stays a round number.
+ */
+const snap = (v: number) => Math.round(v / GRID) * GRID;
 
 /**
  * The first fit has to land before the browser paints, or the diagram is visible

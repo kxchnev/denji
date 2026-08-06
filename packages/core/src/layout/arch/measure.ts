@@ -1,5 +1,6 @@
 import type { ContainerText, Corner, Shape, StyleProps } from "../../model/arch.js";
 import type { Size } from "../../model/geometry.js";
+import { ceilToGrid } from "./grid.js";
 
 /**
  * Shared text metrics (no DOM): average glyph advance at the base font size.
@@ -66,8 +67,11 @@ export function measureNoteStack(lines: readonly ContainerText[]): number {
 /**
  * Size a leaf shape. Cylinders reserve room for their elliptical caps.
  *
- * `style.width` / `style.height` win outright — an explicit size is exact, caps
- * and all, because a box the author asked for should be the box they get.
+ * A measured size is rounded up onto {@link GRID}, so a row of boxes differs in
+ * width by whole grid steps and centring one against another cannot land on a
+ * half pixel. `style.width` / `style.height` win outright and are *not* rounded —
+ * an explicit size is exact, caps and all, because a box the author asked for
+ * should be the box they get.
  */
 export function measureShape(shape: Shape, style: StyleProps = {}): Size {
   const textW = measureLabelWidth(shape.label);
@@ -91,5 +95,8 @@ export function measureShape(shape: Shape, style: StyleProps = {}): Size {
       width += CAP_RX * 2 + 8;
       break;
   }
-  return { width: style.width ?? width, height: style.height ?? height };
+  return {
+    width: style.width ?? ceilToGrid(width),
+    height: style.height ?? ceilToGrid(height),
+  };
 }

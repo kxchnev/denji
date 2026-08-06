@@ -1,6 +1,7 @@
 import type { ArchDiagram, ContainerText, Corner, StyleProps } from "../../model/arch.js";
 import { resolveStyle } from "../../model/style.js";
 import type { Size } from "../../model/geometry.js";
+import { ceilToGrid } from "./grid.js";
 import {
   ICON_GAP,
   ICON_SIZE,
@@ -131,11 +132,18 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     // A container hugs its content, so an explicit size can only be a floor —
     // honouring it exactly would crop the children it is meant to hold.
     const own = styleOf(id);
-    const width = Math.max(contentW + pad * 2, labelW, bands.width, own.width ?? 0);
-    const height = Math.max(
-      contentH + pad * 2 + headerH + bands.top + bands.bottom,
-      own.height ?? 0,
+    // Only the width needs the grid. Its measured inputs — a title, a corner text —
+    // come from glyph advances and are fractional, and a box wider than its content
+    // already leaves the slack on the right whenever a long title decides the width.
+    // The height has no fractional input to round: the header, the padding and the
+    // note bands are whole numbers and `contentH` is on the grid already, so ceiling
+    // it would only shove the rounding into the bottom padding and stop padding
+    // meaning padding. The author's own number passes through untouched either way.
+    const width = Math.max(
+      ceilToGrid(Math.max(contentW + pad * 2, labelW, bands.width)),
+      own.width ?? 0,
     );
+    const height = Math.max(contentH + pad * 2 + headerH + bands.top + bands.bottom, own.height ?? 0);
     innerOffset.set(id, { x: pad, y: headerH + bands.top + pad });
     const size = { width, height };
     sizeMap.set(id, size);
