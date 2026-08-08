@@ -1,6 +1,9 @@
 node_modules/
 dist/
+# Generated from the core's vocabulary by packages/vscode/scripts/generate-grammar.ts
+packages/vscode/syntaxes/
 .next/
 out/
 *.tsbuildinfo
+*.vsix
 .DS_Store

@@ -6,10 +6,12 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "npm run -w power test",
-    "typecheck": "npm run -w power typecheck",
-    "build": "npm run -w power build",
+    "test": "npm run -w power test && npm run -w power-vscode test",
+    "typecheck": "npm run -w power typecheck && npm run -w power-vscode typecheck",
+    "build": "npm run -w power build && npm run -w power-vscode build",
     "docs": "npm run -w docs dev",
-    "docs:build": "npm run -w docs build"
+    "docs:build": "npm run -w docs build",
+    "vscode": "npm run -w power-vscode watch",
+    "vscode:package": "npm run -w power-vscode package"
   }
 }

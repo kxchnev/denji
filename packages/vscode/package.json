@@ -1,0 +1,143 @@
+{
+  "name": "power-vscode",
+  "displayName": "power diagrams",
+  "description": "Live preview for .pwr architecture diagrams — drag a node, the source gets the coordinates",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "publisher": "kxchnev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kxchnev/power.git",
+    "directory": "packages/vscode"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:power",
+    "onWebviewPanel:power.preview"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "power",
+        "aliases": [
+          "power",
+          "pwr"
+        ],
+        "extensions": [
+          ".pwr"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "power",
+        "scopeName": "source.pwr",
+        "path": "./syntaxes/pwr.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "power.showPreview",
+        "title": "Open Preview",
+        "category": "power",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "power.showPreviewToSide",
+        "title": "Open Preview to the Side",
+        "category": "power",
+        "icon": "$(open-preview)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "power.showPreview",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "editorLangId == power"
+      },
+      {
+        "command": "power.showPreviewToSide",
+        "key": "ctrl+k v",
+        "mac": "cmd+k v",
+        "when": "editorLangId == power"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "power.showPreviewToSide",
+          "when": "editorLangId == power",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "power.showPreview",
+          "when": "editorLangId == power"
+        },
+        {
+          "command": "power.showPreviewToSide",
+          "when": "editorLangId == power"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "power",
+      "properties": {
+        "power.preview.codeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Offer 'Open preview to the side' above the first line of a .pwr file, until a preview is open."
+        },
+        "power.preview.grid": {
+          "type": "boolean",
+          "default": true,
+          "description": "Draw a dot grid behind the diagram."
+        },
+        "power.preview.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "light",
+            "dark"
+          ],
+          "default": "auto",
+          "description": "Palette for the preview. 'auto' follows the editor's colour theme. A document with @theme(...) overrides this."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "grammar": "tsx scripts/generate-grammar.ts",
+    "build": "npm run grammar && node esbuild.mjs",
+    "watch": "npm run grammar && node esbuild.mjs --watch",
+    "test": "npm run build && tsx test/diff.test.ts && tsx test/extension.test.ts && tsx test/grammar.test.ts && tsx test/webview.test.ts",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run build && vsce package --no-dependencies -o power-vscode.vsix"
+  },
+  "dependencies": {
+    "power": "*"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^26.1.1",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.2",
+    "jsdom": "^30.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
+}

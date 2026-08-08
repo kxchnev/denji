@@ -1,0 +1,27 @@
+# A file to open while working on the extension.
+# Open the preview to the side (Cmd+K V) and drag something.
+
+architecture
+  group edge "Edge" @at(-160, 0) {
+    text "public"
+    app cdn "CDN" @at(0, 0)
+    app waf "WAF" @at(136, 0)
+    cdn -> waf
+  }
+
+  service orders "Orders" @at(-160, 200) {
+    app api "Orders API" @at(0, 0) @icon(nodedotjs)
+    database db "Postgres" @at(0, 112) @icon(postgresql)
+    queue bus "Events" @at(200, 80)
+    api -> db
+    api -> bus
+  }
+
+  service pay "Payments" @at(264, 200) {
+    app papi "Payments API" @at(0, 0)
+    database pdb "Postgres" @at(24, 88)
+    papi -> pdb
+  }
+
+  waf -> api : https
+  api -> papi : charge

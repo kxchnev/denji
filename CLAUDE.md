@@ -17,6 +17,7 @@
 ```
 packages/core/   пакет power — библиотека + CLI
 packages/docs/   Next.js + shadcn дока с живым playground (зависит от power)
+packages/vscode/ расширение VS Code: живое превью .pwr с драгом
 package.json     workspace-root (скрипты-прокси)
 ```
 
@@ -31,7 +32,19 @@ package.json     workspace-root (скрипты-прокси)
   точка стыковки + кубическая кривая), `measure.ts`.
 - `src/render/arch-svg.ts` — SVG-рендер без зависимостей.
 - `src/dsl/` — `arch-parse.ts` (парсер `.pwr`), `arch-edit.ts` (запись `@at` в
-  исходник построчно — для драга в плейграунде), `error.ts` (`DiagramParseError`).
+  исходник построчно — для драга; там же `findDeclarationLine`, одна и та же
+  «объявление — это одна строка» с `setNodePosition`), `error.ts`
+  (`DiagramParseError`).
+- `src/dsl/arch-parse.ts` заодно экспортирует свой словарь — `SHAPE_KIND_NAMES`,
+  `CONTAINER_KIND_NAMES`, `ARCH_OPERATORS` (порядок «длинные вперёд» —
+  обязателен), `DIRECTIVE_NAMES`, `ICON_PROP_NAMES`. Это для тех, кому язык надо
+  **написать**, а не разобрать (генератор подсветки). `test/arch-vocabulary.test.ts`
+  скармливает каждое слово парсеру, чтобы списки не разъехались с реальностью.
+- `src/interact.ts` — чистые функции для интерактивного просмотрщика:
+  `nodeAt` (хит-тест; фигура берётся целиком, контейнер — только за шапку,
+  побеждает самый глубокий), `nodeDepths`, `pinsFor`, `isBoxed`, `snapToGrid`.
+  Живут в ядре, потому что просмотрщиков теперь два (playground и VS Code) —
+  повторять эти правила по месту нельзя.
 - `src/check.ts` — статические проверки: ошибки парса/build плюс предупреждения
   о раскладке (`loose-node`, `hint-cycle`, `overlapping-siblings`,
   `unconnected-node`, `extreme-aspect-ratio`, `at-overrides-hint`). Проверку пересечений
@@ -109,15 +122,68 @@ Next.js App Router + Tailwind + shadcn-компоненты. Ядро подкл
 `lib/pwr-symbols.ts` и `lib/pwr-complete.ts` (там же таблица директив с
 разрешёнными контекстами и списки значений аргументов — самый большой кусок).
 
+### packages/vscode (расширение)
+
+Живое превью `.pwr` как у markdown, плюс драг узлов прямо в файл пользователя.
+Две сборки (esbuild, `esbuild.mjs`):
+
+- `dist/extension.js` (CJS, host) — `src/extension.ts` (команды
+  `power.showPreview` / `...ToSide`), `src/preview.ts` (`PreviewManager` — одно
+  превью на документ, HTML с CSP, дебаунс 60 мс как в `watch.ts`, сериализатор
+  для переживания reload), `src/lens.ts` (CodeLens «Open preview to the side»
+  над первой строкой), `src/edit.ts` + `src/diff.ts` (запись дропа),
+  `src/protocol.ts` (типы сообщений — общие с вебвью).
+- `syntaxes/pwr.tmLanguage.json` — подсветка. **Генерируется** скриптом
+  `scripts/generate-grammar.ts` из экспортов ядра, в гите её нет.
+- `dist/webview.js` (IIFE, browser) — `webview/main.ts` целиком тащит `power` и
+  делает всё: parse→layout→render, pan/zoom/fit, сетка (`webview/grid.ts` — порт
+  `docs/components/DiagramGrid.tsx`), хит-тест, драг, оверлей ошибки.
+
+⚠️ Ядро исполняется **в вебвью**, а не в host: драг перекладывает документ на
+каждом кадре (иначе контейнеры не растут и связи не перецеливаются), а IPC
+round-trip внутри 60fps-цикла заметен. Расширение самодостаточно всё равно —
+`power` забандлен, у пользователя ничего ставить не нужно.
+
+⚠️ Дроп пишется **построчным диффом** (`src/diff.ts` → `WorkspaceEdit`), а не
+заменой всего документа: `setNodePositions` переписывает объявления на месте и
+никогда не меняет число строк, поэтому сопоставление по индексу точное — и
+курсор, выделение и свёрнутые блоки автора остаются на месте. Один `applyEdit`
+на дроп = один шаг undo. Источник берётся из `document.getText()` в момент
+коммита, а не из копии вебвью (пока тянут узел, в редакторе могли печатать).
+
+⚠️ На каждый `move` host **обязательно** отвечает `source`, даже если правка
+ничего не изменила: вебвью до прихода авторитетного текста держит на экране
+собственный рендер драга, иначе узел прыгает домой на время round-trip.
+
+⚠️ Подсветка **не написана руками** — шестой копии грамматики в репозитории нет.
+`scripts/generate-grammar.ts` берёт слова из ядра (`SHAPE_KIND_NAMES`,
+`CONTAINER_KIND_NAMES`, `ARCH_OPERATORS`, `DIRECTIVE_NAMES`, `ICON_PROP_NAMES`,
+`STYLE_PROPS`, `CORNERS`, `themes`), а формы строк — из самого скрипта, потому
+что TextMate умеет только регэкспы. Добавил вид фигуры или директиву в ядро —
+подсветка узнает о ней на следующей сборке. Регистр: виды фигур ядро сверяет
+буквально (`App` — не вид), а имена директив и свойств прогоняет через
+`normalizePropName` — отсюда `alt` против `altI` в генераторе.
+⚠️ `test/grammar.test.ts` гоняет реальный движок (`vscode-textmate` +
+`vscode-oniguruma`) и проверяет **скоупы токенов**. Проверять, что нужные слова
+«есть в JSON», бесполезно: так и было, пока подсветка не работала вовсе.
+
+Пока сознательно нет: диагностик в Problems (предупреждения `checkDiagram`
+сейчас все с `line: null`).
+
 ## Команды (из корня)
 
-- `npm run build` — собрать ядро (`packages/core/dist`)
-- `npm test` / `npm run typecheck` — тесты/типы ядра
+- `npm run build` — собрать ядро (`packages/core/dist`) и расширение
+- `npm test` / `npm run typecheck` — тесты/типы ядра и расширения
 - `npm run docs` — dev-сервер доки; `npm run docs:build` — статический экспорт
 - `npm run -w docs validate` — прогнать все примеры доки через ядро
+- `npm run vscode` — пересборка расширения по изменениям; F5 (`.vscode/launch.json`)
+  открывает Extension Development Host на `packages/vscode/examples/sample.pwr`
+- `npm run vscode:package` — `.vsix`
 
 ## Конвенции
 
 - ESM, `NodeNext` в ядре. Импорты локальных модулей ядра — с расширением `.js`.
 - `strict` + `noUncheckedIndexedAccess` в ядре. Раскладка детерминирована.
-- Дока цепляется к **собранному** `power` → после правок ядра `npm run build`.
+- Дока и расширение цепляются к **собранному** `power` → после правок ядра
+  `npm run build`. Тесты расширения гоняют реальный `dist/webview.js` в jsdom,
+  так что сборка входит в `npm run -w power-vscode test`.
