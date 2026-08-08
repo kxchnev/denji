@@ -38,9 +38,17 @@ export {
   type Icon,
   type SimpleIconLike,
 } from "./model/icon.js";
-export { parseArchitecture } from "./dsl/arch-parse.js";
-export { setNodePosition, setNodePositions } from "./dsl/arch-edit.js";
+export {
+  parseArchitecture,
+  SHAPE_KIND_NAMES,
+  CONTAINER_KIND_NAMES,
+  ARCH_OPERATORS,
+  DIRECTIVE_NAMES,
+  ICON_PROP_NAMES,
+} from "./dsl/arch-parse.js";
+export { setNodePosition, setNodePositions, findDeclarationLine } from "./dsl/arch-edit.js";
 export { DiagramParseError } from "./dsl/error.js";
+export { snapToGrid, pinsFor, nodeDepths, nodeAt, isBoxed } from "./interact.js";
 
 import type { ArchDiagram } from "./model/arch.js";
 import { layoutArchitecture, type ArchLayoutOptions } from "./layout/arch/index.js";

@@ -15,8 +15,17 @@ import { isStyleSlot, lookupProp, setStyleProp, StyleValueError } from "../model
 import { IconError, type Icon } from "../model/icon.js";
 import { DiagramParseError, indentCol } from "./error.js";
 
-const SHAPE_KINDS = new Set<ShapeKind>(["app", "database", "queue", "rect"]);
-const CONTAINER_KINDS = new Set<ContainerKind>(["service", "group"]);
+/**
+ * The keywords that open a declaration. Exported as ordered lists — not just as
+ * the lookup sets below — because everything downstream that has to *spell* the
+ * grammar rather than parse it wants a stable order: a generated syntax
+ * highlighter, an autocomplete list, a message that enumerates the options.
+ */
+export const SHAPE_KIND_NAMES: readonly ShapeKind[] = ["app", "database", "queue", "rect"];
+export const CONTAINER_KIND_NAMES: readonly ContainerKind[] = ["service", "group"];
+
+const SHAPE_KINDS = new Set<ShapeKind>(SHAPE_KIND_NAMES);
+const CONTAINER_KINDS = new Set<ContainerKind>(CONTAINER_KIND_NAMES);
 
 // Connection operators, longest-first for the scanner.
 const ARCH_OPS: Array<[string, { dir: Dir; style: "solid" | "dashed" }]> = [
@@ -27,6 +36,13 @@ const ARCH_OPS: Array<[string, { dir: Dir; style: "solid" | "dashed" }]> = [
   ["<-", { dir: "from", style: "solid" }],
   ["--", { dir: "none", style: "solid" }],
 ];
+
+/**
+ * Just the operator spellings, still longest-first — a regex alternation needs
+ * that ordering for exactly the reason the scanner does, or `->` swallows the
+ * arrow out of `-.->`.
+ */
+export const ARCH_OPERATORS: readonly string[] = ARCH_OPS.map(([op]) => op);
 
 interface Frame {
   id: string;
@@ -229,7 +245,8 @@ export function parseArchitecture(src: string): ArchDiagram {
 }
 
 /** Icon blocks take their own small set of properties, not style properties. */
-const ICON_PROPS = new Set(["path", "color", "darkcolor", "viewbox", "title"]);
+export const ICON_PROP_NAMES: readonly string[] = ["path", "color", "darkcolor", "viewbox", "title"];
+const ICON_PROPS = new Set(ICON_PROP_NAMES);
 
 /** Read one or more `name: value` declarations, `;`-separated, into a block. */
 function readBlockProps(frame: BlockFrame, text: string, lineNo: number, raw: string): void {
@@ -442,6 +459,16 @@ const KNOWN = new Set([
   ...ALLOWED.connection,
   ...ALLOWED.text,
 ]);
+
+/**
+ * Every directive name the parser recognizes anywhere, lower-cased as it
+ * normalizes them, sorted so a generated file does not churn.
+ *
+ * This is *not* the whole `@…` vocabulary: an inline style property is also
+ * written as a directive, and those names live in `STYLE_PROPS`. Anything
+ * spelling the language out has to read both.
+ */
+export const DIRECTIVE_NAMES: readonly string[] = [...KNOWN].sort();
 
 const WHERE: Record<DirectiveCtx, string> = {
   shape: "on a shape",

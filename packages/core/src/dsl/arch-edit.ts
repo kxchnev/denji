@@ -18,6 +18,24 @@ import type { Point } from "../model/geometry.js";
 /** A line that declares a node — everything that can carry `@at`. */
 const DECLARATION = /^(\s*)(app|database|queue|rect|service|group)(\s+)([A-Za-z0-9_]+)(.*)$/;
 
+/**
+ * The last line declaring `id`, 1-based, or null. The *last* one because for a
+ * duplicate id that is the offending declaration; for everything else there is
+ * only one. `style` and `icon` are in the list because they carry ids too — a
+ * build error naming one has to point somewhere.
+ *
+ * Lives here rather than in `check.ts` because it is the same "a declaration is
+ * one line, and this is what its head looks like" assumption as {@link
+ * setNodePosition}: when one has to change, so does the other.
+ */
+export function findDeclarationLine(source: string, id: string): number | null {
+  const decl = new RegExp(`^\\s*(?:app|database|queue|rect|service|group|style|icon)\\s+${id}\\b`);
+  const lines = source.split(/\r?\n/);
+  let found: number | null = null;
+  for (let i = 0; i < lines.length; i++) if (decl.test(lines[i]!)) found = i + 1;
+  return found;
+}
+
 /** A leading `"label"` in a declaration's tail. */
 const LABEL = /^\s*("[^"]*")/;
 

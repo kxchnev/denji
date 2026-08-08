@@ -7,8 +7,11 @@ import {
   renderArchitecture,
   resolveTheme,
   setNodePositions,
-  DEFAULT_HEADER_H,
-  GRID,
+  isBoxed,
+  nodeAt,
+  nodeDepths,
+  pinsFor,
+  snapToGrid,
   DiagramParseError,
   type ArchDiagram,
   type ArchNode,
@@ -26,12 +29,6 @@ const MAX_SCALE = 4;
 /** Breathing room left around the diagram when fitting it to the viewport. */
 const FIT_MARGIN = 16;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-/**
- * A drop lands on the same lattice the layout sizes boxes on, so a dragged node
- * stays aligned with the ones still placed by hints, and the coordinate written
- * into the document stays a round number.
- */
-const snap = (v: number) => Math.round(v / GRID) * GRID;
 
 /**
  * The first fit has to land before the browser paints, or the diagram is visible
@@ -78,40 +75,6 @@ function render(dsl: string): Rendered {
     const error = e instanceof DiagramParseError ? e.message : (e as Error).message;
     return { svg: null, error, width: 0, height: 0, dsl, diagram: null };
   }
-}
-
-/**
- * Every node that has no coordinates yet, at the coordinates it currently sits on.
- *
- * A drag writes all of these before it writes the move itself, which turns the
- * whole document into one placed by coordinates. Anything less does not hold still:
- * take one node out of a relative scope and everything left in it re-arranges, and
- * a child that grows its container re-arranges that container's scope in turn — so
- * the one thing that visibly would not move is the node under the pointer.
- */
-function pinsFor(diagram: ArchDiagram, movingId: string): Array<{ id: string; at: Point }> {
-  return diagram.nodes
-    .filter((n) => n.id !== movingId && !n.hint?.at && n.local)
-    .map((n) => ({ id: n.id, at: n.local! }));
-}
-
-/**
- * How deep each node sits in the container tree. A pointer over a child is also
- * over its parents, so the deepest hit is the one that meant it.
- */
-function depthMap(diagram: ArchDiagram | null): Map<string, number> {
-  const out = new Map<string, number>();
-  if (!diagram) return out;
-  const kids = new Map<string, readonly string[]>();
-  for (const n of diagram.nodes) if (n.type === "container") kids.set(n.id, n.children);
-  const child = new Set<string>();
-  for (const list of kids.values()) for (const id of list) child.add(id);
-  const walk = (id: string, depth: number): void => {
-    out.set(id, depth);
-    for (const c of kids.get(id) ?? []) walk(c, depth + 1);
-  };
-  for (const n of diagram.nodes) if (!child.has(n.id)) walk(n.id, 0);
-  return out;
 }
 
 export function Diagram({
@@ -167,7 +130,7 @@ export function Diagram({
   const shown = current.svg ? current : lastGood.current;
   const { svg, width, height, pinned } = shown;
   const error = current.error;
-  const depths = useMemo(() => depthMap(shown.diagram), [shown.diagram]);
+  const depths = useMemo(() => nodeDepths(shown.diagram), [shown.diagram]);
   /**
    * `view` pans in *document* coordinates, not in the rendered SVG's. The layout
    * shifts every rect to frame the drawing, and that shift changes the moment a
@@ -342,24 +305,9 @@ export function Diagram({
     };
   };
 
-  /**
-   * The node a pointer at `p` would pick up, or null for empty canvas.
-   *
-   * A shape is grabbable anywhere; a container only by its title band, so that its
-   * body stays free for panning and for the children sitting in it.
-   */
-  const grabbable = (p: Point): ArchNode | null => {
-    if (!onMoveNodes || !fitted) return null;
-    let best: ArchNode | null = null;
-    for (const n of shown.diagram?.nodes ?? []) {
-      const r = n.rect;
-      if (!r || !n.local) continue;
-      const bottom = n.type === "container" ? r.y + DEFAULT_HEADER_H : r.y + r.height;
-      if (p.x < r.x || p.x > r.x + r.width || p.y < r.y || p.y > bottom) continue;
-      if (!best || (depths.get(n.id) ?? 0) >= (depths.get(best.id) ?? 0)) best = n;
-    }
-    return best;
-  };
+  /** The node a pointer at `p` would pick up — nothing at all when read-only. */
+  const grabbable = (p: Point): ArchNode | null =>
+    onMoveNodes && fitted ? nodeAt(shown.diagram, p, depths) : null;
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -379,9 +327,7 @@ export function Diagram({
         src: source,
         base: hit.local,
         fromCursor: cursor,
-        boxed: shown.diagram.nodes.some(
-          (n) => n.type === "container" && n.children.includes(hit.id),
-        ),
+        boxed: isBoxed(shown.diagram, hit.id),
         scale: view.scale,
         at: hit.local,
         freeze: pinsFor(shown.diagram, hit.id),
@@ -402,8 +348,8 @@ export function Diagram({
       // At the top level there is no box and no wall — the drawing simply grows.
       const floor = nd.boxed ? 0 : -Infinity;
       const at = {
-        x: Math.max(floor, snap(nd.base.x + (nd.cursor.x - nd.fromCursor.x) / nd.scale)),
-        y: Math.max(floor, snap(nd.base.y + (nd.cursor.y - nd.fromCursor.y) / nd.scale)),
+        x: Math.max(floor, snapToGrid(nd.base.x + (nd.cursor.x - nd.fromCursor.x) / nd.scale)),
+        y: Math.max(floor, snapToGrid(nd.base.y + (nd.cursor.y - nd.fromCursor.y) / nd.scale)),
       };
       // Most frames land on the same lattice point as the last one; re-rendering
       // for them would mean parsing and laying the document out for nothing.

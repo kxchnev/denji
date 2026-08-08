@@ -10,6 +10,7 @@
  * The layout heuristics deliberately stay few and blunt. A warning nobody acts
  * on is worse than no warning, because it teaches the reader to ignore the list.
  */
+import { findDeclarationLine } from "./dsl/arch-edit.js";
 import { parseArchitecture } from "./dsl/arch-parse.js";
 import { DiagramParseError } from "./dsl/error.js";
 import { layoutArchitecture } from "./layout/arch/index.js";
@@ -119,15 +120,6 @@ function fromThrown(err: unknown, source: string): Diagnostic {
     col: line === null ? null : 1,
     srcLine: line === null ? undefined : (source.split(/\r?\n/)[line - 1] ?? ""),
   };
-}
-
-/** The last line declaring `id` — for a duplicate, that is the offending one. */
-function findDeclarationLine(source: string, id: string): number | null {
-  const decl = new RegExp(`^\\s*(?:app|database|queue|rect|service|group|style|icon)\\s+${id}\\b`);
-  const lines = source.split(/\r?\n/);
-  let found: number | null = null;
-  for (let i = 0; i < lines.length; i++) if (decl.test(lines[i]!)) found = i + 1;
-  return found;
 }
 
 /** Every scope: the top level, plus each container's children. */
