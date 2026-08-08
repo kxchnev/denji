@@ -46,7 +46,13 @@ export {
   DIRECTIVE_NAMES,
   ICON_PROP_NAMES,
 } from "./dsl/arch-parse.js";
-export { setNodePosition, setNodePositions, findDeclarationLine } from "./dsl/arch-edit.js";
+export {
+  setNodePosition,
+  setNodePositions,
+  findDeclaration,
+  findHeaderLine,
+  type Declaration,
+} from "./dsl/arch-edit.js";
 export { DiagramParseError } from "./dsl/error.js";
 export { snapToGrid, pinsFor, nodeDepths, nodeAt, isBoxed } from "./interact.js";
 

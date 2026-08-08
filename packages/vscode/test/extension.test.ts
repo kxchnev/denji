@@ -26,6 +26,18 @@ interface LensProvider {
   provideCodeLenses: (document: unknown) => Lens[];
 }
 
+/** What the extension put in the Problems panel, by document uri. */
+type Published = Map<string, FakeDiagnostic[] | undefined>;
+
+interface FakeDiagnostic {
+  range: { line: number; start: number; end: number };
+  message: string;
+  severity: number;
+  source?: string;
+  code?: string;
+  relatedInformation?: Array<{ message: string; line: number }>;
+}
+
 interface Recorder {
   commands: string[];
   serializers: string[];
@@ -33,6 +45,13 @@ interface Recorder {
   lensProviders: Array<{ selector: { language?: string }; provider: LensProvider }>;
   /** What `power.preview.codeLens` and friends answer during a test. */
   config: Record<string, unknown>;
+  /** Documents the extension believes are open, which it checks on activation. */
+  documents: unknown[];
+  published: Published;
+  /** The handlers the extension subscribed to, so a test can fire them. */
+  onOpen: Array<(d: unknown) => void>;
+  onClose: Array<(d: unknown) => void>;
+  onConfig: Array<(e: { affectsConfiguration: (s: string) => boolean }) => void>;
 }
 
 const recorder = (): Recorder => ({
@@ -41,6 +60,11 @@ const recorder = (): Recorder => ({
   subscriptions: [],
   lensProviders: [],
   config: {},
+  documents: [],
+  published: new Map(),
+  onOpen: [],
+  onClose: [],
+  onConfig: [],
 });
 
 /** The slice of the VS Code API the host half touches on the way up. */
@@ -70,26 +94,71 @@ function stub(rec: Recorder): Record<string, unknown> {
         rec.lensProviders.push({ selector, provider });
         return { dispose() {} };
       },
+      createDiagnosticCollection: () => ({
+        set: (uri: { toString: () => string }, list: FakeDiagnostic[]) =>
+          rec.published.set(uri.toString(), list),
+        delete: (uri: { toString: () => string }) => rec.published.delete(uri.toString()),
+        dispose() {},
+      }),
     },
     workspace: {
       getConfiguration: () => ({
         get: (k: string, d: unknown) => (k in rec.config ? rec.config[k] : d),
       }),
+      get textDocuments() {
+        return rec.documents;
+      },
+      onDidOpenTextDocument: (h: (d: unknown) => void) => {
+        rec.onOpen.push(h);
+        return { dispose() {} };
+      },
+      onDidCloseTextDocument: (h: (d: unknown) => void) => {
+        rec.onClose.push(h);
+        return { dispose() {} };
+      },
       onDidChangeTextDocument: () => ({ dispose() {} }),
-      onDidChangeConfiguration: () => ({ dispose() {} }),
-      textDocuments: [],
+      onDidChangeConfiguration: (h: (e: { affectsConfiguration: (s: string) => boolean }) => void) => {
+        rec.onConfig.push(h);
+        return { dispose() {} };
+      },
       applyEdit: async () => true,
     },
     Uri: { joinPath: () => ({}), parse: (s: string) => ({ toString: () => s }) },
     ViewColumn: { One: 1, Beside: -2 },
     WorkspaceEdit: class {},
     Range: class {
-      constructor(...args: unknown[]) {
-        Object.assign(this, { args });
-      }
+      constructor(
+        public line: number,
+        public start: number,
+        public endLine?: number,
+        public end?: number,
+      ) {}
     },
     Position: class {},
     Selection: class {},
+    Location: class {
+      constructor(
+        public uri: unknown,
+        public range: { line: number },
+      ) {}
+    },
+    Diagnostic: class {
+      source?: string;
+      code?: string;
+      relatedInformation?: unknown[];
+      constructor(
+        public range: unknown,
+        public message: string,
+        public severity: number,
+      ) {}
+    },
+    DiagnosticRelatedInformation: class {
+      constructor(
+        public location: { range: { line: number } },
+        public message: string,
+      ) {}
+    },
+    DiagnosticSeverity: { Error: 0, Warning: 1 },
     CodeLens: class {
       constructor(
         public range: unknown,
@@ -132,6 +201,33 @@ const test = (name: string, fn: () => void): void => {
 
 /** The slice of a `TextDocument` a CodeLens provider looks at. */
 const doc = (uri: string): unknown => ({ uri: { toString: () => uri } });
+
+/** A .pwr document as the diagnostics code reads it: text, plus line lookup. */
+function pwrDoc(uri: string, text: string): unknown {
+  const lines = text.split("\n");
+  return {
+    uri: { toString: () => uri },
+    languageId: "power",
+    getText: () => text,
+    lineCount: lines.length,
+    lineAt: (i: number) => ({
+      text: lines[i] ?? "",
+      range: { end: { character: (lines[i] ?? "").length } },
+    }),
+  };
+}
+
+/** A diagram whose `stray` is loose and unconnected — two warnings, one line. */
+const STRAY = ['architecture', '  app a "A"', '  app b "B" @rightOf(a)', '  app stray "S"', "  a -> b"].join(
+  "\n",
+);
+
+/** Open a document, run every handler that would fire, and read what was published. */
+function publish(uri: string, text: string): FakeDiagnostic[] {
+  const d = pwrDoc(uri, text);
+  for (const h of rec.onOpen) h(d);
+  return rec.published.get(uri) ?? [];
+}
 
 // The bundle is loaded and activated exactly once, which is also all VS Code
 // ever does. Everything below reads the same recording.
@@ -214,6 +310,84 @@ test("activates on the language, or the lens is never there to be clicked", () =
   // Commands self-activate; a CodeLens has to already exist. Without this the
   // offer only appears after something else has woken the extension.
   assert.ok(manifest.activationEvents.includes("onLanguage:power"));
+});
+
+test("puts check's findings in the Problems panel, on the right line", () => {
+  const found = publish("file:///stray.pwr", STRAY);
+  const loose = found.find((d) => d.code === "loose-node");
+  assert.ok(loose, "the loose node is reported");
+  assert.equal(loose.severity, 1, "as a warning");
+  assert.equal(loose.source, "power", "attributed, so the panel can group it");
+  // `  app stray "S"` is line 4 (0-based 3), and `stray` starts at column 6.
+  assert.deepEqual(
+    { line: loose.range.line, start: loose.range.start, end: loose.range.end },
+    { line: 3, start: 6, end: 11 },
+    "squiggled under the id, not the whole line",
+  );
+});
+
+test("makes both ends of an overlap-style finding reachable", () => {
+  // Two nodes, one message: the second is somewhere else in the file, and a
+  // reader who cannot get there has half a diagnostic.
+  const src = 'architecture\n  app a "A" @rightOf(b)\n  app b "B" @rightOf(a)\n';
+  const found = publish("file:///cycle.pwr", src);
+  const cycle = found.find((d) => d.code === "hint-cycle");
+  assert.ok(cycle, "the cycle is reported");
+  assert.ok(
+    (cycle.relatedInformation?.length ?? 0) > 0,
+    "and the other node it names is a place you can go",
+  );
+});
+
+test("reports a parse error where the parser stopped", () => {
+  const found = publish("file:///bad.pwr", 'architecture\n  app a "A" @nope(1)\n');
+  assert.equal(found.length, 1, "an error stops the checks, so nothing else is listed");
+  assert.equal(found[0]!.severity, 0, "as an error");
+  assert.equal(found[0]!.code, "parse-error");
+  assert.equal(found[0]!.range.line, 1);
+});
+
+test("can be turned down to errors, or off altogether", () => {
+  rec.config["diagnostics"] = "errors";
+  try {
+    assert.deepEqual(publish("file:///stray.pwr", STRAY), [], "the heuristics go quiet");
+    assert.equal(
+      publish("file:///bad.pwr", 'architecture\n  app a "A" @nope(1)\n').length,
+      1,
+      "but a broken document still says so",
+    );
+    rec.config["diagnostics"] = "off";
+    publish("file:///bad.pwr", 'architecture\n  app a "A" @nope(1)\n');
+    assert.equal(rec.published.has("file:///bad.pwr"), false, "and off means nothing at all");
+  } finally {
+    delete rec.config["diagnostics"];
+  }
+});
+
+test("clears a document's findings when it is closed", () => {
+  const d = pwrDoc("file:///gone.pwr", STRAY);
+  for (const h of rec.onOpen) h(d);
+  assert.ok(rec.published.has("file:///gone.pwr"));
+  for (const h of rec.onClose) h(d);
+  assert.equal(
+    rec.published.has("file:///gone.pwr"),
+    false,
+    "a list of problems in a file nobody can see is not useful",
+  );
+});
+
+test("leaves documents in other languages alone", () => {
+  const other = { ...(pwrDoc("file:///a.ts", STRAY) as object), languageId: "typescript" };
+  for (const h of rec.onOpen) h(other);
+  assert.equal(rec.published.has("file:///a.ts"), false);
+});
+
+test("declares the setting it reads", () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
+  const prop = manifest.contributes.configuration.properties["power.diagnostics"];
+  assert.ok(prop, "power.diagnostics is declared");
+  assert.deepEqual(prop.enum, ["all", "errors", "off"]);
+  assert.equal(prop.default, "all", "matching what `power check` reports");
 });
 
 test("hands everything it registered to the context, so it all gets disposed", () => {

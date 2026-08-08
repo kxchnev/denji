@@ -2,7 +2,7 @@
  * Turning a drop into an edit of the user's file.
  */
 import * as vscode from "vscode";
-import { findDeclarationLine, setNodePositions } from "power";
+import { findDeclaration, setNodePositions } from "power";
 import { changedLines } from "./diff.js";
 import type { Move } from "./protocol.js";
 
@@ -37,18 +37,18 @@ export async function applyMoves(
 
 /** Put the cursor on the line declaring `id`, and scroll it into view. */
 export function revealNode(document: vscode.TextDocument, id: string): void {
-  const line = findDeclarationLine(document.getText(), id);
-  if (line === null) return;
+  // The columns come from the core along with the line: where the id sits in a
+  // declaration is a fact about the declaration's shape, not something every
+  // caller should re-derive. Landing on the id rather than at column 0 matters —
+  // the declaration keyword is never what someone clicking a node came for.
+  const decl = findDeclaration(document.getText(), id);
+  if (!decl) return;
   // By uri, not by object: a file closed and reopened is a different
   // `TextDocument` for the same thing.
   const key = document.uri.toString();
   const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === key);
   if (!editor) return;
-  // Land on the id itself rather than at column 0 — the declaration keyword is
-  // never what someone clicking a node in the picture came for.
-  const text = document.lineAt(line - 1).text;
-  const col = Math.max(0, text.indexOf(id));
-  const at = new vscode.Position(line - 1, col);
+  const at = new vscode.Position(decl.line - 1, decl.col - 1);
   editor.selection = new vscode.Selection(at, at);
   editor.revealRange(new vscode.Range(at, at), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }

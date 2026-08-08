@@ -94,6 +94,21 @@
     "configuration": {
       "title": "power",
       "properties": {
+        "power.diagnostics": {
+          "type": "string",
+          "enum": [
+            "all",
+            "errors",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Errors and layout warnings, the same list `power check` prints.",
+            "Only what stops the diagram rendering.",
+            "Nothing."
+          ],
+          "default": "all",
+          "description": "What to report in the Problems panel."
+        },
         "power.preview.codeLens": {
           "type": "boolean",
           "default": true,

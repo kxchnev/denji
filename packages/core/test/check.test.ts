@@ -176,3 +176,115 @@ describe("checkDiagram — exact coordinates", () => {
     );
   });
 });
+
+/**
+ * A finding with nowhere to go is barely a finding: a reader cannot jump to it,
+ * an editor cannot underline it, and `power check` can only name the file. Every
+ * warning already knew which nodes it was about, so the position was always
+ * derivable — these pin that it is actually derived, and derived correctly.
+ */
+describe("checkDiagram — every finding says where", () => {
+  /** The text a diagnostic's own span covers, as the reader would see it. */
+  const spanOf = (d: { srcLine?: string; col: number | null; endCol?: number | null }): string =>
+    (d.srcLine ?? "").slice((d.col ?? 1) - 1, (d.endCol ?? 1) - 1);
+
+  const find = (src: string, code: DiagnosticCode) => {
+    const d = checkDiagram(src).diagnostics.find((x) => x.code === code);
+    if (!d) throw new Error(`no ${code} in:\n${src}`);
+    return d;
+  };
+
+  it("points a loose node at its own declaration, under the id", () => {
+    const src = [
+      "architecture",
+      '  app a "A"',
+      '  app b "B" @rightOf(a)',
+      '  app stray "Stray"',
+    ].join("\n");
+    const d = find(src, "loose-node");
+    expect(d.line).toBe(4);
+    expect(spanOf(d)).toBe("stray");
+    expect(d.srcLine).toContain("Stray");
+  });
+
+  it("points an unconnected shape at its declaration", () => {
+    const src = [
+      "architecture",
+      '  app a "A"',
+      '  app b "B" @rightOf(a)',
+      '  app lonely "L" @below(a)',
+      "  a -> b",
+    ].join("\n");
+    const d = find(src, "unconnected-node");
+    expect(d.line).toBe(4);
+    expect(spanOf(d)).toBe("lonely");
+  });
+
+  it("points a dead relation at the node carrying it", () => {
+    const src = 'architecture\n  app a "A"\n  app b "B" @rightOf(a) @at(0, 200)\n';
+    const d = find(src, "at-overrides-hint");
+    expect(d.line).toBe(3);
+    expect(spanOf(d)).toBe("b");
+  });
+
+  it("points a hint cycle at the first node it names", () => {
+    const src = 'architecture\n  app a "A" @rightOf(b)\n  app b "B" @rightOf(a)\n';
+    const d = find(src, "hint-cycle");
+    expect(d.line).not.toBeNull();
+    expect(spanOf(d)).toBe(d.nodes![0]);
+  });
+
+  it("points a strip at the architecture line, where the fix goes", () => {
+    const chain = ["# a note first, so line 1 is not the header", "architecture", '  app a0 "S0"'];
+    for (let i = 1; i < 6; i++) chain.push(`  app a${i} "S${i}" @rightOf(a${i - 1})`);
+    for (let i = 1; i < 6; i++) chain.push(`  a${i - 1} -> a${i}`);
+    const d = find(chain.join("\n"), "extreme-aspect-ratio");
+    expect(d.line).toBe(2);
+    expect(spanOf(d)).toBe("architecture");
+    // It is about the drawing, not about any one node.
+    expect(d.nodes).toBeUndefined();
+  });
+
+  it("finds a declaration indented inside a container", () => {
+    const src = [
+      "architecture",
+      '  app gw "GW"',
+      '  service s "S" @below(gw) {',
+      '    app api "API"',
+      '    app orphan "Orphan" @rightOf(api)',
+      "  }",
+      // The container itself is not connected, so it cannot vouch for its child.
+      "  gw -> api",
+    ].join("\n");
+    const d = find(src, "unconnected-node");
+    expect(d.line).toBe(5);
+    expect(spanOf(d)).toBe("orphan");
+    expect(d.col).toBe(9); // past the four spaces and "app "
+  });
+
+  it("recovers a build error's position, under the offending id", () => {
+    const d = find('architecture\n  app a "A"\n  app a "Again"\n', "build-error");
+    expect(d.line).toBe(3);
+    expect(spanOf(d)).toBe("a");
+  });
+
+  it("does not point a parse error at a span it cannot measure", () => {
+    const d = find('architecture\n  app a "A" @nope(1)\n', "parse-error");
+    expect(d.line).toBe(2);
+    expect(d.endCol ?? null).toBeNull();
+  });
+
+  it("never picks an id out of a comment or a connection", () => {
+    const src = [
+      "architecture",
+      "  # app stray is only mentioned here",
+      '  app a "A"',
+      '  app b "B" @rightOf(a)',
+      '  app stray "Stray"',
+      "  a -> stray",
+    ].join("\n");
+    const d = find(src, "loose-node");
+    expect(d.line).toBe(5);
+    expect(d.srcLine).toContain('"Stray"');
+  });
+});

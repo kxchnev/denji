@@ -143,10 +143,14 @@ program
       for (const d of diagnostics) {
         const at = d.line === null ? where : `${where}:${d.line}:${d.col}`;
         console.error(`${at}  ${d.severity}  ${d.message}  [${d.code}]`);
-        // The caret only means anything when the column is a real offset.
+        // The caret only means anything when the column is a real offset. When
+        // the finding also knows how far it reaches, underline that instead of
+        // pointing at its first character.
         if (d.srcLine) {
+          const col = d.col ?? 1;
+          const width = Math.max(1, (d.endCol ?? col + 1) - col);
           console.error(`    ${d.srcLine}`);
-          console.error(`    ${" ".repeat(Math.max(0, (d.col ?? 1) - 1))}^`);
+          console.error(`    ${" ".repeat(Math.max(0, col - 1))}^${"~".repeat(width - 1)}`);
         }
       }
       console.error(`\n${errors} error(s), ${warnings} warning(s)`);

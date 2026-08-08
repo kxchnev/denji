@@ -32,8 +32,10 @@ package.json     workspace-root (скрипты-прокси)
   точка стыковки + кубическая кривая), `measure.ts`.
 - `src/render/arch-svg.ts` — SVG-рендер без зависимостей.
 - `src/dsl/` — `arch-parse.ts` (парсер `.pwr`), `arch-edit.ts` (запись `@at` в
-  исходник построчно — для драга; там же `findDeclarationLine`, одна и та же
-  «объявление — это одна строка» с `setNodePosition`), `error.ts`
+  исходник построчно — для драга; там же `findDeclaration` и `findHeaderLine`:
+  строка **и колонки** объявления, потому что «где в объявлении лежит id» — факт
+  о его форме, а не то, что каждый вызывающий пересчитывает сам; та же
+  «объявление — это одна строка», что и у `setNodePosition`), `error.ts`
   (`DiagramParseError`).
 - `src/dsl/arch-parse.ts` заодно экспортирует свой словарь — `SHAPE_KIND_NAMES`,
   `CONTAINER_KIND_NAMES`, `ARCH_OPERATORS` (порядок «длинные вперёд» —
@@ -49,6 +51,13 @@ package.json     workspace-root (скрипты-прокси)
   о раскладке (`loose-node`, `hint-cycle`, `overlapping-siblings`,
   `unconnected-node`, `extreme-aspect-ratio`, `at-overrides-hint`). Проверку пересечений
   переиспользует `docs/scripts/validate-examples.ts` — не дублировать.
+  ⚠️ **Каждая находка обязана знать, где она.** `nodes[]` был там всегда, а
+  позиция — нет, и из-за этого предупреждения не могли попасть ни в Problems, ни
+  в кликабельный вывод CLI. Теперь `warn()` берёт `findDeclaration(source,
+  nodes[0])` и заполняет `line`/`col`/`endCol`/`srcLine`; `extreme-aspect-ratio`
+  единственный без узлов — он про рисунок целиком и садится на строку
+  `architecture`, где и лежит лечение. Если id не нашёлся — остаются `null`:
+  выдуманная позиция уводит читателя не туда с полной уверенностью.
 - `src/watch.ts` — живое превью: `node:http` + SSE, следит за **директорией**
   (atomic rename при сохранении убивает file-watcher), держит последний удачный
   рендер и показывает ошибку оверлеем.
@@ -131,8 +140,13 @@ Next.js App Router + Tailwind + shadcn-компоненты. Ядро подкл
   `power.showPreview` / `...ToSide`), `src/preview.ts` (`PreviewManager` — одно
   превью на документ, HTML с CSP, дебаунс 60 мс как в `watch.ts`, сериализатор
   для переживания reload), `src/lens.ts` (CodeLens «Open preview to the side»
-  над первой строкой), `src/edit.ts` + `src/diff.ts` (запись дропа),
-  `src/protocol.ts` (типы сообщений — общие с вебвью).
+  над первой строкой), `src/diagnostics.ts` (`checkDiagram` → Problems, дебаунс
+  300 мс — не 60 как у превью: мигающая волнистая линия под недопечатанной
+  строкой хуже опоздавшей, и тут полный parse+layout; `nodes[1..]` становятся
+  `relatedInformation` через `findDeclaration`; настройка `power.diagnostics` —
+  `all`/`errors`/`off`, потому что предупреждения раскладки эвристичны и спорить
+  с ними должно быть можно выключателем), `src/edit.ts` + `src/diff.ts` (запись
+  дропа), `src/protocol.ts` (типы сообщений — общие с вебвью).
 - `syntaxes/pwr.tmLanguage.json` — подсветка. **Генерируется** скриптом
   `scripts/generate-grammar.ts` из экспортов ядра, в гите её нет.
 - `dist/webview.js` (IIFE, browser) — `webview/main.ts` целиком тащит `power` и
@@ -167,8 +181,6 @@ round-trip внутри 60fps-цикла заметен. Расширение с
 `vscode-oniguruma`) и проверяет **скоупы токенов**. Проверять, что нужные слова
 «есть в JSON», бесполезно: так и было, пока подсветка не работала вовсе.
 
-Пока сознательно нет: диагностик в Problems (предупреждения `checkDiagram`
-сейчас все с `line: null`).
 
 ## Команды (из корня)
 

@@ -16,6 +16,12 @@ The file itself is syntax-highlighted: keywords, ids, labels, connection
 operators and `@directives`, with a directive the language does not know painted
 as an error rather than as a directive.
 
+What `power check` reports shows up in the Problems panel as you type: parse and
+build errors, plus the layout warnings — a node nothing points at, a shape
+nobody connects to, a relation that `@at` has made dead, a diagram that has
+become a strip. Each one squiggles the id it is about, and a warning naming two
+nodes lets you jump to either.
+
 - **Pan** — drag the canvas. **Zoom** — wheel, or the buttons in the corner.
   **Fit** — the ⤢ button.
 - **Move a node** — drag it. A shape is grabbable anywhere, a container by its
@@ -32,6 +38,7 @@ of a relative scope and everything left in it re-arranges.
 
 | Setting | Default | |
 |---|---|---|
+| `power.diagnostics` | `all` | What lands in the Problems panel: `all`, `errors`, or `off`. The layout warnings are heuristics — turn them down rather than argue with them. |
 | `power.preview.codeLens` | `true` | Offer "Open preview to the side" above the first line, until a preview is open. |
 | `power.preview.grid` | `true` | Draw the dot grid behind the diagram. |
 | `power.preview.theme` | `auto` | `auto` follows the editor's colour theme. A document with `@theme(...)` overrides it either way. |

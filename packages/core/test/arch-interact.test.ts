@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
-import { findDeclarationLine } from "../src/dsl/arch-edit.js";
+import { findDeclaration, findHeaderLine } from "../src/dsl/arch-edit.js";
 import { layoutArchitecture } from "../src/layout/arch/index.js";
 import { isBoxed, nodeAt, nodeDepths, pinsFor, snapToGrid } from "../src/interact.js";
 import type { ArchDiagram, ArchNode } from "../src/model/arch.js";
@@ -113,21 +113,59 @@ describe("isBoxed", () => {
   });
 });
 
-describe("findDeclarationLine", () => {
+describe("findDeclaration", () => {
+  /** The text the returned span actually covers — the whole point of the columns. */
+  const span = (src: string, id: string): string | null => {
+    const d = findDeclaration(src, id);
+    return d && d.text.slice(d.col - 1, d.endCol - 1);
+  };
+
   it("finds the line a node is declared on, 1-based", () => {
     const src = 'architecture\n  app a "A"\n  service s "S" {\n    app b "B"\n  }\n';
-    expect(findDeclarationLine(src, "a")).toBe(2);
-    expect(findDeclarationLine(src, "s")).toBe(3);
-    expect(findDeclarationLine(src, "b")).toBe(4);
-    expect(findDeclarationLine(src, "nope")).toBeNull();
+    expect(findDeclaration(src, "a")?.line).toBe(2);
+    expect(findDeclaration(src, "s")?.line).toBe(3);
+    expect(findDeclaration(src, "b")?.line).toBe(4);
+    expect(findDeclaration(src, "nope")).toBeNull();
+  });
+
+  it("spans the id itself, not the keyword before it", () => {
+    const src = 'architecture\n  app a "A"\n  service s "S" {\n    app longer "L"\n  }\n';
+    expect(span(src, "a")).toBe("a");
+    expect(span(src, "longer")).toBe("longer");
+    // Four spaces of indent, then "app ".
+    expect(findDeclaration(src, "longer")?.col).toBe(9);
+  });
+
+  it("hands back the whole line, for a caret to sit under", () => {
+    const src = 'architecture\n  app a "A" @icon(redis)\n';
+    expect(findDeclaration(src, "a")?.text).toBe('  app a "A" @icon(redis)');
   });
 
   it("returns the last of several — for a duplicate id that is the offending one", () => {
-    expect(findDeclarationLine('architecture\n  app a "A"\n  app a "again"\n', "a")).toBe(3);
+    expect(findDeclaration('architecture\n  app a "A"\n  app a "again"\n', "a")?.line).toBe(3);
   });
 
   it("is not fooled by a connection or a comment naming the id", () => {
     const src = 'architecture\n  app a "A"\n  app b "B"\n  # app b again\n  a -> b\n';
-    expect(findDeclarationLine(src, "b")).toBe(3);
+    expect(findDeclaration(src, "b")?.line).toBe(3);
+  });
+
+  it("does not match an id that merely starts another one", () => {
+    const src = 'architecture\n  app apiGateway "G"\n  app api "A" @rightOf(apiGateway)\n';
+    expect(findDeclaration(src, "api")?.line).toBe(3);
+    expect(findDeclaration(src, "apiGateway")?.line).toBe(2);
+  });
+});
+
+describe("findHeaderLine", () => {
+  it("finds the architecture line and spans the keyword", () => {
+    const src = '# a note\n\narchitecture @spacing(40)\n  app a "A"\n';
+    const h = findHeaderLine(src)!;
+    expect(h.line).toBe(3);
+    expect(h.text.slice(h.col - 1, h.endCol - 1)).toBe("architecture");
+  });
+
+  it("has nothing to point at in a document without one", () => {
+    expect(findHeaderLine('app a "A"\n')).toBeNull();
   });
 });

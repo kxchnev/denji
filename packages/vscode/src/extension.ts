@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { registerDiagnostics } from "./diagnostics.js";
 import { OpenPreviewLens } from "./lens.js";
 import { PreviewManager } from "./preview.js";
 
@@ -23,6 +24,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   new OpenPreviewLens(previews).register(context);
+  registerDiagnostics(context);
 }
 
 export function deactivate(): void {}
