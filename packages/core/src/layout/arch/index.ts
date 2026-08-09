@@ -1,8 +1,9 @@
-import type { ArchDiagram, ContainerText, Corner, StyleProps } from "../../model/arch.js";
+import type { ArchDiagram, ContainerText, Corner, Shape, StyleProps } from "../../model/arch.js";
 import { resolveStyle } from "../../model/style.js";
 import type { Size } from "../../model/geometry.js";
 import { ceilToGrid } from "./grid.js";
 import {
+  chooseShapeWidths,
   ICON_GAP,
   ICON_SIZE,
   measureLabelWidth,
@@ -96,10 +97,18 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     return resolveStyle(diagram.styles, n.kind, n.styleRefs, n.styleProps);
   };
 
+  // One width for every leaf, decided before anything is sized. It depends only
+  // on labels, kinds and marks — never on geometry — which is why a flat pass
+  // can settle it up front and the bottom-up recursion below just reads it.
+  const shapeWidths = chooseShapeWidths(
+    diagram.nodes.filter((n): n is Shape => n.type === "shape"),
+    (s) => resolveStyle(diagram.styles, s.kind, s.styleRefs, s.styleProps),
+  );
+
   const sizeNode = (id: string, inherited: AxisGaps): Size => {
     const n = nodes.get(id)!;
     if (n.type === "shape") {
-      const s = measureShape(n, styleOf(id));
+      const s = measureShape(n, styleOf(id), shapeWidths);
       sizeMap.set(id, s);
       return s;
     }

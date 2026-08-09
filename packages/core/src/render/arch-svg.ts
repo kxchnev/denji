@@ -15,16 +15,21 @@ import { isStyleSlot, mergeStyle, STYLE_PROPS } from "../model/style.js";
 import { canonicalIconName, resolveIcon, type Icon } from "../model/icon.js";
 import { center, type Point, type Rect } from "../model/geometry.js";
 import {
-  CAP_RX,
-  CAP_RY,
+  capRx,
+  capRy,
   FONT_SIZE,
   ICON_GAP,
   ICON_SIZE,
+  iconAbove,
+  LABEL_LINE_H,
+  labelBoxLines,
+  labelBoxWidth,
   measureLabelWidth,
   noteLines,
   NOTE_FONT_SIZE,
   NOTE_INSET,
   NOTE_LINE_H,
+  wrapLabel,
 } from "../layout/arch/measure.js";
 import { DEFAULT_HEADER_H } from "../layout/arch/index.js";
 import { linkBadgeRect } from "../interact.js";
@@ -505,38 +510,50 @@ function renderShape(n: Shape, styled: StyleModel): string {
   }
   const mark = styled.useIcon(n.icon);
   const c = labelCenter(n.kind, r);
+  // Wrapped from the label alone, exactly as the layout did it: the split is a
+  // function of the string, not of the room, so the two cannot disagree.
+  const lines = wrapLabel(n.label, labelBoxWidth(n, r.width), labelBoxLines(n, r.height));
   let content: string;
-  if (mark && n.label === "") {
+  if (mark && lines.length === 0) {
     // Icon on its own: centred, no text to align against.
     content = iconMarkup(mark, c.x - ICON_SIZE / 2, c.y - ICON_SIZE / 2, ICON_SIZE);
+  } else if (mark && iconAbove(n.kind)) {
+    // A cylinder wears its mark above the label: it is narrow and tall, so the
+    // room it has to give is vertical. The pair is centred as one block.
+    const block = ICON_SIZE + ICON_GAP + lines.length * LABEL_LINE_H;
+    const top = c.y - block / 2;
+    content =
+      iconMarkup(mark, c.x - ICON_SIZE / 2, top, ICON_SIZE) +
+      labelStack(lines, c.x, top + ICON_SIZE + ICON_GAP + (lines.length * LABEL_LINE_H) / 2, "middle");
   } else if (mark) {
-    // Centre the icon and the label as one block, then anchor the text at its
-    // own left edge instead of the shape's centre.
-    const textW = measureLabelWidth(n.label);
+    // Centre the mark and the whole block of lines as one row, then anchor every
+    // line at the block's own left edge instead of the shape's centre. The mark
+    // stays on `c.y`, which is the block's centre whether it holds one line or
+    // two, so nothing about it has to know how the label broke.
+    const textW = lines.reduce((m, l) => Math.max(m, measureLabelWidth(l)), 0);
     const startX = c.x - (ICON_SIZE + ICON_GAP + textW) / 2;
     content =
       iconMarkup(mark, startX, c.y - ICON_SIZE / 2, ICON_SIZE) +
-      `<text class="pwr-t" x="${round(startX + ICON_SIZE + ICON_GAP)}" y="${c.y}" ` +
-      `text-anchor="start" dominant-baseline="central" font-size="${FONT_SIZE}">${esc(n.label)}</text>`;
+      labelStack(lines, startX + ICON_SIZE + ICON_GAP, c.y, "start");
   } else {
-    content = label(n.label, c, FONT_SIZE);
+    content = labelStack(lines, c.x, c.y, "middle");
   }
   return `<g class="pwr-n ${cls}">${body}${content}</g>`;
 }
 
 /**
- * Where a shape's label sits. A database is drawn with an elliptical lid, so
- * its visible front face starts below the top of the bounding box and text on
- * the geometric centre reads as sitting too high. Nudging it down by half the
- * lid puts it on the optical centre instead.
+ * Where a shape's label sits.
+ *
+ * A database is drawn with an elliptical lid and an elliptical bottom, so the
+ * face a label lives on runs from the underside of the lid (`y + 2·capRy`) to
+ * the bottom of the bulge (`y + height`) — a band exactly `BASE_HEIGHT` tall
+ * whatever the lid is, because that is how the height was built. Its centre is
+ * one lid below the box's, and that is where two lines land with equal air above
+ * and below. On the geometric centre the first line's box crosses the lid.
  */
-const OPTICAL_SHIFT_Y: Partial<Record<Shape["kind"], number>> = {
-  database: CAP_RY / 2,
-};
-
 function labelCenter(kind: Shape["kind"], r: Rect): Point {
   const c = center(r);
-  return { x: c.x, y: c.y + (OPTICAL_SHIFT_Y[kind] ?? 0) };
+  return { x: c.x, y: kind === "database" ? c.y + capRy(r.height) : c.y };
 }
 
 /**
@@ -598,7 +615,7 @@ function round(n: number): number {
 /** Vertical cylinder (database): body path plus a top rim ellipse. */
 function cylinderVertical(r: Rect): string {
   const rx = r.width / 2;
-  const ry = CAP_RY;
+  const ry = round(capRy(r.height));
   const cx = r.x + rx;
   const body =
     `M ${r.x},${r.y + ry} A ${rx},${ry} 0 0 1 ${r.x + r.width},${r.y + ry} ` +
@@ -611,7 +628,7 @@ function cylinderVertical(r: Rect): string {
 
 /** Horizontal cylinder (queue): body path plus a left rim ellipse. */
 function cylinderHorizontal(r: Rect): string {
-  const rx = CAP_RX;
+  const rx = round(capRx(r.width));
   const ry = r.height / 2;
   const cy = r.y + ry;
   const body =
@@ -729,11 +746,36 @@ function renderConnection(c: Connection, index: number, styled: StyleModel): str
   return `${out}</g>`;
 }
 
-function label(text: string, c: Point, size: number): string {
-  return (
-    `<text class="pwr-t" x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" ` +
-    `font-size="${size}">${esc(text)}</text>`
-  );
+/**
+ * A label as one or more lines, centred as a block on `cy`.
+ *
+ * Separate `<text>` elements rather than one `<text>` with `<tspan dy>`: every y
+ * is solved here, so nothing depends on how a rasterizer resolves a relative
+ * shift against an inherited baseline. The same bet as an inline `<path>`
+ * instead of `<use>`, and a literal behind every `var()` — librsvg and a
+ * canvas-rasterized `<img>` are handed finished geometry, never arithmetic to
+ * agree on.
+ *
+ * Not `cornerStack`'s arithmetic: that stack hangs from the edge of a reserved
+ * band, this one is centred on a point, so a single line lands exactly where the
+ * old one-line label did.
+ */
+function labelStack(
+  lines: readonly string[],
+  x: number,
+  cy: number,
+  anchor: "middle" | "start",
+  size: number = FONT_SIZE,
+): string {
+  const top = cy - ((lines.length - 1) * LABEL_LINE_H) / 2;
+  return lines
+    .map(
+      (line, i) =>
+        `<text class="pwr-t" x="${round(x)}" y="${round(top + i * LABEL_LINE_H)}" ` +
+        `text-anchor="${anchor}" dominant-baseline="central" ` +
+        `font-size="${size}">${esc(line)}</text>`,
+    )
+    .join("");
 }
 
 /* ------------------------------------------------------------------- utils */

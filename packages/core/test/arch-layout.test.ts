@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { architecture } from "../src/model/arch-builder.js";
 import { layoutArchitecture } from "../src/layout/arch/index.js";
+import {
+  CAP_RY,
+  labelFitWidth,
+  measureLabelWidth,
+  wrapLabel,
+} from "../src/layout/arch/measure.js";
 import { renderArchitecture } from "../src/render/arch-svg.js";
 import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
 import { setNodePosition } from "../src/dsl/arch-edit.js";
@@ -234,10 +240,10 @@ describe("architecture layout", () => {
     });
 
     it("merges centres that differ by a few px into one straight line", () => {
-      // An app and a taller database sharing a bottom edge are 7px apart —
-      // close enough that a visible S-bend would read as a wobble.
+      // Two boxes a handful of pixels out of line: close enough that a visible
+      // S-bend would read as a wobble rather than as intent.
       const d = parse(
-        'architecture\n  app a "A"\n  database b "Store" @rightOf(a) @align(end)\n  a -> b\n',
+        'architecture\n  app a "A" @at(0, 0)\n  app b "B" @at(200, 6)\n  a -> b\n',
       );
       layoutArchitecture(d);
       const c = d.connections[0]!;
@@ -430,7 +436,7 @@ describe("architecture layout", () => {
     for (const id of ["f", "b", "x"]) expect(rectOf(d, id).x).toBeGreaterThanOrEqual(payRight);
     // ...and the hinted structure itself is untouched
     expect(rectOf(d, "orders").x).toBeCloseTo(24, 5);
-    expect(rectOf(d, "pay").x).toBeCloseTo(232, 5);
+    expect(rectOf(d, "pay").x).toBeCloseTo(256, 5);
   });
 
   it("parks a node whose anchor is not a sibling instead of stacking it at the origin", () => {
@@ -794,5 +800,150 @@ describe("coordinates hold their ground", () => {
     // Margin 24 on every side, exactly as it was before coordinates existed.
     expect(rectOf(d, "a").x).toBe(24);
     expect(rectOf(d, "a").y).toBe(24);
+  });
+});
+
+describe("wrapping a label", () => {
+  it("breaks at a space, most evenly", () => {
+    // Balanced, not greedy: greedy would give "Wide Data Store" / "Cluster".
+    expect(wrapLabel("Wide Data Store Cluster", 80)).toEqual(["Wide Data", "Store Cluster"]);
+  });
+
+  it("breaks at a hyphen, and keeps it on the first line", () => {
+    // Half the names in a real diagram have no space at all, so without this
+    // they could never wrap and the whole scheme would buy nothing.
+    expect(wrapLabel("data-mesh-auth-server", 92)).toEqual(["data-mesh-", "auth-server"]);
+    expect(wrapLabel("vscode-server", 60)).toEqual(["vscode-", "server"]);
+  });
+
+  it("breaks a word that fits no line, rather than widening every box", () => {
+    // The trade: one long word must not set the width of the whole diagram.
+    expect(wrapLabel("SparkApplication CRD", 98)).toEqual(["SparkAppli-", "cation CRD"]);
+  });
+
+  it("leaves a word whole when there is no room to break it readably", () => {
+    // `Ми-` / `кро-` / `сер-` helps nobody; let it bleed instead.
+    expect(wrapLabel("Микросервис", 10)).toEqual(["Микросервис"]);
+  });
+
+  it("puts the surplus back on the last line, as it was written", () => {
+    // Never with an invented space where a hyphen broke.
+    expect(wrapLabel("data-mesh-auth-server", 92, 2)).toEqual(["data-mesh-", "auth-server"]);
+    expect(wrapLabel("one-two-three-four-five", 60, 2)).toEqual(["one-", "two-three-four-five"]);
+  });
+
+  it("never breaks inside brackets", () => {
+    // `cdp (SQL` / `Server)` is the most balanced cut and it is nonsense.
+    expect(wrapLabel("cdp (SQL Server)", 40)).toEqual(["cdp", "(SQL Server)"]);
+  });
+
+  it("leaves a word it cannot break alone, on one line", () => {
+    expect(wrapLabel("Микросервис", 10)).toEqual(["Микросервис"]);
+    expect(wrapLabel("", 100)).toEqual([]);
+  });
+
+  it("keeps an author's own newline as a hard break", () => {
+    expect(wrapLabel("one\ntwo", 999)).toEqual(["one", "two"]);
+  });
+
+  it("fits at the width it says it needs, and never in more than two lines", () => {
+    // The contract between the two sides: the layout reserves labelFitWidth,
+    // the renderer wraps at whatever it got, and the second must fit the first.
+    for (const label of [
+      "",
+      "A",
+      "Debezium",
+      "SparkApplication CRD",
+      "data-mesh-auth-server",
+      "cdp (SQL Server)",
+      "БД микросервиса",
+      "Wide Data Store Cluster",
+    ]) {
+      const fit = labelFitWidth(label);
+      for (const extra of [0, 1, 40]) {
+        const lines = wrapLabel(label, fit + extra);
+        expect(lines.length, label).toBeLessThanOrEqual(2);
+        for (const line of lines) {
+          expect(measureLabelWidth(line), `${label} @ ${fit + extra}`).toBeLessThanOrEqual(fit + extra);
+        }
+      }
+    }
+  });
+});
+
+describe("one size for every leaf", () => {
+  const widths = (d: ReturnType<typeof parse>, ids: string[]) =>
+    ids.map((id) => rectOf(d, id).width);
+
+  it("gives every shape the same width, whatever its label", () => {
+    const d = parse(
+      'architecture\n  app a "A"\n  app b "Storefront service" @rightOf(a)\n  rect c "C" @rightOf(b)\n  queue q "Events" @rightOf(c)\n',
+    );
+    layoutArchitecture(d);
+    const [wa, wb, wc] = widths(d, ["a", "b", "c"]);
+    expect(wa).toBe(wb);
+    expect(wc).toBe(wb);
+  });
+
+  it("makes a queue a pipe: plainly wider than it is tall", () => {
+    // Transposing the barrel is not enough — it is only just taller than it is
+    // wide, so laid on its side it still read as upright.
+    const d = parse('architecture\n  database b "Ledger"\n  queue q "Events" @rightOf(b)\n');
+    layoutArchitecture(d);
+    const db = rectOf(d, "b");
+    const q = rectOf(d, "q");
+    expect(db.height).toBeGreaterThan(db.width);
+    expect(q.width).toBeGreaterThan(q.height);
+    // And derived from the barrel, not from its own label: shorter than one.
+    expect(q.height).toBeLessThan(db.height);
+  });
+
+  it("makes a database narrower and taller — a barrel, not a pancake", () => {
+    const d = parse(
+      'architecture\n  app a "Orders API"\n  database b "Ledger" @rightOf(a)\n',
+    );
+    layoutArchitecture(d);
+    const app = rectOf(d, "a");
+    const db = rectOf(d, "b");
+    expect(db.width).toBeLessThan(app.width);
+    // Taller than it is wide: a barrel, not a pancake. Its height comes from its
+    // width, never from the lines of text inside it.
+    expect(db.height).toBeGreaterThan(db.width);
+    expect(db.height).toBeGreaterThan(app.height);
+  });
+
+  it("widens the shared width rather than fattening the barrel", () => {
+    // The longest name in the document belongs to a database: the rule that has
+    // to give is "everyone is as narrow as possible", never "a database is narrow".
+    const d = parse('architecture\n  app a "A"\n  database b "Very long database name" @rightOf(a)\n');
+    layoutArchitecture(d);
+    expect(rectOf(d, "b").width).toBeLessThan(rectOf(d, "a").width);
+    expect(rectOf(d, "a").width).toBeGreaterThan(96);
+  });
+
+  it("does not let one hand-sized shape drag the rest along with it", () => {
+    // @width is an escape hatch, not a lever: the author said "this one is wide",
+    // not "make everything wide".
+    const d = parse('architecture\n  app a "A" @width(400)\n  app b "B" @rightOf(a)\n');
+    layoutArchitecture(d);
+    expect(rectOf(d, "a").width).toBe(400);
+    expect(rectOf(d, "b").width).toBe(96);
+  });
+
+  it("leaves a bare mark as a mark", () => {
+    // Otherwise four badges in a row become four empty plates.
+    const d = parse(
+      'architecture\n  app long "A very long label indeed"\n  app icon "" @icon(react) @rightOf(long)\n',
+    );
+    layoutArchitecture(d);
+    expect(rectOf(d, "icon").width).toBeLessThan(rectOf(d, "long").width);
+    expect(rectOf(d, "icon").width).toBe(rectOf(d, "icon").height);
+  });
+
+  it("keeps a one-line and a two-line label in the same box", () => {
+    const d = parse('architecture\n  app a "A"\n  app b "Storefront web service" @rightOf(a)\n');
+    layoutArchitecture(d);
+    expect(rectOf(d, "a").height).toBe(rectOf(d, "b").height);
+    expect(rectOf(d, "a").width).toBe(rectOf(d, "b").width);
   });
 });

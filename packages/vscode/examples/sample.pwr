@@ -5,7 +5,7 @@ architecture
   group edge "Edge" @at(-160, 0) {
     text "public"
     app cdn "CDN" @at(0, 0)
-    app waf "WAF" @at(136, 0)
+    app waf "WAF" @at(240, 0)
     cdn -> waf
   }
 

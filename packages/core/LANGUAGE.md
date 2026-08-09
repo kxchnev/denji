@@ -63,6 +63,34 @@ app|database|queue|rect  <id>  ["<label>"]  <directives…>
 - `label` is optional and double-quoted; it may not contain `"`. Omit it and the
   label becomes the id. Write `""` for an icon with no text.
 
+### How big a shape comes out
+
+**Every shape in a diagram is the same size.** A box is not sized to its own
+label — that is what made a picture ragged, one width per name. Instead the
+diagram picks one width and every shape takes it.
+
+- A label breaks at a **space** or a **hyphen**. `data-mesh-auth-server` becomes
+  `data-mesh-` / `auth-server`; brackets stay whole, so `cdp (SQL Server)`
+  becomes `cdp` / `(SQL Server)`.
+- A word too long for the line is **broken with a hyphen** rather than allowed to
+  widen every box in the document. One `SparkApplicationController` should not
+  cost the whole picture.
+- One line and two lines give a box of **exactly the same size**, so a row of
+  boxes is a row.
+- A **database is a barrel**: narrower than the rest, and taller than it is wide.
+  Its height comes from its width, never from the text inside it — sizing it to
+  two lines is what made it a pancake.
+- A **queue is that barrel lying down**: derived from it, but plainly wider than
+  it is tall, because a pipe has to look like one.
+- On a **database** an `@icon` sits **above** the label rather than before it: a
+  barrel is narrow and tall, so vertical room is what it has to spare. On a
+  queue the mark stays where every other mark is, to the left of the text.
+- An **icon with an empty label** stays a compact square. It is a mark, not a box.
+
+`@width` and `@height` override all of it — on one shape, or on every shape of a
+kind through a `style` block (§7). A shape sized by hand neither takes the shared
+width nor helps decide it.
+
 ---
 
 ## 3. Containers
@@ -384,7 +412,10 @@ Directive names are case-insensitive: `@rightOf` and `@rightof` are the same.
    silently lands to the right of everything. Two hints (one per axis) are fine
    and pin both.
 7. **Sizes carry no units**, and `fontSize` does not exist.
-8. **A `@link` URL is unquoted and ends at `)`** — percent-encode one as `%29` —
+8. **Long names get hyphenated.** Every shape shares one width, and past a
+   ceiling a word too long for it is broken with a hyphen rather than allowed to
+   widen every box in the picture.
+9. **A `@link` URL is unquoted and ends at `)`** — percent-encode one as `%29` —
    and only `http`, `https` and `mailto` are accepted.
 8. Prefer containers over a long row of top-level nodes — a wide strip is hard to
    read, and `power check` reports it.

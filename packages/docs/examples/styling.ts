@@ -21,7 +21,7 @@ export const styling: ExampleData[] = [
     id: "size",
     title: "Size",
     description:
-      "A box sizes itself to its label until you say otherwise. `width` and `height` are style properties like any other, so one selector resizes every element of a kind, and `@width(200)` overrides a single one. On a shape the size is exact; on a container it is a floor — it still grows to hold its children. These two are the only properties here that change the layout.",
+      "Every shape in a diagram shares one width, chosen so the longest label fits on two lines — that is the default, not a rule. `width` and `height` are style properties like any other, so one selector resizes every element of a kind and `@width(200)` resizes a single one. On a shape the size is exact; on a container it is a floor — it still grows to hold its children. A shape you size by hand also stops helping decide the shared width. These two are the only properties here that change the layout.",
     dsl: `architecture\n  style app {\n    width: 150\n    height: 64\n  }\n  app a "Every app"\n  app b "the same" @rightOf(a)\n  database c "Untouched" @below(a)\n  rect d "One-off" @rightOf(c) @width(200) @height(40)`,
     api: `architecture()\n  .defineStyle("app", { width: 150, height: 64 })\n  .app("a", "Every app")\n  .app("b", "the same", { hint: { rightOf: "a" } })\n  .database("c", "Untouched", { hint: { below: "a" } })\n  .rect("d", "One-off", {\n    hint: { rightOf: "c" },\n    styleProps: { width: 200, height: 40 },\n  })\n  .build();`,
   },

@@ -11,7 +11,7 @@
 
 import { GRID } from "./layout/arch/grid.js";
 import { DEFAULT_HEADER_H } from "./layout/arch/index.js";
-import { CAP_RX, CAP_RY, ICON_SIZE, NOTE_INSET } from "./layout/arch/measure.js";
+import { capRx, capRy, ICON_SIZE, NOTE_INSET } from "./layout/arch/measure.js";
 import type { Point, Rect } from "./model/geometry.js";
 import type { ArchDiagram, ArchNode } from "./model/arch.js";
 
@@ -118,8 +118,8 @@ export function linkBadgeRect(n: ArchNode, headerH: number = DEFAULT_HEADER_H): 
   }
   // The queue is inset by its whole cap rather than by an exact ellipse solve:
   // where that boundary falls depends on the height, and an author may set one.
-  const dx = n.kind === "queue" ? inset + CAP_RX : inset;
-  const dy = n.kind === "database" ? inset + CAP_RY : inset;
+  const dx = n.kind === "queue" ? inset + capRx(r.width) : inset;
+  const dy = n.kind === "database" ? inset + capRy(r.height) : inset;
   return { x: r.x + r.width - dx - size, y: r.y + dy, width: size, height: size };
 }
 

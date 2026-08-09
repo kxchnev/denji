@@ -376,3 +376,71 @@ architecture
     expect(svg(LINKED)).toBe(svg(LINKED));
   });
 });
+
+describe("labels on two lines", () => {
+  const texts = (out: string): Array<{ x: number; y: number; text: string }> =>
+    [...out.matchAll(/<text class="pwr-t" x="([-\d.]+)" y="([-\d.]+)"[^>]*>([^<]*)<\/text>/g)].map(
+      (m) => ({ x: Number(m[1]), y: Number(m[2]), text: m[3]! }),
+    );
+
+  it("draws one text element per line, never a tspan", () => {
+    const out = svg('architecture\n  app a "Storefront web service"\n');
+    const lines = texts(out);
+    expect(lines).toHaveLength(2);
+    expect(out).not.toContain("<tspan");
+    expect(lines[1]!.y - lines[0]!.y).toBe(18);
+  });
+
+  it("centres the block where a single line sits", () => {
+    // A one-line and a two-line label share a box, so the pair must straddle
+    // exactly the point the single line sits on.
+    const one = texts(svg('architecture\n  app a "A"\n'));
+    const two = texts(svg('architecture\n  app a "Storefront web service"\n'));
+    expect(one).toHaveLength(1);
+    expect((two[0]!.y + two[1]!.y) / 2).toBe(one[0]!.y);
+    expect(two[0]!.x).toBe(two[1]!.x);
+  });
+
+  it("escapes every line it broke the label into", () => {
+    const out = svg('architecture\n  app a "a&b <one> and c&d <two>"\n');
+    expect(out).toContain("&amp;");
+    expect(out).toContain("&lt;one&gt;");
+    expect(out).toContain("&lt;two&gt;");
+    expect(texts(out)).toHaveLength(2);
+  });
+
+  it("keeps a wrapped label on the barrel's face, clear of the lid", () => {
+    const out = svg('architecture\n  database db "Order history archive"\n');
+    const lid = /<ellipse class="pwr-b" cx="[-\d.]+" cy="([-\d.]+)" rx="[-\d.]+" ry="([-\d.]+)"/.exec(out)!;
+    const cy = Number(lid[1]);
+    const ry = Number(lid[2]);
+    const lines = texts(out);
+    expect(lines.length).toBeGreaterThan(1);
+    // The lid's underside is at cy + ry; every line sits below it.
+    for (const l of lines) expect(l.y).toBeGreaterThan(cy + ry);
+  });
+
+  it("gives the database a lid rather than a slot", () => {
+    const out = svg('architecture\n  app a "A"\n  database db "B" @rightOf(a)\n');
+    const ry = Number(/<ellipse class="pwr-b"[^>]*ry="([-\d.]+)"/.exec(out)![1]);
+    expect(ry).toBe(12);
+  });
+
+  it("keeps the mark centred against a pair of lines", () => {
+    const marks = (out: string) =>
+      [...out.matchAll(/<path class="pwr-ic[^"]*" transform="translate\([-\d.]+ ([-\d.]+)\)/g)].map(
+        (m) => Number(m[1]),
+      );
+    const one = marks(svg('architecture\n  app a "A" @icon(react)\n  app b "Storefront web service"\n'));
+    const two = marks(
+      svg('architecture\n  app a "Storefront web service" @icon(react)\n  app b "B"\n'),
+    );
+    // Same box, same mark position, whether the label took one line or two.
+    expect(one[0]).toBe(two[0]);
+  });
+
+  it("is deterministic with a wrapped label", () => {
+    const src = 'architecture\n  app a "Storefront web service"\n  database b "Order archive" @below(a)\n';
+    expect(svg(src)).toBe(svg(src));
+  });
+});

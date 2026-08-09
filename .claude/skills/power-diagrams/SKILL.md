@@ -138,6 +138,11 @@ These are the ones that actually bite. All verified against the parser.
 - **Sizes are unitless** — `@width(150)`, not `150px`. There is no `fontSize`.
 - `@theme` and `@margin` only on the `architecture` line; `@padding` only on a
   container; `@corner` only on a `text`.
+- **Keep labels short — they wrap, and a very long word gets hyphenated.** Every
+  shape in a diagram shares one width; labels break at spaces and hyphens, and a
+  word too long for the line is cut with a hyphen (`SparkAppli-` / `cation`).
+  A database is a narrow tall barrel and a queue is a wide low pipe, so both
+  hold less text per line than a box does — keep their names to a word.
 - **`@link(url)` is unquoted and ends at the first `)`** — percent-encode one
   as `%29` — and takes only `http`, `https` and `mailto`. It draws a button in
   the element's top-right corner, over the box: nothing about the layout moves,
