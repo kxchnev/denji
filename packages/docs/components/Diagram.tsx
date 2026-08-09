@@ -6,17 +6,17 @@ import {
   layoutArchitecture,
   renderArchitecture,
   resolveTheme,
-  setNodePositions,
-  isBoxed,
   linkAt,
   nodeAt,
   nodeDepths,
-  pinsFor,
+  relationFor,
   snapToGrid,
   DiagramParseError,
   type ArchDiagram,
   type ArchNode,
   type Point,
+  type Rect,
+  type Relation,
   type ThemeName,
 } from "power";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
@@ -97,12 +97,12 @@ export function Diagram({
   /** Enable pan and zoom. Off by default so doc pages keep scrolling normally. */
   interactive?: boolean;
   /**
-   * Makes nodes draggable, reporting a drop as coordinates in each node's own
-   * scope — ready to be written into the document as `@at`. It is a list because a
-   * drag also nails down the siblings the moved node was arranged against; without
-   * it the diagram is read-only, which is what every doc page wants.
+   * Makes nodes draggable, reporting a drop as the relation it means: the
+   * sibling the node was dropped next to, and the side it landed on. Ready to be
+   * written into the document as `@rightOf(...)` and friends. Without it the
+   * diagram is read-only, which is what every doc page wants.
    */
-  onMoveNodes?: (moves: ReadonlyArray<{ id: string; at: Point }>) => void;
+  onMoveNodes?: (moves: ReadonlyArray<Relation>) => void;
   /** Draw the dot grid behind the diagram. */
   grid?: boolean;
   /**
@@ -115,13 +115,7 @@ export function Diagram({
   name?: string;
   className?: string;
 }) {
-  // While a node is being dragged, this holds the document as it would be *after*
-  // the drop. Rendering that instead of a floating ghost means the preview is the
-  // real outcome: containers resize, connectors re-aim, siblings reflow.
-  const [preview, setPreview] = useState<string | null>(null);
-  /** Set on drop: the preview has to outlive the commit, see the effect below. */
-  const awaitingCommit = useRef(false);
-  const source = preview ?? dsl;
+  const source = dsl;
   // Anchors on the read-only render, except where the caller has already said
   // this diagram sits inside something clickable: `controls={false}` is that
   // signal, and an <a> nested in a <button> is invalid markup for exactly the
@@ -189,29 +183,30 @@ export function Diagram({
   const linkArm = useRef<{ id: string; url: string } | null>(null);
   // Once the view has been moved by hand, stop auto-fitting it out from under the user.
   const touched = useRef(false);
-  /** The node being dragged: where it started, in both spaces, and where it is now. */
+  /**
+   * The node being dragged.
+   *
+   * The document is not rewritten while the pointer is down. A drop says "this
+   * one belongs next to that one", and re-deciding which sibling that is on every
+   * frame would re-arrange the whole drawing under the pointer as the answer
+   * flipped. So the drag is a ghost over the real render, and the document
+   * changes once, on release.
+   */
   const nodeDrag = useRef<{
     id: string;
-    /** The document as it was before this drag — every preview is written from it,
-     *  so the edits of one drag never pile up on each other. */
-    src: string;
-    /** The node's own coordinates at the start, i.e. what `@at` would have said. */
+    /** The node's own coordinates at the start, in its scope's space. */
     base: Point;
-    /**
-     * The grab point and the zoom, in screen terms. Screen rather than diagram
-     * coordinates because the drag rewrites the document under itself; measuring
-     * against pixels keeps the delta honest whatever the layout does with it.
-     */
+    /** Where it sits on the drawing, for the ghost to start from. */
+    fromRect: Rect;
+    /** The grab point and the zoom, in screen terms, so the delta stays honest. */
     fromCursor: Point;
-    /** Whether this node lives inside a container, whose corner it may not cross. */
-    boxed: boolean;
     scale: number;
     at: Point;
-    /** Everything else in the document, nailed down where it already is. */
-    freeze: Array<{ id: string; at: Point }>;
     /** The pointer, relative to the surface. */
     cursor: Point;
   } | null>(null);
+  /** Where the node in hand is, and which sibling a drop would attach it to. */
+  const [dragGhost, setDragGhost] = useState<{ rect: Rect; anchor: Rect | null } | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [hoverLink, setHoverLink] = useState<string | null>(null);
   // Whether a fit has ever landed, and the size it landed at. Both are refs: the
@@ -359,15 +354,14 @@ export function Diagram({
       const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       nodeDrag.current = {
         id: hit.id,
-        src: source,
         base: hit.local,
+        fromRect: hit.rect,
         fromCursor: cursor,
-        boxed: isBoxed(shown.diagram, hit.id),
         scale: view.scale,
         at: hit.local,
-        freeze: pinsFor(shown.diagram, hit.id),
         cursor,
       };
+      setDragGhost({ rect: hit.rect, anchor: null });
       return; // this pointer moves a node, not the viewport
     }
     drag.current = { x: e.clientX - view.x, y: e.clientY - view.y };
@@ -378,19 +372,25 @@ export function Diagram({
     if (nd) {
       const rect = e.currentTarget.getBoundingClientRect();
       nd.cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      // A child may not cross its container's inner corner: a negative coordinate
-      // there pushes the whole scope over to make room, and its siblings would slide.
-      // At the top level there is no box and no wall — the drawing simply grows.
-      const floor = nd.boxed ? 0 : -Infinity;
       const at = {
-        x: Math.max(floor, snapToGrid(nd.base.x + (nd.cursor.x - nd.fromCursor.x) / nd.scale)),
-        y: Math.max(floor, snapToGrid(nd.base.y + (nd.cursor.y - nd.fromCursor.y) / nd.scale)),
+        x: snapToGrid(nd.base.x + (nd.cursor.x - nd.fromCursor.x) / nd.scale),
+        y: snapToGrid(nd.base.y + (nd.cursor.y - nd.fromCursor.y) / nd.scale),
       };
-      // Most frames land on the same lattice point as the last one; re-rendering
-      // for them would mean parsing and laying the document out for nothing.
       if (at.x === nd.at.x && at.y === nd.at.y) return;
       nd.at = at;
-      setPreview(setNodePositions(nd.src, [...nd.freeze, { id: nd.id, at }]));
+      const rel = shown.diagram ? relationFor(shown.diagram, nd.id, at) : null;
+      const anchor = rel
+        ? (shown.diagram?.nodes.find((n) => n.id === rel.anchor)?.rect ?? null)
+        : null;
+      setDragGhost({
+        rect: {
+          x: nd.fromRect.x + (at.x - nd.base.x),
+          y: nd.fromRect.y + (at.y - nd.base.y),
+          width: nd.fromRect.width,
+          height: nd.fromRect.height,
+        },
+        anchor,
+      });
       return;
     }
     const d = drag.current;
@@ -422,40 +422,26 @@ export function Diagram({
     const nd = nodeDrag.current;
     if (!nd) return;
     nodeDrag.current = null;
-    // A click that moved nothing is not an edit. Committing here rather than on
-    // every frame is what keeps a whole drag to one undo step in the editor.
-    if (nd.at.x === nd.base.x && nd.at.y === nd.base.y) {
-      setPreview(null);
-      return;
-    }
-    // The preview stays up until the committed document arrives. Dropping it here
-    // would show the pre-drag layout for however many frames the owner takes to
-    // hand the new source back — in the playground that is a deferred value, so the
-    // node visibly snapped home and then jumped to where it was let go.
-    awaitingCommit.current = true;
-    onMoveNodes?.([...nd.freeze, { id: nd.id, at: nd.at }]);
+    setDragGhost(null);
+    // A press that moved nothing is not an edit, and neither is a drop that would
+    // say what the node already says. Committing here rather than on every frame
+    // is what keeps a whole drag to one undo step.
+    const rel = shown.diagram ? relationFor(shown.diagram, nd.id, nd.at) : null;
+    if (!rel) return;
+    onMoveNodes?.([rel]);
   };
 
-  useEffect(() => {
-    if (!awaitingCommit.current) return;
-    // Any change to the incoming document supersedes the drag's own preview: either
-    // it is the commit landing, or someone typed — and typing wins.
-    awaitingCommit.current = false;
-    setPreview(null);
-  }, [dsl]);
+  // Nothing compensates the viewport during a drag, and nothing has to: the
+  // document is untouched until the drop, so the drawing behind the ghost cannot
+  // move at all.
 
-  // Nothing compensates the viewport during a drag, and nothing has to: with every
-  // node placed by coordinates and none of them allowed before the origin, the
-  // drawing's own origin never moves. The grid stays where it is, and so does
-  // everything the drag did not touch.
-
-  // Bailing out mid-drag has to leave the document alone, preview and all.
+  // Bailing out mid-drag has to leave the document alone, ghost and all.
   useEffect(() => {
     if (!onMoveNodes) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || !nodeDrag.current) return;
       nodeDrag.current = null;
-      setPreview(null);
+      setDragGhost(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -554,7 +540,7 @@ export function Diagram({
           }
           dangerouslySetInnerHTML={{ __html: svg! }}
         />
-        {hoverRect && (
+        {(hoverRect || dragGhost) && (
           // A second layer under the same transform, because the SVG one is written
           // with innerHTML and cannot take React children.
           <div
@@ -562,17 +548,46 @@ export function Diagram({
             className="pointer-events-none absolute left-0 top-0 origin-top-left"
             style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${view.scale})` }}
           >
-            <div
-              className="absolute rounded-sm outline-dashed outline-primary/70"
-              style={{
-                left: hoverRect.x,
-                top: hoverRect.y,
-                width: hoverRect.width,
-                height: hoverRect.height,
-                // Undo the layer's scale, so the hint is a hairline at every zoom.
-                outlineWidth: 1 / view.scale,
-              }}
-            />
+            {hoverRect && !dragGhost && (
+              <div
+                className="absolute rounded-sm outline-dashed outline-primary/70"
+                style={{
+                  left: hoverRect.x,
+                  top: hoverRect.y,
+                  width: hoverRect.width,
+                  height: hoverRect.height,
+                  // Undo the layer's scale, so the hint is a hairline at every zoom.
+                  outlineWidth: 1 / view.scale,
+                }}
+              />
+            )}
+            {/* The sibling a drop would attach to, named before the release commits it. */}
+            {dragGhost?.anchor && (
+              <div
+                className="absolute rounded-md outline outline-primary"
+                style={{
+                  left: dragGhost.anchor.x,
+                  top: dragGhost.anchor.y,
+                  width: dragGhost.anchor.width,
+                  height: dragGhost.anchor.height,
+                  outlineWidth: 2 / view.scale,
+                }}
+              />
+            )}
+            {/* The node in hand — the only thing that moves while the pointer is
+                down, so there is something steady to aim at. */}
+            {dragGhost && (
+              <div
+                className="absolute rounded-md border border-primary bg-primary/25"
+                style={{
+                  left: dragGhost.rect.x,
+                  top: dragGhost.rect.y,
+                  width: dragGhost.rect.width,
+                  height: dragGhost.rect.height,
+                  borderWidth: 2 / view.scale,
+                }}
+              />
+            )}
           </div>
         )}
       </div>

@@ -14,8 +14,9 @@ import {
   NOTE_INSET,
   NOTE_LINE_H,
 } from "./measure.js";
-import { layoutScope, type AxisGaps, type LayoutWarning, type Placeable } from "./relative.js";
-import { curveConnections } from "./curve.js";
+import { layoutScope, type AxisGaps, type LayoutWarning, type Placeable } from "./scope.js";
+import { hierarchy, projectEdges } from "./graph.js";
+import { routeConnections } from "./route.js";
 
 /**
  * Caller-side defaults. Anything the diagram itself declares (`@spacing`,
@@ -60,9 +61,10 @@ interface Local {
 }
 
 /**
- * Lay out an architecture diagram. Relative hints place siblings within each
- * scope; containers are sized bottom-up to wrap their children, then positioned
- * in their parent scope. Mutates and returns the diagram.
+ * Lay out an architecture diagram. Each scope is arranged from its own share of
+ * the connections, narrowed by whatever hints the author wrote; containers are
+ * sized bottom-up to wrap their children, then positioned in their parent scope.
+ * Mutates and returns the diagram.
  */
 export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions = {}): ArchDiagram {
   // Document over options over built-in, per axis.
@@ -77,17 +79,19 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
 
   const nodes = new Map(diagram.nodes.map((n) => [n.id, n]));
 
-  const childIds = new Set<string>();
-  for (const n of diagram.nodes) {
-    if (n.type === "container") for (const c of n.children) childIds.add(c);
-  }
-  const topLevel = diagram.nodes.filter((n) => !childIds.has(n.id)).map((n) => n.id);
+  const { parentOf, ancestorsOf, topLevel } = hierarchy(diagram);
+  // Each scope is arranged from the connections it can see: a connection between
+  // two containers' innards is, from the outside, a reason for those containers
+  // to sit near each other.
+  const scopeEdges = projectEdges(diagram, parentOf);
 
   const sizeMap = new Map<string, Size>();
   const childLocal = new Map<string, Map<string, Local>>();
   const innerOffset = new Map<string, Local>();
   /** Per scope: what normalizing it subtracted, i.e. the space `@at` speaks in. */
   const scopeOffset = new Map<string, Local>();
+  /** Per scope: the corridors it kept clear, in that scope's own coordinates. */
+  const scopeLanes = new Map<string, Map<string, Local[]>>();
 
   // Bottom-up sizing: a container's size depends on its laid-out children.
   // `inherited` flows down the container tree so a diagram-level spacing reaches
@@ -124,9 +128,10 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     let contentW = 0;
     let contentH = 0;
     if (items.length > 0) {
-      const scope = layoutScope(items, gaps, onWarn);
+      const scope = layoutScope(items, scopeEdges.get(id) ?? [], gaps, onWarn);
       childLocal.set(id, scope.pos);
       scopeOffset.set(id, scope.offset);
+      if (scope.lanes) scopeLanes.set(id, scope.lanes);
       contentW = scope.width;
       contentH = scope.height;
     } else {
@@ -163,7 +168,11 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     const s = sizeNode(id, rootGaps);
     return { id, width: s.width, height: s.height, hint: nodes.get(id)!.hint };
   });
-  const topScope = layoutScope(topItems, rootGaps, onWarn);
+  const topScope = layoutScope(topItems, scopeEdges.get("") ?? [], rootGaps, onWarn);
+  if (topScope.lanes) scopeLanes.set("", topScope.lanes);
+
+  /** Where each scope's own (0, 0) ended up on the drawing. */
+  const scopeOrigin = new Map<string, Local>([["", { x: 0, y: 0 }]]);
 
   // Top-down absolute placement. `local` travels alongside: it is the same
   // position expressed in the scope's own space, which `rect` cannot recover
@@ -177,6 +186,7 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
       const off = innerOffset.get(id)!;
       const locs = childLocal.get(id)!;
       const scope = scopeOffset.get(id)!;
+      scopeOrigin.set(id, { x: absX + off.x, y: absY + off.y });
       for (const cid of n.children) {
         const lp = locs.get(cid);
         if (lp) {
@@ -201,7 +211,25 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     x: framed.x - topScope.offset.x,
     y: framed.y - topScope.offset.y,
   };
-  curveConnections(diagram);
+
+  // Hand the router the corridors, one per connection, in the drawing's own
+  // coordinates. Connections that collapsed into a single edge of some scope
+  // share a corridor, which is exactly the bundle the router will spread into a
+  // bus; the deepest scope to reserve one wins, because it knows the most about
+  // the space the connection actually has to cross.
+  const lanes = new Map<number, Local[]>();
+  for (const [scope, byEdge] of scopeLanes) {
+    const origin = scopeOrigin.get(scope);
+    if (!origin) continue;
+    for (const e of scopeEdges.get(scope) ?? []) {
+      const pts = byEdge.get(e.key);
+      if (!pts || pts.length === 0) continue;
+      const abs = pts.map((p) => ({ x: p.x + origin.x + framed.x, y: p.y + origin.y + framed.y }));
+      for (const i of e.indices) lanes.set(i, abs);
+    }
+  }
+
+  routeConnections(diagram, { ancestorsOf, lanes });
   return diagram;
 }
 

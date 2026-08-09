@@ -7,6 +7,10 @@ packages/vscode/syntaxes/
 # the history never carries them.
 packages/core/src/model/icon.data.ts
 packages/core/src/model/icon.names.ts
+# Стенд для выбора автоматической раскладки: шесть кандидатов, корпус диаграмм и
+# генератор контрольного листа. Прототипное качество и одноразовая задача —
+# выбрать движок; то, что выберут, переезжает в src уже с тестами.
+packages/core/lab/
 .next/
 out/
 *.tsbuildinfo

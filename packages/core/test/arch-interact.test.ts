@@ -9,7 +9,7 @@ import {
   nodeAt,
   nodeDepths,
   pickAt,
-  pinsFor,
+  relationFor,
   snapToGrid,
 } from "../src/interact.js";
 import type { ArchDiagram, ArchNode } from "../src/model/arch.js";
@@ -43,24 +43,49 @@ describe("snapToGrid", () => {
   });
 });
 
-describe("pinsFor", () => {
-  it("reports every other node at the position it already sits on", () => {
-    const d = laid('architecture\n  app a "A"\n  app b "B" @rightOf(a)\n  app c "C" @rightOf(b)\n');
-    const pins = pinsFor(d, "b");
-    expect(pins.map((p) => p.id).sort()).toEqual(["a", "c"]);
-    for (const p of pins) expect(p.at).toEqual(byId(d, p.id).local);
+describe("relationFor", () => {
+  const at = (d: ReturnType<typeof laid>, id: string, dx: number, dy: number) => {
+    const l = byId(d, id).local!;
+    return { x: l.x + dx, y: l.y + dy };
+  };
+
+  it("says which sibling a drop landed next to, and on which side", () => {
+    const d = laid('architecture\n  app a "A"\n  app b "B"\n  app c "C"\n  a -> b\n  b -> c\n');
+    // Dropped square on top of where `a` sits, a little to its right.
+    const onA = at(d, "a", byId(d, "a").rect!.width + 40, 0);
+    expect(relationFor(d, "c", onA)).toEqual({ id: "c", anchor: "a", side: "rightOf" });
   });
 
-  it("leaves nodes that already have coordinates alone — theirs are in the source", () => {
-    const d = laid('architecture\n  app a "A" @at(0, 0)\n  app b "B"\n  app c "C" @rightOf(b)\n');
-    expect(pinsFor(d, "b").map((p) => p.id)).toEqual(["c"]);
+  it("reads a drop below a box as below it, not beside it", () => {
+    const d = laid('architecture\n  app a "A"\n  app b "B"\n  a -> b\n');
+    const underA = at(d, "a", 0, byId(d, "a").rect!.height + 60);
+    expect(relationFor(d, "b", underA)).toMatchObject({ anchor: "a", side: "below" });
   });
 
-  it("pins containers and their children alike, since both scopes can reflow", () => {
+  it("picks the sibling the drop is actually nearest to", () => {
+    const d = laid('architecture\n  app a "A"\n  app b "B"\n  app c "C"\n  a -> b\n  b -> c\n');
+    // Just under `b`, which sits between the other two: `b` is what it landed by.
+    const underB = at(d, "b", 0, byId(d, "b").rect!.height + 20);
+    expect(relationFor(d, "c", underB)).toMatchObject({ anchor: "b", side: "below" });
+  });
+
+  it("only offers siblings — a drop never anchors across a container border", () => {
     const d = laid(
-      'architecture\n  service s "S" {\n    app a "A"\n    app b "B" @rightOf(a)\n  }\n  app out "Out" @below(s)\n',
+      'architecture\n  service s "S" {\n    app a "A"\n    app b "B"\n    a -> b\n  }\n  app out "Out"\n  a -> out\n',
     );
-    expect(pinsFor(d, "a").map((p) => p.id).sort()).toEqual(["b", "out", "s"]);
+    const rel = relationFor(d, "b", at(d, "b", 200, 0));
+    expect(rel?.anchor).toBe("a");
+  });
+
+  it("says nothing when the node already claims exactly that", () => {
+    const d = laid('architecture\n  app a "A"\n  app b "B" @rightOf(a)\n  a -> b\n');
+    const beside = at(d, "a", byId(d, "a").rect!.width + 40, 0);
+    expect(relationFor(d, "b", beside)).toBeNull();
+  });
+
+  it("says nothing when there is no sibling to speak of", () => {
+    const d = laid('architecture\n  app only "Only"\n');
+    expect(relationFor(d, "only", { x: 0, y: 0 })).toBeNull();
   });
 });
 

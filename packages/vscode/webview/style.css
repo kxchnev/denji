@@ -104,6 +104,26 @@ body {
   outline-color: var(--vscode-focusBorder);
 }
 
+/* The node in hand. It is the only thing that moves while the pointer is down —
+   the drawing behind it holds still so there is something to aim at. */
+.ghost {
+  position: absolute;
+  border-radius: 6px;
+  border-style: solid;
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-editor-selectionBackground);
+  opacity: 0.55;
+}
+
+/* The sibling the drop would attach to, so the answer is visible before the
+   release commits it. */
+.drop-target {
+  position: absolute;
+  border-radius: 6px;
+  outline-style: solid;
+  outline-color: var(--vscode-charts-blue, var(--vscode-focusBorder));
+}
+
 .error {
   position: absolute;
   left: 8px;

@@ -11,8 +11,7 @@ import { renderArchitecture } from "../src/render/arch-svg.js";
 import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
 import { setNodePosition } from "../src/dsl/arch-edit.js";
 import type { ArchDiagram, ArchNode } from "../src/model/arch.js";
-import type { Point, Rect } from "../src/model/geometry.js";
-import { cubicAt, sideNormal, type Side } from "../src/layout/arch/curve.js";
+import type { Rect } from "../src/model/geometry.js";
 
 function node(d: ArchDiagram, id: string): ArchNode {
   const n = d.nodes.find((x) => x.id === id);
@@ -24,20 +23,6 @@ function rectOf(d: ArchDiagram, id: string): Rect {
   if (!r) throw new Error(`node ${id} not laid out`);
   return r;
 }
-/** A cubic is a straight line exactly when its four points are collinear. */
-function isStraight(a: Point, c1: Point, c2: Point, b: Point): boolean {
-  const cross = (p: Point, q: Point): number => (q.x - a.x) * (p.y - a.y) - (q.y - a.y) * (p.x - a.x);
-  return Math.abs(cross(c1, b)) < 0.5 && Math.abs(cross(c2, b)) < 0.5;
-}
-
-/** The side a point sits on, by which border it touches. */
-function sideOf(p: Point, r: Rect): Side {
-  if (Math.abs(p.x - r.x) < 0.6) return "left";
-  if (Math.abs(p.x - (r.x + r.width)) < 0.6) return "right";
-  if (Math.abs(p.y - r.y) < 0.6) return "top";
-  return "bottom";
-}
-
 function contains(outer: Rect, inner: Rect): boolean {
   return (
     inner.x >= outer.x &&
@@ -135,155 +120,6 @@ describe("architecture layout", () => {
     expect(start.x).toBeLessThanOrEqual(a.x + a.width + 0.5);
   });
 
-  it("leaves and enters diagonally-placed nodes along their side normals", () => {
-    const d = architecture()
-      .app("a", "A")
-      .app("b", "B", { hint: { rightOf: "a", below: "a" } }) // offset on both axes → diagonal
-      .connect("a", "b")
-      .build();
-    layoutArchitecture(d);
-    const c = d.connections[0]!;
-    const [start, end] = [c.path![0]!, c.path![1]!];
-    const { c1, c2 } = c.curve!;
-    // The tangent at each end is the outward normal of the side it docks on —
-    // which is what makes the arrowhead meet the box square on.
-    const na = sideNormal(sideOf(start, rectOf(d, "a")));
-    const nb = sideNormal(sideOf(end, rectOf(d, "b")));
-    expect(c1.x - start.x).toBeCloseTo(na.x * Math.hypot(c1.x - start.x, c1.y - start.y), 3);
-    expect(c1.y - start.y).toBeCloseTo(na.y * Math.hypot(c1.x - start.x, c1.y - start.y), 3);
-    expect(c2.x - end.x).toBeCloseTo(nb.x * Math.hypot(c2.x - end.x, c2.y - end.y), 3);
-    expect(c2.y - end.y).toBeCloseTo(nb.y * Math.hypot(c2.x - end.x, c2.y - end.y), 3);
-  });
-
-  it("distributes multiple connections entering the same side", () => {
-    // A tall target, so its left side has room for both docks at the pitch: a
-    // 46px-high shape would only fit one, and the second would spill to another
-    // side rather than crowd the first.
-    const d = architecture()
-      .app("t1", "One")
-      .app("t2", "Two", { hint: { below: "t1" } })
-      .app("t3", "Three", { hint: { below: "t2" } })
-      .container("t", "Target", { kind: "service", children: ["t1", "t2", "t3"] })
-      .app("a", "A", { hint: { leftOf: "t" } })
-      .app("b", "B", { hint: { leftOf: "t", above: "a" } })
-      .connect("a", "t")
-      .connect("b", "t")
-      .build();
-    layoutArchitecture(d);
-    const t = rectOf(d, "t");
-    const end0 = d.connections[0]!.path!.at(-1)!;
-    const end1 = d.connections[1]!.path!.at(-1)!;
-    // both enter T's left edge...
-    expect(end0.x).toBeCloseTo(t.x, 1);
-    expect(end1.x).toBeCloseTo(t.x, 1);
-    // ...but at distinct points, not merged.
-    expect(Math.abs(end0.y - end1.y)).toBeGreaterThan(5);
-  });
-
-  it("draws a stacked connection as a straight vertical line", () => {
-    const d = architecture()
-      .app("a", "Orders API")
-      .database("b", "DB", { hint: { below: "a" } })
-      .connect("a", "b")
-      .build();
-    layoutArchitecture(d);
-    const c = d.connections[0]!;
-    const [start, end] = [c.path![0]!, c.path![1]!];
-    expect(start.x).toBeCloseTo(end.x, 5); // perfectly vertical
-    expect(isStraight(start, c.curve!.c1, c.curve!.c2, end)).toBe(true);
-  });
-
-  it("draws a side-by-side connection as a straight horizontal line", () => {
-    const d = architecture()
-      .app("a", "A")
-      .database("b", "Wide Postgres Store", { hint: { rightOf: "a" } })
-      .connect("a", "b")
-      .build();
-    layoutArchitecture(d);
-    const c = d.connections[0]!;
-    const [start, end] = [c.path![0]!, c.path![1]!];
-    expect(start.y).toBeCloseTo(end.y, 5); // perfectly horizontal
-    expect(isStraight(start, c.curve!.c1, c.curve!.c2, end)).toBe(true);
-  });
-
-  // Both of these come from a real diagram whose arrows looked wrong.
-  describe("connector regressions", () => {
-    /** Where the port sits on its side, measured from that side's midpoint. */
-    function offCentre(point: { x: number; y: number }, r: Rect): number {
-      const onVerticalSide =
-        Math.abs(point.x - r.x) < 0.6 || Math.abs(point.x - (r.x + r.width)) < 0.6;
-      return onVerticalSide
-        ? Math.abs(point.y - (r.y + r.height / 2))
-        : Math.abs(point.x - (r.x + r.width / 2));
-    }
-
-    it("centres a lone edge on each node when their centres are far apart", () => {
-      // Ports used to land in the middle of the band where the two rects
-      // overlap. Facing a container four times its height, that band is the
-      // small node's own extent, so the edge met the container 81px above its
-      // centre. Both ends must sit on their own centre instead.
-      const d = parse(
-        [
-          "architecture",
-          '  app a "A"',
-          '  service b "B" @rightOf(a) @align(start) {',
-          '    app b1 "One"',
-          '    app b2 "Two" @below(b1)',
-          "  }",
-          "  a -> b",
-        ].join("\n"),
-      );
-      layoutArchitecture(d);
-      const path = d.connections[0]!.path!;
-      expect(offCentre(path[0]!, rectOf(d, "a"))).toBeLessThan(0.6);
-      expect(offCentre(path[path.length - 1]!, rectOf(d, "b"))).toBeLessThan(0.6);
-    });
-
-    it("merges centres that differ by a few px into one straight line", () => {
-      // Two boxes a handful of pixels out of line: close enough that a visible
-      // S-bend would read as a wobble rather than as intent.
-      const d = parse(
-        'architecture\n  app a "A" @at(0, 0)\n  app b "B" @at(200, 6)\n  a -> b\n',
-      );
-      layoutArchitecture(d);
-      const c = d.connections[0]!;
-      expect(isStraight(c.path![0]!, c.curve!.c1, c.curve!.c2, c.path![1]!)).toBe(true);
-    });
-
-    it("keeps the curve out of both nodes in a corridor a few px wide", () => {
-      // With the control reach capped at half the dock distance, a gap this small
-      // gives a nearly straight hop; without the cap the controls reach past each
-      // other and the curve bulges out through both boxes.
-      const d = parse(
-        [
-          "architecture",
-          '  app a "A"',
-          '  database b "Locks" @rightOf(a) @below(a) @gap(7)',
-          "  a -> b",
-        ].join("\n"),
-      );
-      layoutArchitecture(d);
-      const c = d.connections[0]!;
-      const rects = [rectOf(d, "a"), rectOf(d, "b")];
-      for (let i = 1; i < 32; i++) {
-        const p = cubicAt(c.path![0]!, c.curve!.c1, c.curve!.c2, c.path![1]!, i / 32);
-        for (const r of rects) {
-          const inside =
-            p.x > r.x + 0.01 && p.x < r.x + r.width - 0.01 && p.y > r.y + 0.01 && p.y < r.y + r.height - 0.01;
-          expect(inside).toBe(false);
-        }
-      }
-    });
-
-    it("still merges near-aligned centres into one straight line", () => {
-      // An app and a taller database centred on each other must not gain a
-      // dogleg just because their heights differ.
-      const d = parse('architecture\n  app a "A"\n  database b "Store" @rightOf(a)\n  a -> b\n');
-      layoutArchitecture(d);
-      const c = d.connections[0]!;
-      expect(isStraight(c.path![0]!, c.curve!.c1, c.curve!.c2, c.path![1]!)).toBe(true);
-    });
-  });
 
   it("honors connection direction flags", () => {
     const d = architecture()
@@ -315,113 +151,120 @@ describe("architecture layout", () => {
     expect(() => renderArchitecture(d1)).not.toThrow();
   });
 
-  it("flows unhinted siblings left to right", () => {
-    // No hints anywhere: the plain flow must stay exactly as it was.
-    const d = architecture()
-      .app("a", "A")
-      .database("b", "Wide Postgres Store")
-      .app("c", "C")
-      .build();
-    layoutArchitecture(d);
-    const a = rectOf(d, "a");
-    const b = rectOf(d, "b");
-    const c = rectOf(d, "c");
-    expect(b.x).toBeCloseTo(a.x + a.width + 40, 5);
-    expect(c.x).toBeCloseTo(b.x + b.width + 40, 5);
-    // each centers on the previous sibling, whatever its height
-    expect(b.y + b.height / 2).toBeCloseTo(a.y + a.height / 2, 5);
-    expect(c.y + c.height / 2).toBeCloseTo(b.y + b.height / 2, 5);
-  });
-
-  it("parks an unhinted node beside the hinted structure, not on top of it", () => {
-    const d = architecture()
-      .app("a", "A")
-      .app("loose", "Loose") // declared mid-structure, anchored to nothing
-      .app("b", "B", { hint: { rightOf: "a" } })
-      .build();
-    layoutArchitecture(d);
-    const a = rectOf(d, "a");
-    const b = rectOf(d, "b");
-    const loose = rectOf(d, "loose");
-    expect(b.x).toBeCloseTo(a.x + a.width + 40, 5); // the hint still wins
-    expect(overlappingSiblings(d)).toEqual([]);
-    expect(loose.x).toBeGreaterThanOrEqual(b.x + b.width); // parked past the structure
-  });
-
-  it("keeps an unhinted anchor inside the structure it anchors", () => {
-    // `a` has no hint of its own but `b` hangs off it — it must not be parked.
-    const d = architecture()
-      .app("a", "A")
-      .app("b", "B", { hint: { below: "a" } })
-      .app("loose", "Loose")
-      .build();
-    layoutArchitecture(d);
-    const a = rectOf(d, "a");
-    const b = rectOf(d, "b");
-    expect(b.x).toBeCloseTo(a.x, 5); // still centered under its anchor
-    expect(b.y).toBeGreaterThan(a.y + a.height - 1);
-    expect(rectOf(d, "loose").x).toBeGreaterThanOrEqual(Math.max(a.x + a.width, b.x + b.width));
-  });
-
-  it("slides a node clear when its slot is taken", () => {
-    const side = architecture()
-      .app("a", "A")
-      .app("b", "B", { hint: { rightOf: "a" } })
-      .app("c", "C", { hint: { rightOf: "a" } })
-      .build();
-    layoutArchitecture(side);
-    // Same column as b, pushed down onto the next row.
-    expect(rectOf(side, "c").x).toBeCloseTo(rectOf(side, "b").x, 5);
-    expect(rectOf(side, "c").y).toBeGreaterThan(rectOf(side, "b").y + rectOf(side, "b").height - 1);
-    expect(overlappingSiblings(side)).toEqual([]);
-
-    const stacked = architecture()
-      .app("a", "A")
-      .app("b", "B", { hint: { below: "a" } })
-      .app("c", "C", { hint: { below: "a" } })
-      .build();
-    layoutArchitecture(stacked);
-    // Same row as b, pushed right into the next column.
-    expect(rectOf(stacked, "c").y).toBeCloseTo(rectOf(stacked, "b").y, 5);
-    expect(rectOf(stacked, "c").x).toBeGreaterThan(
-      rectOf(stacked, "b").x + rectOf(stacked, "b").width - 1,
+  it("arranges nodes nobody hinted, from the connections alone", () => {
+    // Nothing in this diagram says where anything goes. The order still has to
+    // come out as the flow of the graph, because that is all there is to go on.
+    const d = parse(
+      [
+        "architecture",
+        '  database store "Store"',
+        '  app api "API"',
+        '  app web "Web"',
+        "  web -> api",
+        "  api -> store",
+      ].join("\n"),
     );
-    expect(overlappingSiblings(stacked)).toEqual([]);
+    layoutArchitecture(d, { onWarn: () => {} });
+    expect(rectOf(d, "api").y).toBeGreaterThan(rectOf(d, "web").y);
+    expect(rectOf(d, "store").y).toBeGreaterThan(rectOf(d, "api").y);
+    expect(overlappingSiblings(d)).toEqual([]);
   });
 
-  it("grows a container around an unhinted child instead of overlapping it", () => {
+  it("puts everything that shares a source on one rank", () => {
+    const d = parse(
+      [
+        "architecture",
+        '  app gw "Gateway"',
+        '  app one "One"',
+        '  app two "Two"',
+        '  app three "Three"',
+        "  gw -> one",
+        "  gw -> two",
+        "  gw -> three",
+      ].join("\n"),
+    );
+    layoutArchitecture(d, { onWarn: () => {} });
+    const ys = ["one", "two", "three"].map((id) => rectOf(d, id).y);
+    for (const y of ys) expect(y).toBeCloseTo(ys[0]!, 5);
+    expect(ys[0]!).toBeGreaterThan(rectOf(d, "gw").y);
+    expect(overlappingSiblings(d)).toEqual([]);
+  });
+
+  it("reads `rightOf` as an order across the rank, not as a coordinate", () => {
+    const d = parse(
+      [
+        "architecture",
+        '  app gw "Gateway"',
+        '  app b "B"',
+        '  app a "A" @leftOf(b)',
+        "  gw -> a",
+        "  gw -> b",
+      ].join("\n"),
+    );
+    layoutArchitecture(d, { onWarn: () => {} });
+    const a = rectOf(d, "a");
+    const b = rectOf(d, "b");
+    expect(a.y).toBeCloseTo(b.y, 5);
+    expect(a.x).toBeLessThan(b.x);
+  });
+
+  it("reads `below` as a rank the flow has to reach later", () => {
+    const d = parse(
+      ["architecture", '  app a "A"', '  app b "B" @below(a)', '  app c "C"'].join("\n"),
+    );
+    layoutArchitecture(d, { onWarn: () => {} });
+    expect(rectOf(d, "b").y).toBeGreaterThan(rectOf(d, "a").y + rectOf(d, "a").height - 1);
+    expect(overlappingSiblings(d)).toEqual([]);
+  });
+
+  it("keeps a node nothing points at out of everyone else's way", () => {
+    // What used to be parked past the whole drawing now simply takes a place of
+    // its own. Either way it may not land on anything.
+    const d = architecture()
+      .app("a", "A")
+      .app("loose", "Loose")
+      .app("b", "B", { hint: { rightOf: "a" } })
+      .build();
+    layoutArchitecture(d, { onWarn: () => {} });
+    expect(overlappingSiblings(d)).toEqual([]);
+    expect(rectOf(d, "a").x).toBeLessThan(rectOf(d, "b").x);
+  });
+
+  it("grows a container around a child nothing points at", () => {
     const d = architecture()
       .app("api", "API")
-      .database("db", "Postgres", { hint: { below: "api" } })
-      .app("helper", "Helper") // no hint, inside the container's scope
+      .database("db", "Postgres")
+      .app("helper", "Helper")
+      .connect("api", "db")
       .container("svc", "Service", { kind: "service", children: ["api", "db", "helper"] })
       .build();
-    layoutArchitecture(d);
+    layoutArchitecture(d, { onWarn: () => {} });
     const svc = rectOf(d, "svc");
     for (const id of ["api", "db", "helper"]) expect(contains(svc, rectOf(d, id))).toBe(true);
     expect(overlappingSiblings(d)).toEqual([]);
   });
 
   it("keeps sibling rects disjoint on the reported broken diagram", () => {
-    // Regression: unhinted apps used to render on top of the `pay` service.
     const d = parse(
       [
         "architecture",
         '  app gw "API Gateway"',
-        '  service orders "Orders" @below(gw) {',
+        '  service orders "Orders" {',
         '    app oapi "Orders API"',
-        '    database odb "Postgres" @below(oapi)',
+        '    database odb "Postgres"',
+        "    oapi -> odb",
         "  }",
         '  app f "f"',
         '  app b "b"',
         '  service x "x" {',
         '    app z "z"',
         "  }",
-        '  service pay "Payments" @rightOf(orders) {',
+        '  service pay "Payments" {',
         '    app papi "Payments API"',
-        '    queue pq "Charges" @below(papi)',
+        '    queue pq "Charges"',
+        "    papi -> pq",
         "  }",
-        '  queue bus "Event Bus" @below(orders)',
+        '  queue bus "Event Bus"',
         "  gw -> orders : http",
         "  gw -> pay : http",
         "  orders -> bus",
@@ -429,37 +272,57 @@ describe("architecture layout", () => {
         "  orders -- pay",
       ].join("\n"),
     );
-    layoutArchitecture(d);
+    layoutArchitecture(d, { onWarn: () => {} });
     expect(overlappingSiblings(d)).toEqual([]);
-    // the unhinted nodes sit to the right of the hinted structure
-    const payRight = rectOf(d, "pay").x + rectOf(d, "pay").width;
-    for (const id of ["f", "b", "x"]) expect(rectOf(d, id).x).toBeGreaterThanOrEqual(payRight);
-    // ...and the hinted structure itself is untouched
-    expect(rectOf(d, "orders").x).toBeCloseTo(24, 5);
-    expect(rectOf(d, "pay").x).toBeCloseTo(256, 5);
+    // The gateway feeds both services, so it reads above them; the bus collects
+    // from both, so it reads below.
+    const gw = rectOf(d, "gw");
+    for (const id of ["orders", "pay"]) expect(rectOf(d, id).y).toBeGreaterThan(gw.y);
+    expect(rectOf(d, "bus").y).toBeGreaterThan(rectOf(d, "orders").y);
   });
 
-  it("parks a node whose anchor is not a sibling instead of stacking it at the origin", () => {
+  it("places a node whose anchor is not a sibling without stacking it at the origin", () => {
     const d = architecture()
       .app("outside", "Outside")
       .app("in1", "In 1")
       .app("in2", "In 2", { hint: { rightOf: "outside" } }) // not a sibling of in1
       .container("svc", "Svc", { kind: "service", children: ["in1", "in2"] })
       .build();
-    layoutArchitecture(d);
+    layoutArchitecture(d, { onWarn: () => {} });
     expect(overlappingSiblings(d)).toEqual([]);
     const svc = rectOf(d, "svc");
     expect(contains(svc, rectOf(d, "in1"))).toBe(true);
     expect(contains(svc, rectOf(d, "in2"))).toBe(true);
   });
 
-  it("does not hang on a hint cycle", () => {
+  it("reports a hint cycle instead of hanging on it", () => {
+    const warnings: string[] = [];
     const d = architecture()
       .app("a", "A", { hint: { rightOf: "b" } })
       .app("b", "B", { hint: { rightOf: "a" } })
       .build();
-    layoutArchitecture(d);
+    layoutArchitecture(d, { onWarn: (w) => warnings.push(w.code) });
     for (const n of d.nodes) expect(n.rect).toBeDefined();
+    expect(warnings).toContain("hint-cycle");
+  });
+
+  it("does not call a cycle among the author's connections a problem", () => {
+    // A service graph with a loop in it is ordinary. Only hints can contradict.
+    const warnings: string[] = [];
+    const d = parse(
+      [
+        "architecture",
+        '  app a "A"',
+        '  app b "B"',
+        '  app c "C"',
+        "  a -> b",
+        "  b -> c",
+        "  c -> a",
+      ].join("\n"),
+    );
+    layoutArchitecture(d, { onWarn: (w) => warnings.push(w.code) });
+    expect(warnings).toEqual([]);
+    expect(overlappingSiblings(d)).toEqual([]);
   });
 });
 

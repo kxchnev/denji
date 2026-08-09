@@ -217,10 +217,14 @@ function pwrDoc(uri: string, text: string): unknown {
   };
 }
 
-/** A diagram whose `stray` is loose and unconnected — two warnings, one line. */
-const STRAY = ['architecture', '  app a "A"', '  app b "B" @rightOf(a)', '  app stray "S"', "  a -> b"].join(
-  "\n",
-);
+/** A diagram whose `stray` is unconnected and whose relation is dead — two on one line. */
+const STRAY = [
+  "architecture",
+  '  app a "A"',
+  '  app b "B" @rightOf(a)',
+  '  app stray "S" @below(a) @at(0, 300)',
+  "  a -> b",
+].join("\n");
 
 /** Open a document, run every handler that would fire, and read what was published. */
 function publish(uri: string, text: string): FakeDiagnostic[] {
@@ -314,13 +318,13 @@ test("activates on the language, or the lens is never there to be clicked", () =
 
 test("puts check's findings in the Problems panel, on the right line", () => {
   const found = publish("file:///stray.pwr", STRAY);
-  const loose = found.find((d) => d.code === "loose-node");
-  assert.ok(loose, "the loose node is reported");
-  assert.equal(loose.severity, 1, "as a warning");
-  assert.equal(loose.source, "power", "attributed, so the panel can group it");
-  // `  app stray "S"` is line 4 (0-based 3), and `stray` starts at column 6.
+  const dead = found.find((d) => d.code === "at-overrides-hint");
+  assert.ok(dead, "the dead relation is reported");
+  assert.equal(dead.severity, 1, "as a warning");
+  assert.equal(dead.source, "power", "attributed, so the panel can group it");
+  // The `stray` declaration is line 4 (0-based 3), and `stray` starts at column 6.
   assert.deepEqual(
-    { line: loose.range.line, start: loose.range.start, end: loose.range.end },
+    { line: dead.range.line, start: dead.range.start, end: dead.range.end },
     { line: 3, start: 6, end: 11 },
     "squiggled under the id, not the whole line",
   );

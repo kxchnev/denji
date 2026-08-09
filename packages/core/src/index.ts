@@ -14,7 +14,7 @@ export {
   DEFAULT_HEADER_H,
   type ArchLayoutOptions,
 } from "./layout/arch/index.js";
-export { resolvedAnchors, type LayoutWarning } from "./layout/arch/relative.js";
+export { resolvedAnchors, type LayoutWarning } from "./layout/arch/scope.js";
 export { GRID, HALF_GRID, ceilToGrid, snapHalf } from "./layout/arch/grid.js";
 export {
   checkDiagram,
@@ -52,6 +52,7 @@ export {
 export {
   setNodePosition,
   setNodePositions,
+  setNodeRelation,
   findDeclaration,
   findHeaderLine,
   type Declaration,
@@ -59,7 +60,8 @@ export {
 export { DiagramParseError } from "./dsl/error.js";
 export {
   snapToGrid,
-  pinsFor,
+  relationFor,
+  type Relation,
   nodeDepths,
   nodeAt,
   linkAt,

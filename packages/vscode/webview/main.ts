@@ -21,9 +21,9 @@ import {
   nodeAt,
   nodeDepths,
   parseArchitecture,
-  pinsFor,
+  relationFor,
+  type Relation,
   renderArchitecture,
-  setNodePositions,
   snapToGrid,
   type ArchDiagram,
   type Point,
@@ -112,9 +112,16 @@ stage.className = "stage";
 const outline = document.createElement("div");
 outline.className = "outline";
 outline.hidden = true;
+/** Where the node in hand currently is, and which sibling it would attach to. */
+const ghost = document.createElement("div");
+ghost.className = "ghost";
+ghost.hidden = true;
+const target = document.createElement("div");
+target.className = "drop-target";
+target.hidden = true;
 const outlineLayer = document.createElement("div");
 outlineLayer.className = "outline-layer";
-outlineLayer.append(outline);
+outlineLayer.append(outline, target, ghost);
 surface.append(stage, outlineLayer);
 
 const errorBox = document.createElement("div");
@@ -160,9 +167,8 @@ let source = "";
 /** Whether the host has ever sent one — an empty document is not "no document". */
 let seenSource = false;
 /**
- * While a node is being dragged, the document as it would be *after* the drop.
- * Rendering that instead of a floating ghost means the preview is the real
- * outcome: containers resize, connectors re-aim, siblings reflow.
+ * Set only while a committed edit is on its way back from the host, to keep the
+ * pre-edit render on screen until the real one arrives.
  */
 let preview: string | null = null;
 
@@ -190,25 +196,27 @@ let touched = false;
 
 let panFrom: { x: number; y: number } | null = null;
 /** The node being dragged: where it started, in both spaces, and where it is now. */
+/**
+ * The node being dragged.
+ *
+ * The document is not rewritten while the pointer is down. A drop now says
+ * "this one belongs next to that one", and re-deciding which sibling that is on
+ * every frame would make the whole drawing re-arrange under the pointer as the
+ * answer flipped. So the drag is a ghost over the real render, and the document
+ * changes once, on release.
+ */
 let nodeDrag: {
   id: string;
-  /** The document as it was before this drag — every preview is written from it,
-   *  so the edits of one drag never pile up on each other. */
-  src: string;
-  /** The node's own coordinates at the start, i.e. what `@at` would have said. */
+  /** The node's own coordinates at the start, in its scope's space. */
   base: Point;
-  /**
-   * The grab point and the zoom, in screen terms. Screen rather than diagram
-   * coordinates because the drag rewrites the document under itself; measuring
-   * against pixels keeps the delta honest whatever the layout does with it.
-   */
+  /** Where it sits on the drawing, for the ghost to start from. */
+  fromRect: { x: number; y: number; width: number; height: number };
+  /** The grab point and the zoom, in screen terms, so the delta stays honest. */
   fromCursor: Point;
-  /** Whether this node lives inside a container, whose corner it may not cross. */
-  boxed: boolean;
   scale: number;
   at: Point;
-  /** Everything else in the document, nailed down where it already is. */
-  freeze: Array<{ id: string; at: Point }>;
+  /** The relation the drop would write, or null while it would write nothing. */
+  rel: Relation | null;
 } | null = null;
 let hoverId: string | null = null;
 /**
@@ -271,6 +279,7 @@ function paintView(): void {
   // thing one can do here. A container is outlined whole, even though only its
   // title band is the handle — what moves is the container, children and all.
   const rect = hoverId ? shown.diagram?.nodes.find((n) => n.id === hoverId)?.rect : null;
+  paintDrag();
   outline.hidden = !rect;
   if (rect) {
     outline.style.left = `${rect.x}px`;
@@ -285,6 +294,38 @@ function paintView(): void {
   // Where it goes, before it goes there — the only warning a preview can give
   // ahead of handing a URL to a browser.
   surface.title = hoverLink ?? "";
+}
+
+/**
+ * The node in hand and the sibling it would attach to.
+ *
+ * Both are drawn over the finished render rather than into it: the diagram the
+ * reader is aiming at has to hold still while they aim, or the target moves as
+ * they reach for it.
+ */
+function paintDrag(): void {
+  const nd = nodeDrag;
+  ghost.hidden = nd === null;
+  target.hidden = nd?.rel == null;
+  if (!nd) return;
+  const shift = shown.diagram?.originShift ?? { x: 0, y: 0 };
+  const dx = nd.at.x - nd.base.x;
+  const dy = nd.at.y - nd.base.y;
+  ghost.style.left = `${nd.fromRect.x + dx}px`;
+  ghost.style.top = `${nd.fromRect.y + dy}px`;
+  ghost.style.width = `${nd.fromRect.width}px`;
+  ghost.style.height = `${nd.fromRect.height}px`;
+  ghost.style.borderWidth = `${2 / view.scale}px`;
+  void shift;
+  if (!nd.rel) return;
+  const anchor = shown.diagram?.nodes.find((n) => n.id === nd.rel!.anchor)?.rect;
+  target.hidden = !anchor;
+  if (!anchor) return;
+  target.style.left = `${anchor.x}px`;
+  target.style.top = `${anchor.y}px`;
+  target.style.width = `${anchor.width}px`;
+  target.style.height = `${anchor.height}px`;
+  target.style.outlineWidth = `${2 / view.scale}px`;
 }
 
 function fit(): void {
@@ -361,13 +402,12 @@ surface.addEventListener("pointerdown", (e) => {
   if (hit?.local && shown.diagram) {
     nodeDrag = {
       id: hit.id,
-      src: shown.source,
       base: hit.local,
       fromCursor: cursorIn(e),
-      boxed: isBoxed(shown.diagram, hit.id),
       scale: view.scale,
       at: hit.local,
-      freeze: pinsFor(shown.diagram, hit.id),
+      fromRect: hit.rect!,
+      rel: null,
     };
     return; // this pointer moves a node, not the viewport
   }
@@ -377,26 +417,14 @@ surface.addEventListener("pointerdown", (e) => {
 surface.addEventListener("pointermove", (e) => {
   if (nodeDrag) {
     const cursor = cursorIn(e);
-    // A child may not cross its container's inner corner: a negative coordinate
-    // there pushes the whole scope over to make room, and its siblings would
-    // slide. At the top level there is no box and no wall — the drawing grows.
-    const floor = nodeDrag.boxed ? 0 : -Infinity;
     const at = {
-      x: Math.max(
-        floor,
-        snapToGrid(nodeDrag.base.x + (cursor.x - nodeDrag.fromCursor.x) / nodeDrag.scale),
-      ),
-      y: Math.max(
-        floor,
-        snapToGrid(nodeDrag.base.y + (cursor.y - nodeDrag.fromCursor.y) / nodeDrag.scale),
-      ),
+      x: snapToGrid(nodeDrag.base.x + (cursor.x - nodeDrag.fromCursor.x) / nodeDrag.scale),
+      y: snapToGrid(nodeDrag.base.y + (cursor.y - nodeDrag.fromCursor.y) / nodeDrag.scale),
     };
-    // Most frames land on the same lattice point as the last one; re-rendering
-    // for them would mean parsing and laying the document out for nothing.
     if (at.x === nodeDrag.at.x && at.y === nodeDrag.at.y) return;
     nodeDrag.at = at;
-    preview = setNodePositions(nodeDrag.src, [...nodeDrag.freeze, { id: nodeDrag.id, at }]);
-    recompute();
+    nodeDrag.rel = shown.diagram ? relationFor(shown.diagram, nodeDrag.id, at) : null;
+    paintDrag();
     return;
   }
   if (panFrom) {
@@ -435,20 +463,17 @@ function endDrag(e?: PointerEvent): void {
   const nd = nodeDrag;
   if (!nd) return;
   nodeDrag = null;
-  // A click that moved nothing is not an edit — it is a request to find the node
-  // in the text.
-  if (nd.at.x === nd.base.x && nd.at.y === nd.base.y) {
-    preview = null;
-    recompute();
+  paintDrag();
+  // A press that moved nothing is not an edit — it is a request to find the node
+  // in the text. Neither is a drop that would say what the node already says.
+  if (!nd.rel) {
     vscode.postMessage({ type: "reveal", id: nd.id });
     return;
   }
-  // The preview stays up until the committed document arrives. Dropping it here
-  // would show the pre-drag layout for however many frames the round-trip
-  // through the host takes — the node visibly snaps home and then jumps back.
-  // The host always answers a move with a source, even when the edit was a
-  // no-op, so nothing can leave the preview stuck.
-  vscode.postMessage({ type: "move", moves: [...nd.freeze, { id: nd.id, at: nd.at }] });
+  vscode.postMessage({
+    type: "move",
+    moves: [{ id: nd.rel.id, anchor: nd.rel.anchor, side: nd.rel.side }],
+  });
 }
 
 surface.addEventListener("pointerup", endDrag);
@@ -467,8 +492,7 @@ window.addEventListener("keydown", (e) => {
   linkArm = null;
   if (!nodeDrag) return;
   nodeDrag = null;
-  preview = null;
-  recompute();
+  paintDrag();
 });
 
 // A passive wheel listener cannot preventDefault, and the webview would scroll

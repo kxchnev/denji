@@ -22,22 +22,82 @@ import type { ArchDiagram, ArchNode } from "./model/arch.js";
  */
 export const snapToGrid = (v: number): number => Math.round(v / GRID) * GRID;
 
+/** One node's position relative to a sibling — what a drop is written down as. */
+export interface Relation {
+  /** The node that moved. */
+  id: string;
+  /** The sibling it was dropped next to. */
+  anchor: string;
+  side: "rightOf" | "leftOf" | "above" | "below";
+}
+
 /**
- * Every node that has no coordinates yet, at the coordinates it currently sits on.
+ * What dropping `movingId` at `at` says about where it belongs.
  *
- * A drag writes all of these before it writes the move itself, which turns the
- * whole document into one placed by coordinates. Anything less does not hold still:
- * take one node out of a relative scope and everything left in it re-arranges, and
- * a child that grows its container re-arranges that container's scope in turn — so
- * the one thing that visibly would not move is the node under the pointer.
+ * A drop is not a coordinate any more. The layout arranges the whole scope from
+ * its connections, so pinning the node where the pointer left it would take it
+ * out of that arrangement for good — and pinning *everything else* too, which is
+ * what this used to do, opted the entire file out of automatic layout on the
+ * first drag. What the gesture actually means is "this one goes over there,
+ * next to that one", and that is what gets written: a relation to the nearest
+ * sibling, on the side the node was dropped.
+ *
+ * `at` is in the same space as `node.local` — the scope's own coordinates —
+ * because that is the space a viewer can compute from a pointer and a rect.
+ * Returns null when there is no sibling to speak of, or when the node did not
+ * really go anywhere.
  */
-export function pinsFor(
+export function relationFor(
   diagram: ArchDiagram,
   movingId: string,
-): Array<{ id: string; at: Point }> {
-  return diagram.nodes
-    .filter((n) => n.id !== movingId && !n.hint?.at && n.local)
-    .map((n) => ({ id: n.id, at: n.local! }));
+  at: Point,
+): Relation | null {
+  const moving = diagram.nodes.find((n) => n.id === movingId);
+  if (!moving?.rect || !moving.local) return null;
+  const parent = parentOf(diagram);
+  const scope = parent.get(movingId);
+  const siblings = diagram.nodes.filter(
+    (n) => n.id !== movingId && parent.get(n.id) === scope && n.rect && n.local,
+  );
+  if (siblings.length === 0) return null;
+
+  // Where the node would sit if the drop were taken literally, in the scope's
+  // own space — the same space every sibling's `local` is written in.
+  const centre = {
+    x: at.x + moving.rect.width / 2,
+    y: at.y + moving.rect.height / 2,
+  };
+
+  let best: Relation | null = null;
+  let bestDist = Infinity;
+  for (const s of siblings) {
+    const c = { x: s.local!.x + s.rect!.width / 2, y: s.local!.y + s.rect!.height / 2 };
+    const dx = centre.x - c.x;
+    const dy = centre.y - c.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist >= bestDist) continue;
+    // Which side, measured against the anchor's own proportions: dropping just
+    // past the end of a wide box means beside it, not under it.
+    const nx = Math.abs(dx) / Math.max(1, s.rect!.width / 2);
+    const ny = Math.abs(dy) / Math.max(1, s.rect!.height / 2);
+    const side: Relation["side"] =
+      nx >= ny ? (dx >= 0 ? "rightOf" : "leftOf") : dy >= 0 ? "below" : "above";
+    bestDist = dist;
+    best = { id: movingId, anchor: s.id, side };
+  }
+  if (!best) return null;
+  // Nothing changed: the node already says exactly this.
+  const h = moving.hint;
+  if (h && !h.at && h[best.side] === best.anchor) return null;
+  return best;
+}
+
+function parentOf(diagram: ArchDiagram): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const n of diagram.nodes) {
+    if (n.type === "container") for (const c of n.children) out.set(c, n.id);
+  }
+  return out;
 }
 
 /**

@@ -259,27 +259,40 @@ test("says so when there is nothing to draw, and stops saying it once there is",
   assert.ok(!visible(h, ".empty"), "and a diagram takes the message away");
 });
 
-test("a drag on a node reports its new coordinates, and nails down the rest", () => {
+test("a drag on a node reports where it belongs, not where the pointer left it", () => {
   const h = boot();
   h.send({ type: "source", text: SOURCE });
   h.sent.length = 0;
 
   const from = onScreen(h, "client");
   h.surface.dispatchEvent(pointer(h.window, "pointerdown", from.x, from.y));
-  h.surface.dispatchEvent(pointer(h.window, "pointermove", from.x + 80, from.y + 40));
-  h.surface.dispatchEvent(pointer(h.window, "pointerup", from.x + 80, from.y + 40));
+  h.surface.dispatchEvent(pointer(h.window, "pointermove", from.x + 240, from.y + 40));
+  h.surface.dispatchEvent(pointer(h.window, "pointerup", from.x + 240, from.y + 40));
 
   const move = h.sent.find((m) => m.type === "move");
   assert.ok(move?.type === "move", "a move was reported");
-  const ids = move.moves.map((m) => m.id);
-  assert.ok(ids.includes("client"), "including the node that was dragged");
-  for (const id of ["orders", "api", "db"]) {
-    assert.ok(ids.includes(id), `and ${id}, nailed down where it already was`);
-  }
-  const moved = move.moves.find((m) => m.id === "client")!;
-  assert.equal(moved.at.x % 8, 0, "on the grid");
-  assert.equal(moved.at.y % 8, 0, "on the grid");
-  assert.ok(moved.at.y > 0, "and further down than it started");
+  assert.equal(move.moves.length, 1, "only the node that was dragged — nothing else is pinned");
+  const moved = move.moves[0]!;
+  assert.equal(moved.id, "client", "the node that was dragged");
+  assert.ok(moved.anchor && moved.anchor !== "client", "next to some other node");
+  assert.ok(
+    ["rightOf", "leftOf", "above", "below"].includes(moved.side),
+    "on a side of it",
+  );
+});
+
+test("the drawing holds still while a node is being dragged over it", () => {
+  const h = boot();
+  h.send({ type: "source", text: SOURCE });
+  const before = h.document.querySelector(".stage")!.innerHTML;
+
+  const from = onScreen(h, "client");
+  h.surface.dispatchEvent(pointer(h.window, "pointerdown", from.x, from.y));
+  h.surface.dispatchEvent(pointer(h.window, "pointermove", from.x + 240, from.y + 40));
+  // Aiming at a target that moves as you reach for it is the reason the document
+  // is not rewritten until the pointer comes up.
+  assert.equal(h.document.querySelector(".stage")!.innerHTML, before, "nothing re-laid out");
+  assert.ok(visible(h, ".ghost"), "the node in hand follows the pointer instead");
 });
 
 test("picks the child out of the container it sits in", () => {

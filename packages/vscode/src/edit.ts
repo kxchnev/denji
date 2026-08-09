@@ -2,23 +2,31 @@
  * Turning a drop into an edit of the user's file.
  */
 import * as vscode from "vscode";
-import { findDeclaration, setNodePositions } from "power";
+import { findDeclaration, setNodeRelation } from "power";
 import { changedLines } from "./diff.js";
 import type { Move } from "./protocol.js";
 
 /**
- * Write `moves` into `document` as `@at` directives, in one undoable step.
+ * Write `moves` into `document` as placement directives, in one undoable step.
  *
  * The source is re-read here rather than taken from the webview: a drag lasts
- * long enough for someone to type in the editor, and the coordinates are the
- * only part of the gesture that should survive that.
+ * long enough for someone to type in the editor, and where the node ended up is
+ * the only part of the gesture that should survive that.
  */
 export async function applyMoves(
   document: vscode.TextDocument,
   moves: readonly Move[],
 ): Promise<void> {
   const before = document.getText();
-  const after = setNodePositions(before, moves);
+  let after: string | null = before;
+  for (const m of moves) {
+    const next: string | null = setNodeRelation(after, m.id, m.side, m.anchor);
+    if (next === null) {
+      after = null;
+      break;
+    }
+    after = next;
+  }
   // Null means not one of the ids is declared any more — the document moved on.
   if (after === null || after === before) return;
 

@@ -714,6 +714,60 @@ function cornerStack(
     .join("");
 }
 
+/**
+ * A path through its own corners, rounded by `radius`.
+ *
+ * Each corner is cut back by the same amount on both sides and replaced with a
+ * quadratic through the corner point, so the curve stays inside the turn the
+ * router walked. The cut never exceeds half of either adjacent segment: a corner
+ * that ate its whole segment would pull the line off the next corner too, and a
+ * tight zig-zag would come apart into a wave that goes nowhere near its route.
+ *
+ * A two-point path has no corners, so this is exactly the old polyline for
+ * everything that came before routers with corners existed.
+ */
+const HEAD_ROOM = 14;
+
+function polyline(path: readonly Point[], radius: number): string {
+  const move = (p: Point): string => `M ${round(p.x)} ${round(p.y)}`;
+  const line = (p: Point): string => `L ${round(p.x)} ${round(p.y)}`;
+  if (radius <= 0 || path.length < 3) {
+    return path.map((p, i) => (i === 0 ? move(p) : line(p))).join(" ");
+  }
+  const at = (from: Point, to: Point, d: number): Point => {
+    const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+    return { x: from.x + ((to.x - from.x) * d) / len, y: from.y + ((to.y - from.y) * d) / len };
+  };
+  const out = [move(path[0]!)];
+  for (let i = 1; i + 1 < path.length; i++) {
+    const prev = path[i - 1]!;
+    const cur = path[i]!;
+    const next = path[i + 1]!;
+    const into = Math.hypot(cur.x - prev.x, cur.y - prev.y);
+    const outOf = Math.hypot(next.x - cur.x, next.y - cur.y);
+    // The two segments touching a box keep a straight stretch for the arrowhead
+    // to sit on. Rounding into it is what makes a connector look like it arrives
+    // sideways: the head ends up drawn along the bend rather than along the line.
+    const r = Math.min(
+      radius,
+      into / 2,
+      outOf / 2,
+      i === 1 ? into - HEAD_ROOM : Infinity,
+      i === path.length - 2 ? outOf - HEAD_ROOM : Infinity,
+    );
+    if (r < 0.5) {
+      out.push(line(cur));
+      continue;
+    }
+    const enter = at(cur, prev, r);
+    const leave = at(cur, next, r);
+    out.push(line(enter));
+    out.push(`Q ${round(cur.x)} ${round(cur.y)} ${round(leave.x)} ${round(leave.y)}`);
+  }
+  out.push(line(path[path.length - 1]!));
+  return out.join(" ");
+}
+
 function renderConnection(c: Connection, index: number, styled: StyleModel): string {
   if (!c.path || c.path.length < 2) return "";
   const cls = styled.classesFor("edge", `e${index}`, c.styleRefs, c.styleProps);
@@ -730,7 +784,7 @@ function renderConnection(c: Connection, index: number, styled: StyleModel): str
   const d = c.curve
     ? `M ${round(a.x)} ${round(a.y)} C ${round(c.curve.c1.x)} ${round(c.curve.c1.y)} ` +
       `${round(c.curve.c2.x)} ${round(c.curve.c2.y)} ${round(b.x)} ${round(b.y)}`
-    : c.path.map((p, i) => `${i === 0 ? "M" : "L"} ${round(p.x)} ${round(p.y)}`).join(" ");
+    : polyline(c.path, c.radius ?? 0);
   const dashed = c.style === "dashed" ? " pwr-dashed" : "";
   const start = c.fromArrow ? ` marker-start="url(#{{ID}}-a${marker})"` : "";
   const end = c.toArrow ? ` marker-end="url(#{{ID}}-a${marker})"` : "";
@@ -806,6 +860,16 @@ function bounds(diagram: ArchDiagram, padding: number): { width: number; height:
     if (!n.rect) continue;
     maxX = Math.max(maxX, n.rect.x + n.rect.width);
     maxY = Math.max(maxY, n.rect.y + n.rect.height);
+  }
+  // Connectors too: a router that walks around the boxes can reach past the
+  // rightmost one, and the frame is decided here, after the layout has already
+  // fixed every rect. Measuring only the boxes clips exactly the route that had
+  // to go furthest — the one most worth seeing.
+  for (const c of diagram.connections) {
+    for (const p of c.path ?? []) {
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
   }
   return { width: Math.ceil(maxX + padding), height: Math.ceil(maxY + padding) };
 }

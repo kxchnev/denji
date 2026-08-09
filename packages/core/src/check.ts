@@ -14,7 +14,7 @@ import { findDeclaration, findHeaderLine } from "./dsl/arch-edit.js";
 import { parseArchitecture } from "./dsl/arch-parse.js";
 import { DiagramParseError } from "./dsl/error.js";
 import { layoutArchitecture } from "./layout/arch/index.js";
-import { resolvedAnchors, type LayoutWarning } from "./layout/arch/relative.js";
+import type { LayoutWarning } from "./layout/arch/scope.js";
 import type { ArchDiagram, ArchNode } from "./model/arch.js";
 import { intersects } from "./model/geometry.js";
 
@@ -25,7 +25,6 @@ export type DiagnosticCode =
   | "build-error"
   | "overlapping-siblings"
   | "hint-cycle"
-  | "loose-node"
   | "unconnected-node"
   | "extreme-aspect-ratio"
   | "at-overrides-hint";
@@ -88,7 +87,6 @@ export function checkDiagram(source: string): CheckResult {
   }
   diagnostics.push(...overlapDiagnostics(diagram, source));
   diagnostics.push(...pinnedHintDiagnostics(diagram, source));
-  diagnostics.push(...looseNodeDiagnostics(diagram, source));
   diagnostics.push(...unconnectedDiagnostics(diagram, source));
   diagnostics.push(...aspectDiagnostics(diagram, source));
 
@@ -219,44 +217,6 @@ function pinnedHintDiagnostics(diagram: ArchDiagram, source: string): Diagnostic
         n.id,
       ]),
     );
-  }
-  return out;
-}
-
-/**
- * Nodes with no resolvable hint that nothing else anchors to. Each starts its
- * own block, and blocks are packed left to right — so such a node silently lands
- * to the right of everything, which is the single most common surprise in this
- * language.
- *
- * Exempt only when it is the scope's first declared node: that one opens the
- * first block, so it is the origin everything else hangs off rather than a
- * stray. A loose node further down is a stray even if an earlier node happened
- * to be the origin — which is why this tests declaration position, not merely
- * "is it the first loose one".
- */
-function looseNodeDiagnostics(diagram: ArchDiagram, source: string): Diagnostic[] {
-  const out: Diagnostic[] = [];
-  for (const scope of scopes(diagram)) {
-    const ids = new Set(scope.map((n) => n.id));
-    const anchored = new Set<string>();
-    for (const n of scope) for (const a of resolvedAnchors(n.id, n.hint, ids)) anchored.add(a);
-    // Exact coordinates are the opposite of loose: the node is not parked
-    // anywhere, it is where it was put.
-    const isLoose = (n: ArchNode): boolean =>
-      !n.hint?.at && resolvedAnchors(n.id, n.hint, ids).length === 0 && !anchored.has(n.id);
-    const loose = scope.filter(isLoose);
-    const origin = scope[0] !== undefined && isLoose(scope[0]) ? 1 : 0;
-    for (const n of loose.slice(origin)) {
-      out.push(
-        warn(
-          source,
-          "loose-node",
-          `"${n.id}" has no placement hint and nothing points at it, so it is parked to the right of everything else`,
-          [n.id],
-        ),
-      );
-    }
   }
   return out;
 }

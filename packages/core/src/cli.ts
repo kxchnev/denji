@@ -15,7 +15,7 @@ const program = new Command();
 
 program
   .name("power")
-  .description("Architecture diagrams with controllable, relative layout")
+  .description("Architecture diagrams that lay themselves out")
   .version("0.0.1");
 
 /** Render at 2x the diagram's own units so raster output stays crisp. */

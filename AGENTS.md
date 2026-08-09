@@ -33,8 +33,9 @@ knowing before you start, are in
 [`.claude/skills/power-diagrams/SKILL.md`](./.claude/skills/power-diagrams/SKILL.md).
 The short version:
 
-- Give every node a placement hint except the first. A node with no hint that
-  nothing points at silently lands to the right of everything else.
+- Declare the boxes, wire them up, and write no hints at all — the layout is
+  computed from the connections. A hint overrules it for one pair; reach for one
+  only when you have a reason.
 - Group related nodes into containers; a long top-level row is unreadable.
 - ids are `[A-Za-z0-9_]+` — no hyphens — and must never be a keyword
   (`app`, `database`, `queue`, `rect`, `service`, `group`, `text`,

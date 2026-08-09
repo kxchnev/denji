@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "power — architecture diagrams",
-  description: "Free-form architecture diagrams with controllable, relative layout.",
+  description: "Free-form architecture diagrams that lay themselves out.",
 };
 
 // Set the theme before paint to avoid a flash of the wrong theme.

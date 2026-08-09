@@ -6,10 +6,11 @@ description: Write and edit architecture diagrams in the .pwr DSL (power). Use w
 # Writing `.pwr` diagrams
 
 `power` draws free-form architecture diagrams — shapes, containers and
-connections. **Write them with relative hints**: that is the whole point of the
-language, and a diagram made of hints keeps arranging itself as it grows.
-Exact coordinates exist (`@at`) but they are the escape hatch, and mostly they
-arrive in the file because a person dragged something — see below.
+connections. **Declare the boxes, wire them up, and stop.** The layout is
+computed from the connections, so a diagram that is wired up is finished; hints
+exist to overrule it for one pair, and exact coordinates (`@at`) are the escape
+hatch for a picture whose shape is not in the graph at all — a rack, a floor
+plan, a map.
 
 ## The loop
 
@@ -30,13 +31,13 @@ arrive in the file because a person dragged something — see below.
    VS Code.
 
 ⚠️ **In that preview they can drag a node, and the drag rewrites their file** —
-it writes `@at` into the declarations. So the source may have changed under you
-since you last read it: **re-read the file before every edit**, and never keep
-editing from a copy you made earlier.
+it writes a relation like `@rightOf(other)` into the declaration. So the source
+may have changed under you since you last read it: **re-read the file before
+every edit**, and never keep editing from a copy you made earlier.
 
-The eight things `check` reports: `parse-error` and `build-error` (errors —
+The seven things `check` reports: `parse-error` and `build-error` (errors —
 nothing renders, or ids/icons/styles do not hold together), then the layout
-warnings `loose-node`, `hint-cycle`, `overlapping-siblings`, `unconnected-node`,
+warnings `hint-cycle`, `overlapping-siblings`, `unconnected-node`,
 `at-overrides-hint` and `extreme-aspect-ratio`. They are explained in
 `power spec`.
 
@@ -74,20 +75,20 @@ bottomLeft|bottomRight)` writes a free line in that corner.
 
 ## Rules that decide whether it reads well
 
-- **Give every node a placement hint except the first one.** A node with no hint
-  that nothing points at starts a new block, and blocks are packed left to right
-  — it silently lands to the right of everything. This is the single most common
-  mistake. `check` reports it as `loose-node`.
+- **Draw the connections and write no hints at all.** The layout is computed
+  from the graph: what feeds something comes before it, and nodes that mostly
+  talk to each other are drawn together. A diagram whose boxes are wired up is
+  finished. Reaching for hints first is the single most common mistake — every
+  one you add is a constraint that has to stay true as the diagram grows.
+- **Add a hint only to overrule the layout for one pair**, e.g. `@rightOf(peer)`
+  to fix the order of two things on one row. `@below` / `@above` move a node to a
+  later / earlier layer; `@rightOf` / `@leftOf` order it within its own.
 - **Group related nodes into containers.** A long row of top-level nodes becomes
-  an unreadable strip; `check` reports `extreme-aspect-ratio`.
-- **Prefer `@below` for flow and `@rightOf` for peers.** A request path reads
-  top-to-bottom; things at the same level sit side by side.
-- **A connection is one curve, and it never routes around anything.** It leaves
-  a box perpendicular to a side and enters the other the same way; a third box
-  standing between the two **will be crossed**. That is the price of connectors
-  that always meet a box square on, so it is on you to leave the room: put the
-  pair side by side, or in the same container, rather than wiring across the
-  drawing. `check` has no rule for it — you see it in the rendered image.
+  an unreadable strip; `check` reports `extreme-aspect-ratio`. Containers also
+  scope the layout: each one is drawn from its own connections.
+- **Connectors route around the boxes on their own.** They leave and enter
+  perpendicular to a side, walk around anything in the way, and where several run
+  together they are spread into a bundle. You do not have to leave room for them.
 - **Connect everything you declare.** An unwired node is usually a leftover;
   `check` reports `unconnected-node`.
 - **To centre a node under several peers, wrap the peers in a `group` and hint
@@ -113,22 +114,22 @@ bottomLeft|bottomRight)` writes a free line in that corner.
 
 `@at(x, y)` puts a node's top-left corner at exact coordinates, **in its own
 scope** — the parent container's inner area, or the diagram at the top level.
-You will meet it because someone dragged a node in the preview or the
-playground: the drag writes this directive, snapped to 8.
+It is there because someone wanted that picture to match something outside the
+graph, and the layout leaves those nodes exactly where they are.
 
 - **`@at` beats every relation on the same node.** `@rightOf`, `@align` and
   `@gap` written there do nothing at all, and `check` says `at-overrides-hint`.
   So when you are asked to move a pinned node, edit its numbers — adding a hint
   is a no-op that looks like a fix.
-- **The first drag pins the whole document.** It has to, or everything else
-  would rearrange around the one node being dragged. A file full of `@at` is
-  therefore normal and not a mistake; it means the layout is frozen and nothing
-  arranges itself any more.
-- **Do not add `@at` yourself when a hint would do**, and do not strip the ones
-  that are there — they are the person's own placement, and deleting them hands
-  the scope back to the hints, which visibly rearranges the picture.
-- Other nodes may still point **at** a pinned node and they follow it, so you
-  can extend a dragged diagram with ordinary hints against its pinned parts.
+- **Do not add `@at` yourself.** Dragging no longer writes it: a drop is recorded
+  as a relation to the sibling it landed next to, so the node keeps being
+  arranged. Coordinates in a file are a deliberate choice by whoever put them
+  there.
+- **Do not strip the ones that are there** — deleting them hands those nodes back
+  to the layout, which visibly rearranges that part of the picture.
+- Other nodes may point **at** a pinned node, and those are placed against it
+  exactly, so you can extend a hand-placed part with ordinary hints. Everything
+  else steps clear of it.
 
 ## Syntax traps
 

@@ -12,10 +12,15 @@ export interface PreviewConfig {
   theme: PreviewTheme;
 }
 
-/** A node's position in the coordinate space of its own scope — i.e. an `@at`. */
+/**
+ * Where a dropped node belongs, said the way the document says it: next to a
+ * sibling, on a side. Not a coordinate — the layout arranges the scope from its
+ * connections, and a coordinate would take the node out of that for good.
+ */
 export interface Move {
   id: string;
-  at: { x: number; y: number };
+  anchor: string;
+  side: "rightOf" | "leftOf" | "above" | "below";
 }
 
 /** Host → webview. */
@@ -25,7 +30,7 @@ export type ToWebview =
 
 /** Webview → host. */
 export type FromWebview =
-  /** A drag was dropped: write these coordinates into the document. */
+  /** A drag was dropped: write this relation into the document. */
   | { type: "move"; moves: Move[] }
   /** A node was clicked without being moved: put the cursor on its declaration. */
   | { type: "reveal"; id: string }

@@ -211,15 +211,25 @@ export interface Connection extends Styled {
   fromArrow: boolean;
   toArrow: boolean;
   style: "solid" | "dashed";
-  /** Filled in by the layout engine: the two points where the connector meets
-   *  its boxes. */
+  /**
+   * Filled in by the layout engine: where the connector meets its boxes, and
+   * every corner in between. Two points for a router that draws one curve, more
+   * for one that walks a corridor around the boxes.
+   */
   path?: Point[];
   /**
    * Cubic control points for `path[0] → path[1]`, filled in by the layout. Each
    * one sits on the outward normal of its dock's side, which is what makes the
-   * arrowhead meet the box square on.
+   * arrowhead meet the box square on. Absent on a path with corners of its own.
    */
   curve?: { c1: Point; c2: Point };
+  /**
+   * How wide the corners of a multi-point `path` are rounded. The router owns
+   * this rather than the theme: how far a turn may be cut is a fact about the
+   * space the route was given, and a corner rounded past its own segment stops
+   * touching the points it was routed through.
+   */
+  radius?: number;
   labelPos?: Point;
 }
 

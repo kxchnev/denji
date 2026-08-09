@@ -92,23 +92,22 @@ describe("checkDiagram — layout warnings", () => {
     spy.mockRestore();
   });
 
-  it("flags loose nodes but exempts the scope's first declared node", () => {
+  it("says nothing about a node that wrote no hint — the connections place it", () => {
+    // This used to be the single most common complaint the checker had: a node
+    // nothing pointed at got parked past the whole drawing. Now the graph puts
+    // it where it belongs, so there is no surprise left to report.
     const src = [
       "architecture",
       '  app a "A"',
-      '  app b "B" @rightOf(a)',
+      '  app b "B"',
       '  app c "C"',
-      '  app d "D"',
+      "  a -> b",
+      "  b -> c",
     ].join("\n");
-    const loose = checkDiagram(src)
-      .diagnostics.filter((d) => d.code === "loose-node")
-      .flatMap((d) => d.nodes ?? []);
-    // `a` is anchored-to so it opens the block; c and d each start their own and
-    // get parked to the right, which is the surprise worth reporting.
-    expect(loose).toEqual(["c", "d"]);
+    expect(codes(src)).toEqual([]);
   });
 
-  it("does not call a node loose when something anchors to it", () => {
+  it("says nothing about a node that wrote a hint", () => {
     const src = 'architecture\n  app a "A"\n  app b "B" @rightOf(a)\n  a -> b\n';
     expect(codes(src)).toEqual([]);
   });
@@ -155,11 +154,9 @@ describe("checkDiagram — layout warnings", () => {
 });
 
 describe("checkDiagram — exact coordinates", () => {
-  it("does not call a pinned node loose", () => {
-    // Without coordinates this is the textbook loose node.
-    expect(codes('architecture\n  app a "A"\n  app b "B"\n')).toContain("loose-node");
-    expect(codes('architecture\n  app a "A"\n  app b "B" @at(0, 200)\n')).not.toContain(
-      "loose-node",
+  it("leaves a diagram placed by coordinates alone", () => {
+    expect(codes('architecture\n  app a "A" @at(0, 0)\n  app b "B" @at(0, 200)\n  a -> b\n')).toEqual(
+      [],
     );
   });
 
@@ -194,14 +191,14 @@ describe("checkDiagram — every finding says where", () => {
     return d;
   };
 
-  it("points a loose node at its own declaration, under the id", () => {
+  it("points a dead relation at its own declaration, under the id", () => {
     const src = [
       "architecture",
       '  app a "A"',
       '  app b "B" @rightOf(a)',
-      '  app stray "Stray"',
+      '  app stray "Stray" @rightOf(a) @at(0, 300)',
     ].join("\n");
-    const d = find(src, "loose-node");
+    const d = find(src, "at-overrides-hint");
     expect(d.line).toBe(4);
     expect(spanOf(d)).toBe("stray");
     expect(d.srcLine).toContain("Stray");
@@ -280,10 +277,10 @@ describe("checkDiagram — every finding says where", () => {
       "  # app stray is only mentioned here",
       '  app a "A"',
       '  app b "B" @rightOf(a)',
-      '  app stray "Stray"',
+      '  app stray "Stray" @below(a) @at(0, 300)',
       "  a -> stray",
     ].join("\n");
-    const d = find(src, "loose-node");
+    const d = find(src, "at-overrides-hint");
     expect(d.line).toBe(5);
     expect(d.srcLine).toContain('"Stray"');
   });

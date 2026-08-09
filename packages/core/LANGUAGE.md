@@ -13,8 +13,7 @@ it cannot see. Run it before handing a diagram to anyone.
 |---|---|---|
 | `parse-error` | error | the document does not parse; nothing renders |
 | `build-error` | error | it parses but does not hold together — duplicate id, unknown icon or style, a node in two containers |
-| `hint-cycle` | warning | hints point at each other; those nodes fall back to declaration order |
-| `loose-node` | warning | a node with no hint that nothing points at, so it is parked to the right of everything |
+| `hint-cycle` | warning | hints contradict each other; the relations that close the cycle are dropped |
 | `unconnected-node` | warning | a shape with no connections, in a diagram that otherwise has them |
 | `overlapping-siblings` | warning | two siblings drawn on top of each other |
 | `at-overrides-hint` | warning | a node has `@at` and a relation; the relation does nothing |
@@ -169,36 +168,50 @@ never run along its border.
 
 ## 5. Placement
 
-Placement is relative by default: a node is positioned against a **sibling in the
-same scope** — hints pointing into another container are ignored. `@at` is the
-escape hatch, and the playground writes it for you when you drag something.
+**You do not place anything. The connections do.**
+
+The layout reads each scope's own graph and draws it in layers along the flow:
+what feeds something comes before it, what it feeds comes after, and the order
+within a layer is chosen to keep the connectors from crossing. Nodes that mostly
+talk to each other are drawn together and placed as a group. A connection that
+skips a layer gets a corridor reserved through it, so no connector ever runs
+across a box it has nothing to do with.
+
+```
+architecture
+  app web "Web"
+  app api "API"
+  database db "Postgres"
+
+  web -> api
+  api -> db
+```
+
+That is a complete diagram. There is nothing to add about where the boxes go.
+
+### Hints are constraints, not coordinates
+
+Where the graph leaves a choice, say what you want and the layout obeys it:
 
 ```
 app b "B" @rightOf(a)
 app c "C" @below(a) @align(start)
 ```
 
-- One horizontal relation (`@rightOf` / `@leftOf`) sets X, one vertical
-  (`@below` / `@above`) sets Y. Write both and you pin both axes.
+- `@rightOf` / `@leftOf` mean **the same layer, in that order**.
+- `@below` / `@above` mean **a later / earlier layer**.
+- Which is which follows the direction the drawing runs, so the words always
+  mean what they say on the page.
 - If you write both `@rightOf` and `@leftOf`, **`rightOf` wins**; with both
   `@below` and `@above`, **`below` wins**.
-- `@align(start|center|end)` sets the cross axis, and **only applies when just
-  one axis is constrained**. Default `center`.
-- If the computed slot is taken, the node slides clear: one placed by a
-  *horizontal* relation slides **down**, one placed by a *vertical* relation
-  slides **right**.
+- `@align(start|center|end)` only applies to a node placed next to a pinned one
+  (below). Default `center`.
+- Contradicting yourself (`a @rightOf(b)` and `b @rightOf(a)`) does not fail: the
+  relations that close the cycle are dropped and `power check` reports
+  `hint-cycle`.
 
-### The rule that matters most
-
-Siblings tied together by hints form one block. **A node with no hint that
-nothing points at starts a new block, and blocks are packed left to right** — so
-it lands to the right of everything else, not where you expected.
-
-Give every node a hint except the one you want as the origin. `power check`
-reports the rest as `loose-node`.
-
-A cycle (`a @rightOf(b)` and `b @rightOf(a)`) does not fail; the nodes fall back
-to declaration order and `power check` reports `hint-cycle`.
+A node with no hints is not a problem and never was one to report — it is the
+ordinary case.
 
 ### Exact coordinates
 
@@ -215,30 +228,31 @@ service edge "Edge" @at(320, 80) {
   and leaves their coordinates alone.
 - A scope that has coordinates in it **keeps its origin**: it is measured from
   (0, 0) rather than packed against its leftmost node, so moving one node moves
-  nothing else. A relative-only scope still hugs its content, exactly as before.
+  nothing else.
 - Coordinates may be negative or fractional. At the top level the drawing simply
   extends to hold them. Inside a container the box has to contain its children, so
-  content reaching before the container's corner pushes the rest of that scope over
-  — which is why the playground stops a child at the corner and lets a top-level
-  node go wherever it likes.
+  content reaching before the container's corner pushes the rest of that scope over.
 - `@at` **beats every relation on the same node** — `@rightOf`, `@align` and
   `@gap` there do nothing, and `power check` reports `at-overrides-hint`.
-- Other nodes may still point **at** a pinned node, and they follow it. That is
-  what lets one part of a diagram be dragged into place while the rest keeps
-  arranging itself.
-- A pinned node leaves the sibling flow but stays an **obstacle** in it: blocks of
-  relative nodes step around it instead of landing on top of it.
+- Other nodes may still point **at** a pinned node, and they are placed against
+  it, exactly and in order. That is what lets one part of a diagram be drawn by
+  hand while the rest keeps arranging itself.
+- Everything the layout arranges steps clear of the pinned part rather than
+  landing on it.
 
-In the playground, dragging a shape or a container (by its title band) writes
-exactly this directive, snapped to 8px — and editing the numbers by hand moves the
-diagram. It is the same source either way; there is no hidden layout state.
+Reach for `@at` when a picture has to match a floor plan, a rack, a map — a shape
+that is not in the graph. For everything else, the graph already knows.
 
-The first drag also pins **everything else in the document** at the coordinates it
-already had. It has to: a node leaving a relative scope re-arranges everything left
-in it, and a child that grows its container re-arranges that container's scope in
-turn — so without this the one thing that visibly would not move is the node you
-are dragging. From then on the document is placed by coordinates and nothing
-arranges itself; delete the `@at`s to hand a scope back to the hints.
+### Dragging
+
+Dragging a shape or a container (by its title band) says **where it belongs**,
+not where the pointer stopped: on release the node gets a relation to the sibling
+it was dropped next to — `@rightOf(that_one)` and friends — and the layout keeps
+arranging everything, including it.
+
+The drawing holds still while you drag; only the node in hand moves, and the
+sibling it would attach to is outlined before you let go. It is the same source
+either way; there is no hidden layout state.
 
 ---
 
@@ -415,14 +429,17 @@ Directive names are case-insensitive: `@rightOf` and `@rightof` are the same.
 3. **Directives come before the `:` label** on a connection.
 4. **`{` ends the line; `}` sits alone on its own.**
 5. **Comments are whole-line only.**
-6. **Give every node at least one hint**, except the first. A node without one
-   silently lands to the right of everything. Two hints (one per axis) are fine
-   and pin both.
+6. **Write hints only where you actually care.** The connections decide the
+   arrangement; a hint is you overruling that for one pair, and every one you add
+   is a constraint someone has to keep true as the diagram grows.
 7. **Sizes carry no units**, and `fontSize` does not exist.
 8. **Long names get hyphenated.** Every shape shares one width, and past a
    ceiling a word too long for it is broken with a hyphen rather than allowed to
    widen every box in the picture.
 9. **A `@link` URL is unquoted and ends at `)`** — percent-encode one as `%29` —
    and only `http`, `https` and `mailto` are accepted.
-8. Prefer containers over a long row of top-level nodes — a wide strip is hard to
-   read, and `power check` reports it.
+10. **Draw the connections.** They are not decoration on top of a layout — they
+    *are* the layout. A diagram whose boxes are wired up needs nothing else said
+    about where anything goes.
+11. Prefer containers over a long row of top-level nodes — a wide strip is hard to
+    read, and `power check` reports it.
