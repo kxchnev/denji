@@ -29,6 +29,7 @@ export {
   ICONS,
   ICON_ALIASES,
   ICON_NAMES,
+  ICONSET_VERSION,
   resolveIcon,
   isKnownIcon,
   canonicalIconName,
@@ -38,6 +39,7 @@ export {
   type Icon,
   type SimpleIconLike,
 } from "./model/icon.js";
+export { POPULAR_ICONS } from "./model/icon.popular.js";
 export { LINK_SCHEMES, LinkError, validateLink } from "./model/link.js";
 export {
   parseArchitecture,

@@ -2,6 +2,11 @@ node_modules/
 dist/
 # Generated from the core's vocabulary by packages/vscode/scripts/generate-grammar.ts
 packages/vscode/syntaxes/
+# Generated from simple-icons by packages/core/scripts/generate-icons.ts. Five
+# megabytes of path data: the build writes them, so they can never go stale, and
+# the history never carries them.
+packages/core/src/model/icon.data.ts
+packages/core/src/model/icon.names.ts
 .next/
 out/
 *.tsbuildinfo

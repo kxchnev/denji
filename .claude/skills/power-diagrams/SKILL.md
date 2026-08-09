@@ -41,8 +41,8 @@ warnings `loose-node`, `hint-cycle`, `overlapping-siblings`, `unconnected-node`,
 `power spec`.
 
 **Run `power spec` and read it before writing anything non-trivial** — it prints
-the complete grammar. `power icons` lists every bundled icon name; run it rather
-than guessing.
+the complete grammar. `power icons <text>` searches the bundled marks; run it
+rather than guessing at a slug.
 
 If `power` is not on the PATH, the CLI is `node <repo>/packages/core/dist/cli.js`
 after `npm run build`. Resolve it to an absolute path once and reuse it — the
@@ -96,9 +96,15 @@ bottomLeft|bottomRight)` writes a free line in that corner.
   services is exactly what you usually want, and the wrapper is how you get it.
 - **Reach for `@icon(...)` when the technology is the point** (`postgres`,
   `kafka`, `k8s`, `redis`); skip it when the role matters more than the vendor.
-  Run `power icons` for the list. They are vendor marks only — there is no
-  generic device, browser or person glyph, so a "mobile app" box simply goes
-  without one.
+  **The whole of Simple Icons is bundled**, so nearly any product you can name is
+  there under its slug — `power icons <text>` searches by slug, title or
+  shorthand, and it is the fastest way to confirm one. Do not paste path data
+  into a diagram for a mark that is already in the set.
+  Two things are still missing and no slug will find them: **AWS, Azure, Amazon
+  and Oracle**, which asked to be removed, and generic glyphs — there is no
+  device, browser or person mark, so a "mobile app" box goes without one. For a
+  logo the set does not carry, declare it once at the top of the file:
+  `icon acme { path: … }`.
 - If an incoming edge's label collides with a container's frame, push the
   container down with `@gap(n)` on it. `check` has no rule for that; you will
   only see it in the rendered image.

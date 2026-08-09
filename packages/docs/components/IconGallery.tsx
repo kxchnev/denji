@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ICONS, ICON_ALIASES, ICON_NAMES } from "power";
+import { useMemo, useState, type CSSProperties } from "react";
+import { ICONS, ICON_ALIASES, ICON_NAMES, ICONSET_VERSION, POPULAR_ICONS } from "power";
+
+/**
+ * How many marks a search may show at once. The whole set is three and a half
+ * thousand: rendering it would put ten megabytes of inline `<path>` into the
+ * prerendered page, and nobody scrolls a wall of logos anyway — they search.
+ */
+const LIMIT = 120;
 
 /** Shorthands grouped by what they resolve to, so each card can list its own. */
 const ALIASES = Object.entries(ICON_ALIASES).reduce<Record<string, string[]>>((acc, [from, to]) => {
@@ -9,22 +16,14 @@ const ALIASES = Object.entries(ICON_ALIASES).reduce<Record<string, string[]>>((a
   return acc;
 }, {});
 
-/**
- * One stylesheet for the whole gallery rather than an inline `fill` per card:
- * the dark variants have to switch with the page, and a plain attribute cannot.
- */
-const SWATCH_CSS = ICON_NAMES.map((name) => {
-  const icon = ICONS[name]!;
-  const dark = icon.darkColor ?? icon.color;
-  return `.pwr-g-${name}{fill:${icon.color}}.dark .pwr-g-${name}{fill:${dark}}`;
-}).join("");
-
 export function IconGallery() {
   const [query, setQuery] = useState("");
 
-  const shown = useMemo(() => {
+  const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (q === "") return ICON_NAMES;
+    // Before anyone types: the marks a diagram actually reaches for. The full
+    // set sorted alphabetically opens on `1001tracklists`, which reads as a bug.
+    if (q === "") return POPULAR_ICONS;
     return ICON_NAMES.filter(
       (name) =>
         name.includes(q) ||
@@ -33,19 +32,32 @@ export function IconGallery() {
     );
   }, [query]);
 
+  const shown = useMemo(() => matches.slice(0, LIMIT), [matches]);
+
+
+
   return (
     <div className="my-6">
-      <style>{SWATCH_CSS}</style>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={`Filter ${ICON_NAMES.length} icons…`}
+        placeholder={`Search ${ICON_NAMES.length} icons…`}
         aria-label="Filter icons"
         className="h-9 w-full max-w-xs rounded-md border bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
       />
+      <p className="mt-2 text-xs text-muted-foreground">
+        Every mark in Simple Icons {ICONSET_VERSION} is bundled — {ICON_NAMES.length} of them.
+        {query.trim() === ""
+          ? " These are the ones a diagram usually reaches for; search for any other."
+          : matches.length > shown.length
+            ? ` Showing ${shown.length} of ${matches.length} matches; keep typing to narrow.`
+            : ` ${matches.length} match${matches.length === 1 ? "" : "es"}.`}
+      </p>
       {shown.length === 0 ? (
         <p className="mt-6 text-sm text-muted-foreground">
-          Nothing matches — but any other Simple Icons slug still works, see below.
+          Nothing matches. AWS, Azure and Oracle asked Simple Icons to drop them, so those
+          are not here either — declare an <code>icon</code> block for a mark the set does
+          not carry.
         </p>
       ) : (
         <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -55,7 +67,16 @@ export function IconGallery() {
               <li key={name} className="flex items-center gap-3 rounded-md border px-3 py-2">
                 <svg
                   viewBox={icon.viewBox ?? "0 0 24 24"}
-                  className={`h-5 w-5 shrink-0 pwr-g-${name}`}
+                  // Two custom properties and one static rule, rather than a
+                  // stylesheet built per keystroke: the dark variant has to
+                  // switch with the page, which a plain `fill` attribute cannot.
+                  style={
+                    {
+                      "--pwr-swatch": icon.color,
+                      "--pwr-swatch-dark": icon.darkColor ?? icon.color,
+                    } as CSSProperties
+                  }
+                  className="pwr-swatch h-5 w-5 shrink-0"
                   aria-hidden
                 >
                   <path d={icon.path} />

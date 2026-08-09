@@ -121,6 +121,14 @@
 .tok-string2 {
   color: hsl(var(--tok-string));
 }
+/* An icon swatch in the gallery. Two custom properties per card, set inline, so
+   the dark variant switches with the page without a stylesheet per keystroke. */
+.pwr-swatch {
+  fill: var(--pwr-swatch);
+}
+.dark .pwr-swatch {
+  fill: var(--pwr-swatch-dark);
+}
 /* A URL is a literal, so it borrows the string colour rather than claiming one
    of its own; the underline is what tells it apart from an ordinary label. */
 .tok-url {

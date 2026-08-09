@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "description": "Diagrams with controllable layout \u2014 a mermaid alternative where you can actually place things",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -16,10 +17,13 @@
     "LANGUAGE.md"
   ],
   "scripts": {
+    "prebuild": "npm run icons",
     "build": "tsc",
     "dev": "tsx",
+    "pretest": "npm run icons",
     "test": "vitest run",
     "test:watch": "vitest",
+    "pretypecheck": "npm run icons",
     "typecheck": "tsc --noEmit",
     "icons": "tsx scripts/generate-icons.ts"
   },

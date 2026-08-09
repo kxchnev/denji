@@ -331,18 +331,22 @@ architecture
   database db "Postgres" @below(api) @icon(postgres)
 ```
 
-61 marks are bundled, with aliases (`pg`, `postgres` → `postgresql`; `k8s` →
-`kubernetes`; `node` → `nodedotjs`; `java`, `jvm` → `openjdk`). An unknown name
-fails at parse time with a suggestion.
+**The whole of [Simple Icons](https://simpleicons.org) is bundled** — every mark
+in the set, by its slug, with no declaration needed. Shorthands work too: `pg`
+and `postgres` → `postgresql`, `k8s` → `kubernetes`, `java` → `openjdk`, and an
+Apache project answers to its short name (`spark`, `flink`, `cassandra`). An
+unknown name fails at parse time with a suggestion.
 
-**`power icons` lists every bundled name and alias — run it instead of
-guessing.** They are technology and vendor marks only: there is no generic
-device, browser, person or "mobile app" glyph, so leave those without an icon.
-An alias resolves to the vendor's own mark, which is not always the glyph you
-pictured (`java` → the OpenJDK Duke, `node` → the Node hexagon); check the list
-if it matters.
+**`power icons <text>` searches by slug, title or shorthand — run it instead of
+guessing.** Bare `power icons` says how many there are and which release they
+came from.
 
-`power icon <slug>` prints a block for any other Simple Icons slug.
+These are technology and vendor marks only: there is no generic device, browser,
+person or "mobile app" glyph, so leave those without an icon. **AWS, Azure,
+Amazon and Oracle are not there either** — those companies asked Simple Icons to
+drop them, so no slug can bring them back. Google Cloud is there. And an alias
+resolves to the vendor's own mark, which is not always the glyph you pictured
+(`java` → the OpenJDK Duke, `node` → the Node hexagon).
 
 Your own mark:
 
@@ -356,6 +360,9 @@ icon acme {
 `path` is required and may contain only SVG path commands and numbers. Optional:
 `color`, `dark-color`, `view-box` (four numbers), `title`. Declaring a block with
 a bundled name replaces that mark.
+
+This is now for the marks Simple Icons does not carry — AWS, Azure, a company's
+own logo — and nothing else. If `power icons` finds it, do not paste it.
 
 ---
 

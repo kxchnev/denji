@@ -3,7 +3,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
 import sharp from "sharp";
 import { checkDiagram } from "./check.js";
-import { ICON_ALIASES, ICON_NAMES } from "./model/icon.js";
+import { ICON_ALIASES, ICON_NAMES, ICONS, ICONSET_VERSION } from "./model/icon.js";
+import { POPULAR_ICONS } from "./model/icon.popular.js";
 import { parseArchitecture } from "./dsl/arch-parse.js";
 import { DiagramParseError } from "./dsl/error.js";
 import { toSvg } from "./index.js";
@@ -164,28 +165,78 @@ program
 
 program
   .command("icons")
-  .description("List the bundled icon names, so you can pick one without guessing")
-  .action(() => {
-    console.log(`${ICON_NAMES.length} bundled marks:\n`);
-    // Four columns keeps the whole set on one screen.
-    const width = Math.max(...ICON_NAMES.map((n) => n.length)) + 2;
-    for (let i = 0; i < ICON_NAMES.length; i += 4) {
+  .description("Find a brand mark by name — every Simple Icons slug is bundled")
+  .argument("[query]", "part of a slug, a title or a shorthand")
+  .action((query?: string) => {
+    const aliasesOf = new Map<string, string[]>();
+    for (const [from, to] of Object.entries(ICON_ALIASES)) {
+      aliasesOf.set(to, [...(aliasesOf.get(to) ?? []), from]);
+    }
+    const missing =
+      "AWS, Azure, Amazon and Oracle asked Simple Icons to drop their marks, so\n" +
+      "nothing of theirs is here; `openjdk` stands in for Java and `googlecloud`\n" +
+      "is. Generic ideas — a database, a user, a browser, a mobile app — have no\n" +
+      "mark at all. Declare an `icon` block for one of your own.";
+
+    if (!query) {
+      // Three and a half thousand names help nobody — least of all a model,
+      // which would spend its context on a list it has to search anyway. What
+      // it needs before typing is a starting vocabulary.
       console.log(
-        "  " +
-          ICON_NAMES.slice(i, i + 4)
-            .map((n) => n.padEnd(width))
-            .join("")
-            .trimEnd(),
+        `${ICON_NAMES.length} marks bundled — the whole of Simple Icons ${ICONSET_VERSION} — ` +
+          `plus ${Object.keys(ICON_ALIASES).length} shorthands.\n` +
+          "Search by name, title or shorthand:  power icons <text>\n\n" +
+          "Common ones:\n" +
+          POPULAR_ICONS.reduce<string[]>((lines, name, i) => {
+            if (i % 6 === 0) lines.push("  ");
+            lines[lines.length - 1] += `${name} `;
+            return lines;
+          }, []).join("\n") +
+          `\n\n${missing}`,
+      );
+      return;
+    }
+
+    const q = query.toLowerCase();
+    const titleOf = (name: string) => ICONS[name]!.title ?? name;
+    /** Ranked, so `power icons go` does not open on `agora` and `algolia`. */
+    const rank = (name: string): number => {
+      const title = titleOf(name).toLowerCase();
+      const shorthands = aliasesOf.get(name) ?? [];
+      if (name === q || shorthands.includes(q)) return 0;
+      if (name.startsWith(q)) return 1;
+      if (shorthands.some((a) => a.startsWith(q))) return 2;
+      if (title.startsWith(q)) return 3;
+      if (name.includes(q)) return 4;
+      if (title.includes(q)) return 5;
+      return shorthands.some((a) => a.includes(q)) ? 6 : 7;
+    };
+
+    const hits = ICON_NAMES.filter((name) => rank(name) < 7).sort(
+      (a, b) => rank(a) - rank(b) || a.localeCompare(b),
+    );
+
+    if (hits.length === 0) {
+      console.error(`No mark matches "${query}".\n${missing}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    // A search that answers with hundreds of lines is a search that failed.
+    const LIMIT = 40;
+    const shown = hits.slice(0, LIMIT);
+    const width = Math.max(...shown.map((n) => n.length)) + 2;
+    for (const name of shown) {
+      const shorthands = aliasesOf.get(name);
+      console.log(
+        `  ${name.padEnd(width)}${titleOf(name)}` +
+          (shorthands ? `  (${shorthands.join(", ")})` : ""),
       );
     }
-    console.log("\naliases:\n");
-    for (const [alias, target] of Object.entries(ICON_ALIASES)) {
-      console.log(`  ${alias.padEnd(width)}→ ${target}`);
-    }
     console.log(
-      "\nThese are technology and vendor marks only — there is no generic device,\n" +
-        "browser or person glyph. `power icon <slug>` emits a block for any other\n" +
-        "Simple Icons slug; see https://simpleicons.org.",
+      hits.length > LIMIT
+        ? `\n${LIMIT} of ${hits.length} matches shown — narrow the search.`
+        : `\n${hits.length} of ${ICON_NAMES.length} marks. Use the name on the left as @icon(name).`,
     );
   });
 
@@ -201,39 +252,6 @@ program
       console.error("power: LANGUAGE.md is missing from this install");
       process.exitCode = 1;
     }
-  });
-
-program
-  .command("icon")
-  .description("Print an `icon` block for any Simple Icons slug, ready to paste into a .pwr file")
-  .argument("<slug>", "Simple Icons slug, e.g. vercel — see https://simpleicons.org")
-  .option("-n, --name <name>", "name to declare it under (defaults to the slug)")
-  .action(async (slug: string, opts: { name?: string }) => {
-    // `simple-icons` is a devDependency: the ~40 bundled marks are generated
-    // from it at build time, and this command is the only thing that needs the
-    // other few thousand at runtime. Loading it lazily keeps the published
-    // package dependency-free for everyone who does not run it.
-    let icons: Record<string, { path: string; hex: string; title: string } | undefined>;
-    try {
-      icons = (await import("simple-icons")) as never;
-    } catch {
-      console.error("power: this command needs simple-icons — run `npm i -D simple-icons`");
-      process.exitCode = 1;
-      return;
-    }
-    const key = `si${slug.charAt(0).toUpperCase()}${slug.slice(1)}`;
-    const icon = icons[key];
-    if (!icon) {
-      console.error(`power: no icon "${slug}" in simple-icons (check the slug on simpleicons.org)`);
-      process.exitCode = 1;
-      return;
-    }
-    const name = opts.name ?? slug;
-    console.log(`icon ${name} {`);
-    console.log(`  path: ${icon.path}`);
-    console.log(`  color: #${icon.hex.toLowerCase()}`);
-    console.log(`  title: ${icon.title}`);
-    console.log(`}`);
   });
 
 program.parse();

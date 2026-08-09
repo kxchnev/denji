@@ -15,6 +15,7 @@ import {
   CORNERS,
   ICONS,
   ICON_NAMES,
+  POPULAR_ICONS,
   STYLE_PROPS,
   lightTheme,
   normalizePropName,
@@ -130,12 +131,30 @@ function styleValueOptions(spec: StylePropSpec | undefined): Completion[] {
   }
 }
 
-const ICON_OPTIONS: Completion[] = ICON_NAMES.map((name) => ({
-  label: name,
-  type: "constant",
-  detail: ICONS[name]?.color,
-  info: ICONS[name]?.title,
-}));
+/**
+ * Three and a half thousand options, built on the first `@icon(` and not before.
+ * Eagerly it is a few thousand objects and a few thousand property reads on
+ * every page that loads the editor — including the ones that never open it.
+ * CodeMirror filters the list itself, so handing it the whole set is fine.
+ */
+let popular: Completion[] | null = null;
+const popularIconOptions = (): Completion[] =>
+  (popular ??= POPULAR_ICONS.map((name, i) => ({
+    label: name,
+    type: "constant",
+    detail: ICONS[name]?.color,
+    info: ICONS[name]?.title,
+    boost: 50 - i,
+  })));
+
+let iconOptions: Completion[] | null = null;
+const allIconOptions = (): Completion[] =>
+  (iconOptions ??= ICON_NAMES.map((name) => ({
+    label: name,
+    type: "constant",
+    detail: ICONS[name]?.color,
+    info: ICONS[name]?.title,
+  })));
 
 /** Icon block properties — a different, much shorter list than the style ones. */
 const ICON_PROP_OPTIONS: Completion[] = [
@@ -624,7 +643,14 @@ export const pwrCompletions: CompletionSource = (ctx) => {
         detail: "declared here",
         boost: 60 - i,
       }));
-      return result([...declared, ...ICON_OPTIONS], wordFrom);
+      // Nothing typed yet: three and a half thousand names sorted alphabetically
+      // opens on `1001tracklists`. A short, hand-picked list is the only useful
+      // answer to "which icon?" — and the first character brings back the rest,
+      // because `result` re-runs this source on anything but a word character.
+      if (arg.trim() === "" && !ctx.explicit) {
+        return { from: wordFrom, options: [...declared, ...popularIconOptions()] };
+      }
+      return result([...declared, ...allIconOptions()], wordFrom);
     }
     if (name === "style") {
       const options = scan.styles.map((n, i) => ({

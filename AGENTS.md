@@ -17,7 +17,7 @@ npm run build                                          # once; the CLI runs from
 node packages/core/dist/cli.js check  diagram.pwr      # errors + layout problems
 node packages/core/dist/cli.js render diagram.pwr -o /tmp/p.png   # then LOOK at it
 node packages/core/dist/cli.js watch  diagram.pwr      # live preview in a browser
-node packages/core/dist/cli.js icons                   # the bundled icon names
+node packages/core/dist/cli.js icons <text>            # search 3450 brand marks
 ```
 
 `check` reports syntax errors *and* layout problems (`--json` for structured

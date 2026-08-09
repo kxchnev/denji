@@ -4,7 +4,18 @@ import { DiagramParseError } from "../src/dsl/error.js";
 import { architecture } from "../src/model/arch-builder.js";
 import { layoutArchitecture } from "../src/layout/arch/index.js";
 import { renderArchitecture } from "../src/render/arch-svg.js";
-import { ICONS, ICON_ALIASES, fromSimpleIcon, resolveIcon } from "../src/model/icon.js";
+import {
+  ICONS,
+  ICON_ALIASES,
+  ICON_NAMES,
+  ICONSET_VERSION,
+  canonicalIconName,
+  fromSimpleIcon,
+  isKnownIcon,
+  resolveIcon,
+  suggestIcon,
+} from "../src/model/icon.js";
+import { POPULAR_ICONS } from "../src/model/icon.popular.js";
 import type { ArchDiagram, Container, Shape } from "../src/model/arch.js";
 
 function shape(d: ArchDiagram, id: string): Shape {
@@ -38,7 +49,11 @@ describe("the bundled icon set", () => {
     const PATH = /^[MmLlHhVvCcSsQqTtAaZz0-9eE,.+\-\s]+$/;
     expect(Object.keys(ICONS).length).toBeGreaterThan(30);
     for (const [name, icon] of Object.entries(ICONS)) {
-      expect(name, `${name} is not a usable CSS class suffix`).toMatch(/^[a-z][a-z0-9]*$/);
+      // A name is only ever a *suffix* — `pwr-icon-42`, `--pwr-icon-42` — so a
+      // leading digit is fine where a bare class would be invalid, and `_` is
+      // an ordinary identifier character. Anything else would need escaping,
+      // which is exactly what must never be needed here.
+      expect(name, `${name} is not a usable CSS class suffix`).toMatch(/^[a-z0-9][a-z0-9_]*$/);
       expect(icon.path.length, `${name} has no path`).toBeGreaterThan(0);
       expect(PATH.test(icon.path), `${name} has an unsafe path`).toBe(true);
       expect(icon.color, `${name} has no brand colour`).toMatch(/^#[0-9a-f]{6}$/);
@@ -371,6 +386,79 @@ describe("icon geometry", () => {
     expect(w.x - square.x).toBeCloseTo(0, 1);
     expect(t.x - square.x).toBeCloseTo(4.5, 1);
     expect(t.y - square.y).toBeCloseTo(0, 1);
+  });
+});
+
+describe("the whole of Simple Icons", () => {
+  it("carries the marks an author used to paste by hand", () => {
+    // These four were pasted as `icon { path: … }` blocks into a real diagram
+    // because they were not bundled. They are the reason for the whole change.
+    for (const name of ["yandexcloud", "apachesuperset", "trino", "opensearch"]) {
+      expect(isKnownIcon(name), name).toBe(true);
+    }
+    expect(ICON_NAMES.length).toBeGreaterThan(3000);
+  });
+
+  it("answers to the short name of an Apache project", () => {
+    // `spark`, not `apachespark` — the name a person reaches for first.
+    for (const [short, full] of [
+      ["spark", "apachespark"],
+      ["flink", "apacheflink"],
+      ["cassandra", "apachecassandra"],
+      ["superset", "apachesuperset"],
+    ] as const) {
+      expect(canonicalIconName(short), short).toBe(full);
+    }
+  });
+
+  it("never lets a shorthand shadow a real mark", () => {
+    // Simple Icons lists `terraform` as an alias of OpenTofu, and Terraform is a
+    // mark in its own right. The generated aliases must not touch a live slug.
+    expect(canonicalIconName("terraform")).toBe("terraform");
+    expect(canonicalIconName("hive")).toBe("hive");
+    for (const from of Object.keys(ICON_ALIASES)) {
+      expect(ICONS[from], `${from} shadows a real mark`).toBeUndefined();
+    }
+  });
+
+  it("keeps the hand-written shorthands people actually type", () => {
+    for (const [short, full] of [
+      ["pg", "postgresql"],
+      ["k8s", "kubernetes"],
+      ["java", "openjdk"],
+      ["node", "nodedotjs"],
+    ] as const) {
+      expect(canonicalIconName(short), short).toBe(full);
+    }
+  });
+
+  it("says which release it was generated from", () => {
+    expect(ICONSET_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it("reaches a mark whose name starts with a digit", () => {
+    // Seventeen of them — `1password`, `7zip`, `42`. The directive used to
+    // insist on a leading letter, which put them out of reach entirely.
+    const d = parseArchitecture('architecture\n  app a "Vault" @icon(1password)');
+    expect(shape(d, "a").icon).toBe("1password");
+    expect(svg('architecture\n  app a "Vault" @icon(1password)')).toContain("pwr-icon-1password");
+  });
+
+  it("suggests a real mark for a typo, and nothing at all for a brand that is gone", () => {
+    // The set holds slugs one and two characters long, so an unranked search
+    // answered "did you mean `e`?" — worse than silence, and exactly what sends
+    // an author off to paste raw path data.
+    expect(suggestIcon("kubernets")).toBe("kubernetes");
+    expect(suggestIcon("dokcer")).toBe("docker");
+    expect(suggestIcon("postgres_ql")).toBe("postgresql");
+    // Amazon, Microsoft and Oracle asked to be removed: no mark here is theirs.
+    for (const gone of ["aws", "azure", "s3", "mobileapp"]) {
+      expect(suggestIcon(gone), gone).toBeUndefined();
+    }
+  });
+
+  it("keeps the starting vocabulary pointing at real marks", () => {
+    for (const name of POPULAR_ICONS) expect(isKnownIcon(name), name).toBe(true);
   });
 });
 

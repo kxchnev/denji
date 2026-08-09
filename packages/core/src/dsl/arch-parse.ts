@@ -618,7 +618,10 @@ function parseDirectives(
       }
       out.theme = arg;
     } else if (name === "icon") {
-      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(arg)) {
+      // A leading digit is legal: the set has `1password`, `7zip`, `42` and
+      // fourteen more, and the name only ever reaches CSS as a *suffix* of
+      // `pwr-icon-`, where a digit is fine.
+      if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(arg)) {
         throw new DiagramParseError("@icon expects an icon name", lineNo, indentCol(raw), raw);
       }
       // Only the shape of the name is checked here. Whether it resolves is

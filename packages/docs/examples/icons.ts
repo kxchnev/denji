@@ -5,7 +5,7 @@ export const icons: ExampleData[] = [
     id: "icon",
     title: "@icon",
     description:
-      "`@icon(name)` draws a brand mark before the label, in that brand's own colour. Shorthands work too — `pg` is `postgresql`, `k8s` is `kubernetes`.",
+      "`@icon(name)` draws a brand mark before the label, in that brand's own colour. Every mark in Simple Icons is bundled, so write the brand's name and it is there. Shorthands work too — `pg` is `postgresql`, `k8s` is `kubernetes`, `spark` is `apachespark`.",
     dsl: `architecture\n  app api "Orders API" @icon(dotnet)\n  database db "Postgres" @below(api) @icon(pg)\n  queue bus "Events" @below(db) @icon(kafka)\n  api -> db : sql`,
     api: `architecture()\n  .app("api", "Orders API", { icon: "dotnet" })\n  .database("db", "Postgres", { hint: { below: "api" }, icon: "pg" })\n  .queue("bus", "Events", { hint: { below: "db" }, icon: "kafka" })\n  .connect("api", "db", { label: "sql" })\n  .build();`,
   },
@@ -36,8 +36,8 @@ export const icons: ExampleData[] = [
     id: "icon-custom",
     title: "Your own mark",
     description:
-      "An `icon` block declares a mark from SVG path data. Any of the ~3400 Simple Icons works this way — `power icon <slug>` prints the block for you. A block that reuses a bundled name replaces it.",
+      "Every Simple Icons mark is already bundled, so a block is for the ones that are not: your own company logo, or a brand the set does not carry — AWS, Azure, Amazon and Oracle asked to be removed. A block that reuses a bundled name replaces it.",
     dsl: `architecture\n  icon acme {\n    path: M12 2 L22 20 L2 20 Z\n    color: #ff6600\n  }\n  app a "Acme" @icon(acme)\n  app b "Acme too" @rightOf(a) @icon(acme)`,
-    api: `import { fromSimpleIcon } from "power";\nimport { siVercel } from "simple-icons";\n\narchitecture()\n  .defineIcon("acme", { path: "M12 2 L22 20 L2 20 Z", color: "#ff6600" })\n  .defineIcon("vercel", fromSimpleIcon(siVercel))\n  .app("a", "Acme", { icon: "acme" })\n  .app("b", "Acme too", { hint: { rightOf: "a" }, icon: "acme" })\n  .build();`,
+    api: `architecture()\n  .defineIcon("acme", { path: "M12 2 L22 20 L2 20 Z", color: "#ff6600" })\n  .app("a", "Acme", { icon: "acme" })\n  .app("b", "Acme too", { hint: { rightOf: "a" }, icon: "acme" })\n  .build();`,
   },
 ];
