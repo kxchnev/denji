@@ -12,6 +12,7 @@
  */
 import * as vscode from "vscode";
 import { applyMoves, revealNode } from "./edit.js";
+import { safeLink } from "./open.js";
 import type { FromWebview, PreviewConfig, PreviewTheme, ToWebview } from "./protocol.js";
 
 /** Editors fire a change per keystroke; one render per burst is enough. The
@@ -197,6 +198,15 @@ class Preview {
       case "reveal": {
         const doc = this.document();
         if (doc) revealNode(doc, m.id);
+        return;
+      }
+      case "open": {
+        const url = safeLink(m.url);
+        // Silently, when it fails: a refused URL is a bug or an attack, and
+        // neither is news the reader of a diagram can act on. VS Code puts its
+        // own trusted-domain prompt in front of the browser, so there is no
+        // second confirmation to add here.
+        if (url) void vscode.env.openExternal(vscode.Uri.parse(url));
         return;
       }
     }

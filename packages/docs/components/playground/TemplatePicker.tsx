@@ -26,8 +26,9 @@ export function TemplatePicker({ onPick }: { onPick: (label: string, dsl: string
             className="flex flex-col overflow-hidden rounded-lg border bg-card text-left transition-colors hover:border-foreground/25 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {/* The preview is decoration — the card itself is the button, so the
-                diagram must not bring its own download control along: a <button>
-                inside a <button> is invalid markup and breaks hydration. */}
+                diagram must not bring its own download control along, nor a link
+                button's anchor: a <button> or an <a> inside a <button> is invalid
+                markup and breaks hydration. `controls={false}` turns off both. */}
             <div className="pointer-events-none grid h-32 place-items-center overflow-hidden border-b">
               {t.id === "empty" ? (
                 <Plus className="h-6 w-6 text-muted-foreground" />

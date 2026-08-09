@@ -373,3 +373,22 @@ describe("icon geometry", () => {
     expect(t.y - square.y).toBeCloseTo(0, 1);
   });
 });
+
+describe("links, through the builder", () => {
+  it("guards the programmatic API too, and names the node before the URL", () => {
+    // check.ts recovers a position for a build error by pulling the first quoted
+    // word out of the message, so the id has to come first or the diagnostic
+    // lands nowhere.
+    expect(() => architecture().app("api", "API", { link: "javascript:alert(1)" }).build()).toThrow(
+      /^Node "api" has an unusable link/,
+    );
+    expect(() =>
+      architecture().container("s", "S", { kind: "service", link: "./x.md" }).build(),
+    ).toThrow(/^Node "s" has an unusable link/);
+  });
+
+  it("lets a real one through untouched", () => {
+    const d = architecture().app("api", "API", { link: "https://example.com/a?b=1" }).build();
+    expect(d.nodes[0]!.link).toBe("https://example.com/a?b=1");
+  });
+});

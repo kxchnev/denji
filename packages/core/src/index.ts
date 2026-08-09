@@ -38,6 +38,7 @@ export {
   type Icon,
   type SimpleIconLike,
 } from "./model/icon.js";
+export { LINK_SCHEMES, LinkError, validateLink } from "./model/link.js";
 export {
   parseArchitecture,
   SHAPE_KIND_NAMES,
@@ -54,7 +55,18 @@ export {
   type Declaration,
 } from "./dsl/arch-edit.js";
 export { DiagramParseError } from "./dsl/error.js";
-export { snapToGrid, pinsFor, nodeDepths, nodeAt, isBoxed } from "./interact.js";
+export {
+  snapToGrid,
+  pinsFor,
+  nodeDepths,
+  nodeAt,
+  linkAt,
+  linkBadgeRect,
+  pickAt,
+  isBoxed,
+  LINK_BADGE,
+  type LinkHit,
+} from "./interact.js";
 
 import type { ArchDiagram } from "./model/arch.js";
 import { layoutArchitecture, type ArchLayoutOptions } from "./layout/arch/index.js";

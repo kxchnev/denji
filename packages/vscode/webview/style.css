@@ -68,6 +68,13 @@ body {
   cursor: move;
 }
 
+/* Over a link button "this opens" outranks "this moves": the button sits inside
+   the element it belongs to, and pressing it moves nothing. */
+.surface.over-link,
+.surface.over-link:active {
+  cursor: pointer;
+}
+
 .stage {
   position: absolute;
   left: 0;

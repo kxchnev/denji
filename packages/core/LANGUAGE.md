@@ -331,12 +331,38 @@ a bundled name replaces that mark.
 
 ---
 
-## 9. Where each directive is allowed
+## 9. Links
+
+`@link(url)` on a shape or a container draws a small button in its top-right
+corner. Pressing it opens the URL — a new tab on the docs site, your browser
+from the VS Code preview. The button is an **overlay**: it never changes a box's
+size or where it sits, so adding one to a finished diagram moves nothing.
+
+```
+architecture
+  app api "Orders API" @link(https://example.com/runbook)
+  service pay "Payments" @below(api) @link(https://example.com/payments) {
+    database db "Ledger" @link(mailto:data@example.com)
+  }
+```
+
+- Only `http`, `https` and `mailto` are accepted. Anything else — `javascript:`,
+  `data:`, a relative path like `./doc.md` — is a parse error, so a diagram can
+  never carry an executable URL to whoever opens it.
+- The URL is **not quoted** and runs to the closing `)`, so it may not contain
+  one: percent-encode a `)` as `%29`. A `#fragment` is fine, because a comment
+  has to own its whole line.
+- A connection cannot carry a link — its label runs from the first `:` to the
+  end of the line, and a URL has a `:` in it.
+- Because the button overlays the box, a long label passes underneath it. That
+  is the trade for a diagram whose layout does not shift when a link is added.
+
+## 10. Where each directive is allowed
 
 | Context | Allowed |
 |---|---|
 | `architecture` line | `@spacing` `@spacingX` `@spacingY` `@margin` `@theme` |
-| shape | `@rightOf` `@leftOf` `@above` `@below` `@gap` `@align` `@style` `@icon` + style properties |
+| shape | `@rightOf` `@leftOf` `@above` `@below` `@gap` `@align` `@style` `@icon` `@link` + style properties |
 | container | the shape set, plus `@spacing` `@spacingX` `@spacingY` `@padding` |
 | connection | `@style` + style properties |
 | `text` line | `@corner` |
@@ -345,7 +371,7 @@ Directive names are case-insensitive: `@rightOf` and `@rightof` are the same.
 
 ---
 
-## 10. Rules that are easy to get wrong
+## 11. Rules that are easy to get wrong
 
 1. **ids cannot contain `-`.** Use `order_api`, not `order-api`.
 2. **Never name a node after a keyword.** `app`, `database`, `queue`, `rect`,
@@ -358,5 +384,7 @@ Directive names are case-insensitive: `@rightOf` and `@rightof` are the same.
    silently lands to the right of everything. Two hints (one per axis) are fine
    and pin both.
 7. **Sizes carry no units**, and `fontSize` does not exist.
+8. **A `@link` URL is unquoted and ends at `)`** — percent-encode one as `%29` —
+   and only `http`, `https` and `mailto` are accepted.
 8. Prefer containers over a long row of top-level nodes — a wide strip is hard to
    read, and `power check` reports it.

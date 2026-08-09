@@ -136,7 +136,7 @@
     "grammar": "tsx scripts/generate-grammar.ts",
     "build": "npm run grammar && node esbuild.mjs",
     "watch": "npm run grammar && node esbuild.mjs --watch",
-    "test": "npm run build && tsx test/diff.test.ts && tsx test/extension.test.ts && tsx test/grammar.test.ts && tsx test/webview.test.ts",
+    "test": "npm run build && tsx test/diff.test.ts && tsx test/extension.test.ts && tsx test/grammar.test.ts && tsx test/open.test.ts && tsx test/webview.test.ts",
     "typecheck": "tsc --noEmit",
     "package": "npm run build && vsce package --no-dependencies -o power-vscode.vsix"
   },

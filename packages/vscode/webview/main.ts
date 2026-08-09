@@ -6,7 +6,8 @@
  * the extension host, because a drag re-lays the document out on every frame —
  * that is what makes containers grow and connectors re-aim while the node is
  * still in hand. An IPC round-trip per frame would be felt. The host is asked
- * for exactly one thing: to write the drop into the file.
+ * only for what a webview cannot do itself: write a drop into the file, put the
+ * cursor on a declaration, open a link in a browser.
  *
  * The document is the only state. Nothing here owns a position; the webview
  * shows the source it was given, or — for the length of one drag — the source
@@ -16,6 +17,7 @@ import {
   DiagramParseError,
   isBoxed,
   layoutArchitecture,
+  linkAt,
   nodeAt,
   nodeDepths,
   parseArchitecture,
@@ -209,6 +211,15 @@ let nodeDrag: {
   freeze: Array<{ id: string; at: Point }>;
 } | null = null;
 let hoverId: string | null = null;
+/**
+ * A link button under the pointer, held between press and release.
+ *
+ * Deliberately not a drag and not a pan: a press on a button starts nothing, so
+ * the "clicked without moving = reveal" branch in endDrag is unreachable from
+ * here and the two gestures cannot be confused for one another.
+ */
+let linkArm: { id: string; url: string } | null = null;
+let hoverLink: string | null = null;
 
 /** Where the rendered drawing's own origin sits on screen.
  *
@@ -270,6 +281,10 @@ function paintView(): void {
     outline.style.outlineWidth = `${1 / view.scale}px`;
   }
   surface.classList.toggle("over-node", hoverId !== null);
+  surface.classList.toggle("over-link", hoverLink !== null);
+  // Where it goes, before it goes there — the only warning a preview can give
+  // ahead of handing a URL to a browser.
+  surface.title = hoverLink ?? "";
 }
 
 function fit(): void {
@@ -334,6 +349,14 @@ surface.addEventListener("pointerdown", (e) => {
   // wholesale whenever the source changes, which would drop the capture mid-drag.
   surface.setPointerCapture(e.pointerId);
 
+  // A button beats the node it sits on: a container's hangs in the title band,
+  // which is the only part of a container a drag can take hold of.
+  const link = shown.diagram ? linkAt(shown.diagram, toDiagram(e), depths) : null;
+  if (link) {
+    linkArm = { id: link.node.id, url: link.url };
+    return; // this pointer opens a link: not a drag, not a pan
+  }
+
   const hit = shown.diagram ? nodeAt(shown.diagram, toDiagram(e), depths) : null;
   if (hit?.local && shown.diagram) {
     nodeDrag = {
@@ -381,16 +404,34 @@ surface.addEventListener("pointermove", (e) => {
     paintView();
     return;
   }
-  const hit = shown.diagram ? nodeAt(shown.diagram, toDiagram(e), depths) : null;
+  const p = toDiagram(e);
+  const overLink = shown.diagram ? linkAt(shown.diagram, p, depths) : null;
+  // Over a button, say only "this opens": the dashed "this moves" outline of the
+  // node underneath it is a mixed message about what the press will do.
+  const hit = overLink || !shown.diagram ? null : nodeAt(shown.diagram, p, depths);
   const next = hit?.id ?? null;
-  if (next !== hoverId) {
+  const nextLink = overLink?.url ?? null;
+  if (next !== hoverId || nextLink !== hoverLink) {
     hoverId = next;
+    hoverLink = nextLink;
     paintView();
   }
 });
 
-function endDrag(): void {
+function endDrag(e?: PointerEvent): void {
   panFrom = null;
+  const armed = linkArm;
+  linkArm = null;
+  if (armed) {
+    // Only a release still over the button that was pressed counts, exactly as
+    // a real button behaves: press, wander off, release — nothing happens.
+    const still =
+      e?.type === "pointerup" && shown.diagram ? linkAt(shown.diagram, toDiagram(e), depths) : null;
+    if (still && still.node.id === armed.id && still.url === armed.url) {
+      vscode.postMessage({ type: "open", url: still.url });
+    }
+    return;
+  }
   const nd = nodeDrag;
   if (!nd) return;
   nodeDrag = null;
@@ -414,14 +455,17 @@ surface.addEventListener("pointerup", endDrag);
 surface.addEventListener("pointercancel", endDrag);
 surface.addEventListener("lostpointercapture", endDrag);
 surface.addEventListener("pointerleave", () => {
-  if (hoverId === null) return;
+  if (hoverId === null && hoverLink === null) return;
   hoverId = null;
+  hoverLink = null;
   paintView();
 });
 
 // Bailing out mid-drag has to leave the document alone, preview and all.
 window.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape" || !nodeDrag) return;
+  if (e.key !== "Escape") return;
+  linkArm = null;
+  if (!nodeDrag) return;
   nodeDrag = null;
   preview = null;
   recompute();

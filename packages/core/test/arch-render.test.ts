@@ -294,3 +294,85 @@ describe("output shape", () => {
     expect(() => svg(SAMPLE, { theme: evil })).toThrow(/Unsafe style value/);
   });
 });
+
+describe("link buttons", () => {
+  const LINKED = `
+architecture
+  app gw "Gateway" @link(https://example.com/gw)
+  service svc "Orders" @below(gw) @link(https://example.com/runbook) {
+    database db "PG"
+  }
+  gw -> svc : http
+`;
+
+  it("draws one button per linked element and nothing for the rest", () => {
+    const out = svg(LINKED);
+    expect(out.match(/class="pwr-lk-p"/g)).toHaveLength(2);
+    expect(svg(SAMPLE)).not.toContain("pwr-lk");
+  });
+
+  it("leaves a link-free diagram's stylesheet exactly as it was", () => {
+    // The scope class is a hash of markup plus palette, so a rule that leaked
+    // into every diagram would repaint every already-published one.
+    const css = sheet(svg(SAMPLE));
+    expect(css).not.toContain("--pwr-link-");
+    expect(css).not.toContain(".pwr-lk");
+  });
+
+  it("draws the buttons over the connections", () => {
+    // A connector docks within ten pixels of a corner, so an arrow really does
+    // cross this patch — and a button with a line through it is not a button.
+    const out = svg(LINKED);
+    expect(out.indexOf('class="pwr-lks"')).toBeGreaterThan(out.lastIndexOf('class="pwr-e'));
+  });
+
+  it("carries its own chrome in both palettes, with literal fallbacks", () => {
+    for (const theme of ["light", "dark"] as const) {
+      const css = sheet(svg(LINKED, { theme }));
+      const chrome = theme === "dark" ? darkTheme.link! : lightTheme.link!;
+      expect(css).toContain(`--pwr-link-fill:${chrome.fill}`);
+      expect(css).toContain(`fill:var(--pwr-link-fill,${chrome.fill})`);
+      expect(css).toContain(`stroke:var(--pwr-link-glyph,${chrome.glyph})`);
+      expect(css.match(/var\(--[a-z0-9-]+\)/g)).toBeNull();
+    }
+  });
+
+  it("restates the chrome for the dark half of a two-palette render", () => {
+    const css = sheet(svg(LINKED, { themeMode: "selector" }));
+    expect(css).toContain(`--pwr-link-fill:${lightTheme.link!.fill}`);
+    expect(css).toContain(`--pwr-link-fill:${darkTheme.link!.fill}`);
+  });
+
+  it("is inert markup by default, and an anchor only when asked", () => {
+    // An <a> is live in a page, dead in the VS Code webview and dropped by the
+    // rasterizer, so the viewers hit-test instead and only a standalone .svg
+    // asks for the anchor.
+    const plain = svg(LINKED);
+    expect(plain).not.toContain("<a ");
+    expect(plain).not.toMatch(/href="(?!#)/);
+
+    const anchored = svg(LINKED, { linkAnchors: true });
+    expect(anchored.match(/<a class="pwr-lk"/g)).toHaveLength(2);
+    expect(anchored).toContain('href="https://example.com/gw"');
+    expect(anchored).toContain('rel="noopener noreferrer"');
+  });
+
+  it("escapes the URL wherever it lands", () => {
+    const src = 'architecture\napp a "A" @link(https://x.com/a?b=1&c=2)';
+    const out = svg(src, { linkAnchors: true });
+    expect(out).toContain('href="https://x.com/a?b=1&amp;c=2"');
+    expect(out).toContain("<title>https://x.com/a?b=1&amp;c=2</title>");
+    expect(out).not.toContain("b=1&c=2");
+  });
+
+  it("inlines the glyph, like every other mark in the output", () => {
+    const out = svg(LINKED);
+    expect(out).not.toContain("<image");
+    expect(out).not.toContain("<use");
+    expect(out).toContain('class="pwr-lk-i"');
+  });
+
+  it("is deterministic", () => {
+    expect(svg(LINKED)).toBe(svg(LINKED));
+  });
+});

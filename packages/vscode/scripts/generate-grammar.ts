@@ -21,6 +21,7 @@ import {
   CORNERS,
   DIRECTIVE_NAMES,
   ICON_PROP_NAMES,
+  LINK_SCHEMES,
   SHAPE_KIND_NAMES,
   STYLE_PROPS,
   themes,
@@ -63,6 +64,9 @@ const STYLE_PROP_NAMES = Object.keys(STYLE_PROPS).flatMap((prop) => {
 });
 
 const DIRECTIVES = altI(longestFirst([...DIRECTIVE_NAMES, ...STYLE_PROP_NAMES]));
+
+/** The schemes `@link` accepts, without their colons — the URL rule adds it. */
+const LINK_SCHEME_NAMES = altI(longestFirst(LINK_SCHEMES.map((s) => s.slice(0, -1))));
 
 /** Values that are words rather than numbers, so a typo reads as a typo. */
 const CONSTANTS = altI(
@@ -221,6 +225,10 @@ const grammar = {
 
     value: {
       patterns: [
+        // First, and ahead of the colour and number rules: a URL is one token,
+        // not a word plus two numbers plus a colour swatch where its `#fragment`
+        // happens to read as hex. It ends at `)`, because so does the argument.
+        { match: `\\b(?:${LINK_SCHEME_NAMES}):[^\\s)]*`, name: "markup.underline.link.pwr" },
         { match: "#[0-9a-fA-F]{3,8}\\b", name: "constant.other.color.pwr" },
         {
           match: "\\b(rgb|rgba|hsl|hsla)\\b",

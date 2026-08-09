@@ -6,21 +6,39 @@ description: Write and edit architecture diagrams in the .pwr DSL (power). Use w
 # Writing `.pwr` diagrams
 
 `power` draws free-form architecture diagrams — shapes, containers and
-connections, placed **only** by relative hints. No coordinates.
+connections. **Write them with relative hints**: that is the whole point of the
+language, and a diagram made of hints keeps arranging itself as it grows.
+Exact coordinates exist (`@at`) but they are the escape hatch, and mostly they
+arrive in the file because a person dragged something — see below.
 
 ## The loop
 
 1. Write or edit the `.pwr` file.
 2. `power check <file>` — syntax errors *and* layout problems. Fix everything it
-   lists. `--json` for structured output, `--strict` to fail on warnings too.
+   lists. Every finding points at a line and column (`file:12:3  warning  …`
+   plus the source line and a caret), so go straight there. `--json` for
+   structured output, `--strict` to fail on warnings too.
 3. **`power render <file> -o /tmp/preview.png` and look at the image.** Do this;
    do not skip it. `check` can only judge the things it has a rule for — it says
-   nothing about a label colliding with a container frame, an arrow taking an
-   ugly detour, or a layout that is merely confusing. Reading the picture is the
-   only way to catch those, and you can read pictures.
-4. Only then hand it over, and suggest they keep `power watch <file>` open: it
-   re-renders on every save, so they can watch your edits land and tell you what
-   to change without a round trip.
+   nothing about a label colliding with a container frame, a connector cutting
+   across a third box, or a layout that is merely confusing. Reading the picture
+   is the only way to catch those, and you can read pictures.
+4. Only then hand it over. They are most likely watching in the VS Code preview
+   (it opens beside any `.pwr` file and re-renders as you type), so your edits
+   land in front of them and they can tell you what to change without a round
+   trip. `power watch <file>` is the same thing in a browser, for someone not in
+   VS Code.
+
+⚠️ **In that preview they can drag a node, and the drag rewrites their file** —
+it writes `@at` into the declarations. So the source may have changed under you
+since you last read it: **re-read the file before every edit**, and never keep
+editing from a copy you made earlier.
+
+The eight things `check` reports: `parse-error` and `build-error` (errors —
+nothing renders, or ids/icons/styles do not hold together), then the layout
+warnings `loose-node`, `hint-cycle`, `overlapping-siblings`, `unconnected-node`,
+`at-overrides-hint` and `extreme-aspect-ratio`. They are explained in
+`power spec`.
 
 **Run `power spec` and read it before writing anything non-trivial** — it prints
 the complete grammar. `power icons` lists every bundled icon name; run it rather
@@ -64,6 +82,12 @@ bottomLeft|bottomRight)` writes a free line in that corner.
   an unreadable strip; `check` reports `extreme-aspect-ratio`.
 - **Prefer `@below` for flow and `@rightOf` for peers.** A request path reads
   top-to-bottom; things at the same level sit side by side.
+- **A connection is one curve, and it never routes around anything.** It leaves
+  a box perpendicular to a side and enters the other the same way; a third box
+  standing between the two **will be crossed**. That is the price of connectors
+  that always meet a box square on, so it is on you to leave the room: put the
+  pair side by side, or in the same container, rather than wiring across the
+  drawing. `check` has no rule for it — you see it in the rendered image.
 - **Connect everything you declare.** An unwired node is usually a leftover;
   `check` reports `unconnected-node`.
 - **To centre a node under several peers, wrap the peers in a `group` and hint
@@ -79,6 +103,27 @@ bottomLeft|bottomRight)` writes a free line in that corner.
   container down with `@gap(n)` on it. `check` has no rule for that; you will
   only see it in the rendered image.
 
+## When the file already has `@at` in it
+
+`@at(x, y)` puts a node's top-left corner at exact coordinates, **in its own
+scope** — the parent container's inner area, or the diagram at the top level.
+You will meet it because someone dragged a node in the preview or the
+playground: the drag writes this directive, snapped to 8.
+
+- **`@at` beats every relation on the same node.** `@rightOf`, `@align` and
+  `@gap` written there do nothing at all, and `check` says `at-overrides-hint`.
+  So when you are asked to move a pinned node, edit its numbers — adding a hint
+  is a no-op that looks like a fix.
+- **The first drag pins the whole document.** It has to, or everything else
+  would rearrange around the one node being dragged. A file full of `@at` is
+  therefore normal and not a mistake; it means the layout is frozen and nothing
+  arranges itself any more.
+- **Do not add `@at` yourself when a hint would do**, and do not strip the ones
+  that are there — they are the person's own placement, and deleting them hands
+  the scope back to the hints, which visibly rearranges the picture.
+- Other nodes may still point **at** a pinned node and they follow it, so you
+  can extend a dragged diagram with ordinary hints against its pinned parts.
+
 ## Syntax traps
 
 These are the ones that actually bite. All verified against the parser.
@@ -93,6 +138,10 @@ These are the ones that actually bite. All verified against the parser.
 - **Sizes are unitless** — `@width(150)`, not `150px`. There is no `fontSize`.
 - `@theme` and `@margin` only on the `architecture` line; `@padding` only on a
   container; `@corner` only on a `text`.
+- **`@link(url)` is unquoted and ends at the first `)`** — percent-encode one
+  as `%29` — and takes only `http`, `https` and `mailto`. It draws a button in
+  the element's top-right corner, over the box: nothing about the layout moves,
+  but a long label passes underneath it. Connections cannot carry one.
 - **`text` lives inside a `group` only** and its string must be quoted. Repeat
   it to stack lines in one corner — there is no `\n`. It reserves a band, so it
   grows the group rather than overlapping the children: a long note makes a wide
@@ -100,6 +149,10 @@ These are the ones that actually bite. All verified against the parser.
 
 ## When you are asked to change an existing diagram
 
-Read the file first. Keep the ids stable — the person is looking at the picture
-and refers to boxes by their labels, and stable ids keep the diff small and the
-layout from jumping around.
+Read the file from disk first — every time, not once per conversation. A drag in
+the preview rewrites it between your turns.
+
+Keep the ids stable — the person is looking at the picture and refers to boxes
+by their labels, and stable ids keep the diff small and the layout from jumping
+around. Keep their formatting and comments too: edit the lines you need and
+leave the rest alone, rather than rewriting the file in your own house style.

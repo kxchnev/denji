@@ -121,6 +121,12 @@
 .tok-string2 {
   color: hsl(var(--tok-string));
 }
+/* A URL is a literal, so it borrows the string colour rather than claiming one
+   of its own; the underline is what tells it apart from an ordinary label. */
+.tok-url {
+  color: hsl(var(--tok-string));
+  text-decoration: underline;
+}
 .tok-number {
   color: hsl(var(--tok-number));
 }

@@ -1,5 +1,5 @@
 import { StreamLanguage, type StreamParser, type StringStream } from "@codemirror/language";
-import { STYLE_PROPS, normalizePropName, type StylePropSpec } from "power";
+import { LINK_SCHEMES, STYLE_PROPS, normalizePropName, type StylePropSpec } from "power";
 import { pwrCompletions } from "./pwr-complete";
 
 /** Mirrors SHAPE_KINDS / CONTAINER_KINDS in packages/core/src/dsl/arch-parse.ts — case-sensitive. */
@@ -252,6 +252,13 @@ function argument(stream: StringStream, state: PwrState): string | null {
   if (state.directive === "align" || state.directive === "theme") return "atom";
   if (state.directive === "corner") return "atom";
   if (state.directive === "icon") return "atom";
+  if (state.directive === "link") {
+    const v = arg[0].trim().toLowerCase();
+    const colon = v.indexOf(":");
+    // Still typing the scheme: flashing red on `h`, `ht`, `htt` is noise.
+    if (colon < 0) return "string";
+    return LINK_SCHEMES.includes(v.slice(0, colon + 1)) ? "url" : "invalid";
+  }
   if (state.directive === "style") return "variableName";
   if (RELATIONAL.has(state.directive)) return "variableName";
   // An inline style property: `@fill(#0f172a)`, `@stroke-width(2)`.

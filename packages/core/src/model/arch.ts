@@ -136,6 +136,14 @@ export interface Shape extends Styled {
    * layout runs long before styles are resolved.
    */
   icon?: string;
+  /**
+   * URL behind the button drawn in this shape's top-right corner. A model field
+   * for the same reason `icon` is one, and a stronger one besides: the two
+   * interactive viewers read it off the laid-out diagram, and nothing they read
+   * comes from the stylesheet. Unlike an icon it costs no space — the button
+   * overlays the box rather than widening it.
+   */
+  link?: string;
   hint?: PlaceHint;
   /** Filled in by the layout engine. Absent until laid out. */
   rect?: Rect;
@@ -165,6 +173,8 @@ export interface Container extends Styled {
   kind: ContainerKind;
   /** Icon drawn before the container's title. */
   icon?: string;
+  /** URL behind the button drawn in the title band. See {@link Shape.link}. */
+  link?: string;
   /**
    * Free corner texts. A model field rather than anything style-ish because
    * each one reserves layout space, and layout runs before styles are resolved.

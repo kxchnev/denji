@@ -170,6 +170,24 @@ test("carries every word the core knows", (g) => {
   }
 });
 
+
+test("paints a URL as one link, not as a word, two numbers and a colour", (g) => {
+  const t = tokenize(g, 'architecture\napp a "A" @link(https://ops.example.com:8080/run#3fa)');
+  assert.ok(has(scopesOf(t, "link"), "support.function"), "@link is a directive");
+  const url = t.find((x) => x.text.includes("ops.example.com"));
+  assert.ok(url && has(url.scopes, "markup.underline.link"), "the URL is one link token");
+  assert.ok(
+    !t.some((x) => x.text.includes("#3fa") && has(x.scopes, "constant.other.color")),
+    "and a fragment that happens to read as hex is not a colour swatch",
+  );
+});
+
+test("paints a mailto the same way", (g) => {
+  const t = tokenize(g, 'architecture\napp a "A" @link(mailto:team@example.com)');
+  const url = t.find((x) => x.text.includes("team@example.com"));
+  assert.ok(url && has(url.scopes, "markup.underline.link"), "a mailto is a link too");
+});
+
 // ── go ───────────────────────────────────────────────────────────────────────
 
 async function run(): Promise<void> {

@@ -59,7 +59,11 @@ program
     try {
       const name = opts.theme;
       const diagram = parseArchitecture(source);
-      const svg = toSvg(diagram, { render: { theme: name } });
+      // A standalone `.svg` is the one output with no viewer to hit-test its
+      // link buttons for it, so there the button becomes a real anchor. A
+      // rasterizer drops those anyway, which keeps PNG and JPEG byte-identical
+      // to what the previews draw.
+      const svg = toSvg(diagram, { render: { theme: name, linkAnchors: format === "svg" } });
       if (format === "svg") {
         writeFileSync(out, svg);
       } else {

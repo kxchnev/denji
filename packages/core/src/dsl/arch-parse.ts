@@ -13,6 +13,7 @@ import type {
 import { architecture, type ArchitectureBuilder, type Dir } from "../model/arch-builder.js";
 import { isStyleSlot, lookupProp, setStyleProp, StyleValueError } from "../model/style.js";
 import { IconError, type Icon } from "../model/icon.js";
+import { LinkError, validateLink } from "../model/link.js";
 import { DiagramParseError, indentCol } from "./error.js";
 
 /**
@@ -56,6 +57,7 @@ interface Frame {
   styleRefs?: string[];
   styleProps?: StyleProps;
   icon?: string;
+  link?: string;
 }
 
 /** An open `style <name> { … }` or `icon <name> { … }` block. */
@@ -85,6 +87,7 @@ interface Directives {
   styleRefs?: string[];
   styleProps?: StyleProps;
   icon?: string;
+  link?: string;
   corner?: Corner;
 }
 
@@ -183,6 +186,7 @@ export function parseArchitecture(src: string): ArchDiagram {
         styleRefs: frame.styleRefs,
         styleProps: frame.styleProps,
         icon: frame.icon,
+        link: frame.link,
         texts: frame.texts,
       });
       addChildToScope(frame.id);
@@ -325,9 +329,15 @@ function parseShapeLine(
   const kind = m[1] as ShapeKind;
   const id = m[2]!;
   const label = m[3];
-  const { hint, styleRefs, styleProps, icon } = parseDirectives(m[4] ?? "", lineNo, raw, "shape", kind);
+  const { hint, styleRefs, styleProps, icon, link } = parseDirectives(
+    m[4] ?? "",
+    lineNo,
+    raw,
+    "shape",
+    kind,
+  );
 
-  const opts = { hint, styleRefs, styleProps, icon };
+  const opts = { hint, styleRefs, styleProps, icon, link };
   if (kind === "app") b.app(id, label, opts);
   else if (kind === "database") b.database(id, label, opts);
   else if (kind === "queue") b.queue(id, label, opts);
@@ -374,6 +384,7 @@ function parseContainerOpen(line: string, lineNo: number, raw: string): Frame {
     styleRefs: d.styleRefs,
     styleProps: d.styleProps,
     icon: d.icon,
+    link: d.link,
   };
 }
 
@@ -425,7 +436,18 @@ const CORNER_NAMES: Record<string, Corner | undefined> = {
 
 /** Which directives each position accepts, for the "not allowed here" message. */
 const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
-  shape: new Set(["at", "rightof", "leftof", "above", "below", "gap", "align", "style", "icon"]),
+  shape: new Set([
+    "at",
+    "rightof",
+    "leftof",
+    "above",
+    "below",
+    "gap",
+    "align",
+    "style",
+    "icon",
+    "link",
+  ]),
   container: new Set([
     "at",
     "rightof",
@@ -440,6 +462,7 @@ const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
     "padding",
     "style",
     "icon",
+    "link",
   ]),
   diagram: new Set(["spacing", "spacingx", "spacingy", "margin", "theme"]),
   connection: new Set(["style"]),
@@ -602,6 +625,15 @@ function parseDirectives(
       // settled by build(), which sees `icon` blocks declared further down —
       // exactly how @style already behaves.
       out.icon = arg;
+    } else if (name === "link") {
+      // Checked here rather than in build() so a bad scheme lands on the line
+      // that wrote it, with a caret under the declaration.
+      try {
+        out.link = validateLink(arg);
+      } catch (e) {
+        if (!(e instanceof LinkError)) throw e;
+        throw new DiagramParseError(e.message, lineNo, indentCol(raw), raw);
+      }
     } else if (name === "corner") {
       // `topLeft`, `top-left` and `topleft` are the same corner; the model keeps
       // the camelCase spelling.

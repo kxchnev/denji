@@ -5,6 +5,27 @@ import type { StyleProps, StyleSlot, ThemeName } from "../model/arch.js";
  * plus the two document-wide values. Everything the renderer paints has a
  * theme value behind it, so a `style` block only ever needs to override.
  */
+/**
+ * The chrome of a `@link` button. Not a style slot and not exposed as style
+ * properties: an affordance an author can repaint per element — or paint out
+ * entirely — stops being an affordance, and this one has to read as a button on
+ * a PNG, where nothing can be hovered to find out.
+ */
+export interface LinkChrome {
+  fill: string;
+  stroke: string;
+  glyph: string;
+}
+
+/** Chosen to sit on all four shape fills *and* on a service's header band. */
+const LIGHT_LINK: LinkChrome = { fill: "#e0e7ff", stroke: "#a5b4fc", glyph: "#4338ca" };
+const DARK_LINK: LinkChrome = { fill: "#312e81", stroke: "#6366f1", glyph: "#c7d2fe" };
+
+/** A custom theme need not carry one; its lightness decides which pair it gets. */
+export function linkChrome(theme: Theme): LinkChrome {
+  return theme.link ?? (theme.dark ? DARK_LINK : LIGHT_LINK);
+}
+
 export interface Theme {
   name: string;
   /**
@@ -21,6 +42,8 @@ export interface Theme {
   surface: string;
   fontFamily: string;
   slots: Record<StyleSlot, StyleProps>;
+  /** Link-button chrome. Optional: {@link linkChrome} fills it in from `dark`. */
+  link?: LinkChrome;
 }
 
 const FONT_FAMILY = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
@@ -35,6 +58,7 @@ export const lightTheme: Theme = {
   background: "transparent",
   surface: "#ffffff",
   fontFamily: FONT_FAMILY,
+  link: LIGHT_LINK,
   slots: {
     app: { fill: "#eef2ff", stroke: "#6366f1", strokeWidth: 1.5, text: "#1e293b", radius: 10 },
     database: { fill: "#ecfdf5", stroke: "#10b981", strokeWidth: 1.5, text: "#1e293b" },
@@ -82,6 +106,7 @@ export const darkTheme: Theme = {
   background: "transparent",
   surface: "#0b1220",
   fontFamily: FONT_FAMILY,
+  link: DARK_LINK,
   slots: {
     app: { fill: "#1e1b4b", stroke: "#818cf8", strokeWidth: 1.5, text: "#e0e7ff", radius: 10 },
     database: { fill: "#022c22", stroke: "#34d399", strokeWidth: 1.5, text: "#d1fae5" },

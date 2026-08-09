@@ -311,3 +311,91 @@ describe("exact coordinates", () => {
     );
   });
 });
+
+describe("links", () => {
+  const fail = (src: string): DiagramParseError => {
+    try {
+      parseArchitecture(src);
+    } catch (e) {
+      return e as DiagramParseError;
+    }
+    throw new Error("expected throw");
+  };
+
+  it("reads @link on every shape kind and both container kinds", () => {
+    const d = parseArchitecture(
+      'architecture\n' +
+        'app a "A" @link(https://example.com/a)\n' +
+        'database b "B" @link(http://10.0.0.5:8080)\n' +
+        'queue c "C" @link(mailto:team@example.com)\n' +
+        'rect e "E" @link(https://example.com/e)\n' +
+        'service s "S" @link(https://example.com/s) {\n' +
+        'app in1 "In"\n' +
+        '}\n' +
+        'group g "G" @link(https://example.com/g) {\n' +
+        'app in2 "In2"\n' +
+        '}',
+    );
+    expect(shape(d, "a").link).toBe("https://example.com/a");
+    expect(shape(d, "b").link).toBe("http://10.0.0.5:8080");
+    expect(shape(d, "c").link).toBe("mailto:team@example.com");
+    expect(shape(d, "e").link).toBe("https://example.com/e");
+    // The container's directives are read at its `{` and only reach the builder
+    // at its `}`, so this is the hand-off through Frame, not a repeat of above.
+    expect(container(d, "s").link).toBe("https://example.com/s");
+    expect(container(d, "g").link).toBe("https://example.com/g");
+  });
+
+  it("keeps the URL exactly as written — query, fragment, case and all", () => {
+    // `#` starts a comment only at the beginning of a line, so a fragment is safe.
+    const url = "https://Example.com/a/b?x=1&y=2#frag";
+    expect(shape(parseArchitecture(`architecture\napp a "A" @link(${url})`), "a").link).toBe(url);
+    expect(shape(parseArchitecture('architecture\napp a "A" @link(HTTPS://X.COM)'), "a").link).toBe(
+      "HTTPS://X.COM",
+    );
+  });
+
+  it("takes only http, https and mailto", () => {
+    for (const url of ["javascript:alert(1)", "data:text/html,x", "file:///etc/passwd", "vscode://x"]) {
+      expect(fail(`architecture\napp a "A" @link(${url})`).reason).toContain(
+        "must start with http://, https:// or mailto:",
+      );
+    }
+  });
+
+  it("refuses a relative path, which means nothing to whoever opens the picture", () => {
+    for (const url of ["./runbook.md", "/runbook", "example.com", "#anchor"]) {
+      expect(fail(`architecture\napp a "A" @link(${url})`).reason).toContain("must start with");
+    }
+  });
+
+  it("refuses what the unquoted argument cannot carry", () => {
+    // A `)` would end the argument early and leave the rest of the URL as junk.
+    expect(fail('architecture\napp a "A" @link(https://x.com/a(b)c)').reason).toContain("%29");
+    expect(fail('architecture\napp a "A" @link(https://)').reason).toContain(
+      "needs something after the scheme",
+    );
+  });
+
+  it("reports where the bad link is, not just that there is one", () => {
+    const e = fail('architecture\napp a "A"\napp b "B" @below(a) @link(ftp://x)');
+    expect(e.line).toBe(3);
+    expect(e.col).toBe(1);
+  });
+
+  it("belongs to an element, so it is not allowed anywhere else", () => {
+    expect(fail("architecture @link(https://x.com)").reason).toContain(
+      "not allowed on the architecture line",
+    );
+    expect(fail('architecture\ngroup g "G" {\ntext "x" @link(https://x.com)\napp a "A"\n}').reason)
+      .toContain("not allowed on a text");
+  });
+
+  it("cannot go on a connection, whose label eats everything after the first colon", () => {
+    // Pinned deliberately: the message is ugly, and the fix is not to add `link`
+    // to the connection set — it is to leave connections alone.
+    expect(fail('architecture\napp a "A"\napp b "B"\na -> b @link(https://x.com)').reason).toContain(
+      'unexpected token "@link(https"',
+    );
+  });
+});

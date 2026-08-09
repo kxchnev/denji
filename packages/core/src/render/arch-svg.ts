@@ -27,7 +27,8 @@ import {
   NOTE_LINE_H,
 } from "../layout/arch/measure.js";
 import { DEFAULT_HEADER_H } from "../layout/arch/index.js";
-import { resolveTheme, type Theme } from "./theme.js";
+import { linkBadgeRect } from "../interact.js";
+import { linkChrome, resolveTheme, type Theme } from "./theme.js";
 
 /**
  * - `fixed` (default) — one palette, baked in. What an export wants: the file
@@ -61,6 +62,18 @@ export interface ArchRenderOptions {
    * inlined diagrams on one page from sharing marker ids or CSS variables.
    */
   idPrefix?: string;
+  /**
+   * Wrap each `@link` button in an SVG `<a>`.
+   *
+   * Off by default, and the two interactive viewers must leave it off: an
+   * anchor works in a page's DOM, is inert in the VS Code webview (which has to
+   * ask its host to open anything) and is dropped by librsvg on the way to a
+   * PNG. Relying on it would mean one mechanism that works in one of the three
+   * places — so a viewer hit-tests {@link linkBadgeRect} and decides for itself
+   * what a press means. A standalone `.svg` has no viewer to do that, which is
+   * the one case worth the second code path; the CLI turns it on for `.svg`.
+   */
+  linkAnchors?: boolean;
 }
 
 const DEFAULTS = {
@@ -114,6 +127,18 @@ export function renderArchitecture(diagram: ArchDiagram, opts: ArchRenderOptions
   }
   diagram.connections.forEach((c, i) => body.push(renderConnection(c, i, styled)));
 
+  // Link buttons last of all, over the connections. A connector docks within
+  // DOCK_INSET of a corner, so an arrow really does cross this exact patch —
+  // and a button with a line drawn through it stops reading as a button.
+  const badges = diagram.nodes
+    .map((n) => ({ n, box: linkBadgeRect(n, headerH) }))
+    .filter((x) => x.box !== null)
+    .map(({ n, box }) => linkBadge(n.link!, box!, opts.linkAnchors ?? false));
+  if (badges.length > 0) {
+    styled.usedLinks = true;
+    body.push(`<g class="pwr-lks">${badges.join("")}</g>`);
+  }
+
   const markup = body.join("\n");
   // The scope class keys the whole stylesheet, so anything that changes the CSS
   // without changing the markup — the palette, the backdrop — has to be in here.
@@ -165,6 +190,8 @@ class StyleModel {
   readonly arrowColors: string[] = [];
   /** Marks actually drawn, so only their colour variables get declared. */
   readonly usedIcons = new Map<string, Icon>();
+  /** Set when a link button was drawn, so a link-free diagram's CSS is unchanged. */
+  usedLinks = false;
 
   constructor(
     private readonly theme: Theme,
@@ -249,21 +276,38 @@ class StyleModel {
     // The palette lives in custom properties scoped to this one diagram, so
     // `auto` only has to restate the variables — every rule below reads through
     // them and stays as it is.
-    rules.push(`${o.scope}{${vars(o.theme, o.background, this.usedIcons)}}`);
+    rules.push(`${o.scope}{${vars(o.theme, o.background, this.usedIcons, this.usedLinks)}}`);
     if (o.mode === "auto") {
       rules.push(
-        `@media(prefers-color-scheme:dark){${o.scope}{${vars(o.darkTheme, o.background, this.usedIcons)}}}`,
+        `@media(prefers-color-scheme:dark){${o.scope}{${vars(o.darkTheme, o.background, this.usedIcons, this.usedLinks)}}}`,
       );
     } else if (o.mode === "selector") {
       // No media query alongside it on purpose: a host that owns a selector has
       // already folded the device preference into it, and a query would win
       // back whenever the reader turned the host's toggle against their OS.
       rules.push(
-        `${o.darkSelector} ${o.scope}{${vars(o.darkTheme, o.background, this.usedIcons)}}`,
+        `${o.darkSelector} ${o.scope}{${vars(o.darkTheme, o.background, this.usedIcons, this.usedLinks)}}`,
       );
     }
 
     rules.push(`${o.scope} .pwr-bg{fill:var(--pwr-bg,${o.background ?? o.theme.background})}`);
+
+    // The button's chrome is fixed, not styleable — see LinkChrome. Literal
+    // fallbacks for the same reason as everywhere else: librsvg ignores custom
+    // properties and renders the fallback, which therefore has to be the
+    // *active* palette's value or a dark PNG gets a light chip.
+    if (this.usedLinks) {
+      const c = linkChrome(o.theme);
+      rules.push(
+        `${o.scope} .pwr-lk{cursor:pointer}`,
+        `${o.scope} .pwr-lk-p{${guard(
+          `fill:var(--pwr-link-fill,${c.fill});stroke:var(--pwr-link-stroke,${c.stroke});stroke-width:1`,
+        )}}`,
+        `${o.scope} .pwr-lk-i{${guard(
+          `fill:none;stroke:var(--pwr-link-glyph,${c.glyph});stroke-width:2;stroke-linecap:round;stroke-linejoin:round`,
+        )}}`,
+      );
+    }
 
     // One rule per mark. Deliberately a single class — lower specificity than
     // the `.pwr-<slot> .pwr-ic` rule an `iconColor` produces, so overriding a
@@ -314,8 +358,13 @@ function vars(
   theme: Theme,
   background: string | undefined,
   icons: ReadonlyMap<string, Icon>,
+  links: boolean,
 ): string {
   const out: string[] = [`--pwr-bg:${background ?? theme.background}`];
+  if (links) {
+    const c = linkChrome(theme);
+    out.push(`--pwr-link-fill:${c.fill}`, `--pwr-link-stroke:${c.stroke}`, `--pwr-link-glyph:${c.glyph}`);
+  }
   for (const [name, icon] of icons) {
     out.push(`--pwr-icon-${name}:${(theme.dark && icon.darkColor) || icon.color}`);
   }
@@ -512,6 +561,33 @@ function iconMarkup(mark: { key: string; icon: Icon }, x: number, y: number, siz
     `transform="translate(${round(x + dx - vx * scale)} ${round(y + dy - vy * scale)}) scale(${round(scale)})" ` +
     `d="${mark.icon.path}"/>`
   );
+}
+
+/** The glyph's own box, and how much of the 18px plate it takes. */
+const LINK_GLYPH_BOX = 24;
+const LINK_GLYPH_SIZE = 12;
+/** An arrow leaving a box: the one mark a reader already knows means "opens". */
+const LINK_GLYPH = "M14 4h6v6M20 4l-8 8M17 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4";
+
+/**
+ * The button. An inline `<path>` for the same reason {@link iconMarkup} uses
+ * one — no `<symbol>`, no `<use>`, no `<image>`: librsvg and a canvas-rasterized
+ * `<img>` each break on all three.
+ */
+function linkBadge(url: string, b: Rect, anchor: boolean): string {
+  const scale = LINK_GLYPH_SIZE / LINK_GLYPH_BOX;
+  const gx = round(b.x + (b.width - LINK_GLYPH_SIZE) / 2);
+  const gy = round(b.y + (b.height - LINK_GLYPH_SIZE) / 2);
+  const inner =
+    // The URL as a tooltip wherever a DOM renders this, and as the accessible
+    // name. Inert in librsvg, and free.
+    `<title>${esc(url)}</title>` +
+    `<rect class="pwr-lk-p" x="${round(b.x)}" y="${round(b.y)}" ` +
+    `width="${b.width}" height="${b.height}" rx="5" ry="5"/>` +
+    `<path class="pwr-lk-i" transform="translate(${gx} ${gy}) scale(${round(scale)})" d="${LINK_GLYPH}"/>`;
+  return anchor
+    ? `<a class="pwr-lk" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+    : `<g class="pwr-lk">${inner}</g>`;
 }
 
 /** Keep generated coordinates short and byte-stable across runs. */

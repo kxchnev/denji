@@ -17,17 +17,22 @@ import type {
 } from "./arch.js";
 import { isStyleSlot } from "./style.js";
 import { isKnownIcon, suggestIcon, validateIcon, type Icon } from "./icon.js";
+import { validateLink } from "./link.js";
 
 export interface ShapeOptions extends Styled {
   hint?: PlaceHint;
   /** Name of a bundled or document-declared icon. */
   icon?: string;
+  /** URL behind the link button. `http`, `https` or `mailto` only. */
+  link?: string;
 }
 
 export interface ContainerOptions extends Styled {
   kind?: ContainerKind;
   /** Name of a bundled or document-declared icon. */
   icon?: string;
+  /** URL behind the link button. `http`, `https` or `mailto` only. */
+  link?: string;
   children?: string[];
   hint?: PlaceHint;
   /** Spacing between this container's children; inherited by nested scopes. */
@@ -75,6 +80,7 @@ export class ArchitectureBuilder {
       label: label ?? id,
       kind,
       icon: opts.icon,
+      link: opts.link,
       hint: opts.hint,
       styleRefs: opts.styleRefs,
       styleProps: opts.styleProps,
@@ -105,6 +111,7 @@ export class ArchitectureBuilder {
       label: label ?? id,
       kind,
       icon: opts.icon,
+      link: opts.link,
       texts: normalizeTexts(id, kind, opts.texts),
       children: opts.children ? [...opts.children] : [],
       hint: opts.hint,
@@ -230,6 +237,20 @@ export class ArchitectureBuilder {
           `Node "${n.id}" references unknown icon: "${n.icon}"` +
             (hint ? ` (did you mean "${hint}"?)` : ""),
         );
+      }
+    }
+
+    // The parser has already refused a bad link at the line that wrote it; this
+    // is the programmatic API's guard, exactly like the icon loop above. The id
+    // is quoted *first* on purpose — check.ts recovers a position by pulling the
+    // first quoted [A-Za-z0-9_] run out of the message, and a URL must never be
+    // able to pass for one.
+    for (const n of this.nodes.values()) {
+      if (!n.link) continue;
+      try {
+        validateLink(n.link);
+      } catch (e) {
+        throw new Error(`Node "${n.id}" has an unusable link: ${(e as Error).message}`);
       }
     }
 

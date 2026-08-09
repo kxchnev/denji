@@ -8,6 +8,7 @@ import {
   resolveTheme,
   setNodePositions,
   isBoxed,
+  linkAt,
   nodeAt,
   nodeDepths,
   pinsFor,
@@ -22,7 +23,7 @@ import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiagramGrid } from "@/components/DiagramGrid";
 import { DownloadButton } from "@/components/DownloadButton";
-import { cn } from "@/lib/utils";
+import { cn, openLink } from "@/lib/utils";
 
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 4;
@@ -50,7 +51,13 @@ interface Rendered {
   diagram: ArchDiagram | null;
 }
 
-function render(dsl: string): Rendered {
+/**
+ * @param linkAnchors wrap link buttons in real `<a>` elements. Only the
+ * read-only render wants them: there is nothing there to intercept a click, and
+ * a real anchor is focusable and has a context menu. The interactive one takes
+ * the pointer for panning and dragging, so it hit-tests the button itself.
+ */
+function render(dsl: string, linkAnchors: boolean): Rendered {
   try {
     const diagram = parseArchitecture(dsl);
     layoutArchitecture(diagram);
@@ -58,7 +65,7 @@ function render(dsl: string): Rendered {
     // folded the device preference into the `.dark` class on <html>. Matching on
     // that class means the header toggle moves the diagrams too — through CSS,
     // with no React state and no re-render. Downloads bake one palette instead.
-    const svg = renderArchitecture(diagram, { themeMode: "selector" });
+    const svg = renderArchitecture(diagram, { themeMode: "selector", linkAnchors });
     // The core always emits `viewBox="0 0 W H"` — steadier than measuring the DOM
     // and it keeps the padding knowledge in one place (the renderer).
     const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg);
@@ -115,7 +122,14 @@ export function Diagram({
   /** Set on drop: the preview has to outlive the commit, see the effect below. */
   const awaitingCommit = useRef(false);
   const source = preview ?? dsl;
-  const current = useMemo(() => render(source), [source]);
+  // Anchors on the read-only render, except where the caller has already said
+  // this diagram sits inside something clickable: `controls={false}` is that
+  // signal, and an <a> nested in a <button> is invalid markup for exactly the
+  // reason a nested <button> is.
+  const current = useMemo(
+    () => render(source, !interactive && controls),
+    [source, interactive, controls],
+  );
   // Editing spends most of its keystrokes on a document that is momentarily
   // incomplete. Swapping the whole preview for a red box each time — losing the
   // pan and zoom with it — makes the playground unusable, so the last render that
@@ -152,6 +166,10 @@ export function Diagram({
     const diagram = parseArchitecture(shown.dsl);
     layoutArchitecture(diagram);
     return {
+      // No `linkAnchors`: a download is a picture. It goes into a slide or a
+      // README, where a live `href` is at best inert and at worst a surprise in
+      // someone else's document — the button is still drawn, it just does not
+      // carry the URL out of here.
       svg: renderArchitecture(diagram, { theme, themeMode: "fixed" }),
       matte: resolveTheme(theme).surface,
     };
@@ -163,6 +181,12 @@ export function Diagram({
   const [fitted, setFitted] = useState(false);
   const surface = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * A link button held between press and release. Deliberately neither a drag
+   * nor a pan: pressing a button starts nothing, so nothing has to be undone if
+   * the pointer wanders off before it is let go.
+   */
+  const linkArm = useRef<{ id: string; url: string } | null>(null);
   // Once the view has been moved by hand, stop auto-fitting it out from under the user.
   const touched = useRef(false);
   /** The node being dragged: where it started, in both spaces, and where it is now. */
@@ -189,6 +213,7 @@ export function Diagram({
     cursor: Point;
   } | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [hoverLink, setHoverLink] = useState<string | null>(null);
   // Whether a fit has ever landed, and the size it landed at. Both are refs: the
   // resize handler below reads them without wanting to be rebuilt.
   const everFit = useRef(false);
@@ -318,6 +343,16 @@ export function Diagram({
     e.currentTarget.setPointerCapture(e.pointerId);
 
     const p = toDiagram(e);
+    // A button beats the node under it: a container's hangs in the title band,
+    // which is the only part of a container a drag can take hold of.
+    // Not gated on `onMoveNodes` the way `grabbable` is: opening a link needs no
+    // callback from the owner, only the transform that maps the pointer.
+    const link = fitted ? linkAt(shown.diagram, p, depths) : null;
+    if (link) {
+      linkArm.current = { id: link.node.id, url: link.url };
+      return; // this pointer opens a link: not a drag, not a pan
+    }
+
     const hit = grabbable(p);
     if (hit?.local && hit.rect && shown.diagram) {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -363,11 +398,27 @@ export function Diagram({
       setView((v) => ({ ...v, x: e.clientX - d.x, y: e.clientY - d.y }));
       return;
     }
-    setHoverId(grabbable(toDiagram(e))?.id ?? null);
+    const p = toDiagram(e);
+    const overLink = fitted ? linkAt(shown.diagram, p, depths) : null;
+    // Over a button say only "this opens": the dashed "this moves" outline of
+    // the node underneath is a mixed message about what the press will do.
+    setHoverLink(overLink?.url ?? null);
+    setHoverId(overLink ? null : (grabbable(p)?.id ?? null));
   };
 
-  const endDrag = () => {
+  const endDrag = (e?: React.PointerEvent<HTMLDivElement>) => {
     drag.current = null;
+    const armed = linkArm.current;
+    linkArm.current = null;
+    if (armed) {
+      // Only a release still over the button that was pressed counts, exactly
+      // as a real button behaves: press, wander off, release — nothing happens.
+      // Only a real release: a cancel or a lost capture arrives here too.
+      const still =
+        e?.type === "pointerup" && shown.diagram ? linkAt(shown.diagram, toDiagram(e), depths) : null;
+      if (still && still.node.id === armed.id && still.url === armed.url) openLink(still.url);
+      return;
+    }
     const nd = nodeDrag.current;
     if (!nd) return;
     nodeDrag.current = null;
@@ -473,14 +524,22 @@ export function Diagram({
           "relative h-full w-full select-none touch-none",
           // Over a draggable node the cursor says "this moves"; everywhere else the
           // canvas still says "this pans".
-          hoverId ? "cursor-move" : "cursor-grab active:cursor-grabbing",
+          hoverLink
+            ? "cursor-pointer"
+            : hoverId
+              ? "cursor-move"
+              : "cursor-grab active:cursor-grabbing",
         )}
+        title={hoverLink ?? undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onLostPointerCapture={endDrag}
-        onPointerLeave={() => setHoverId(null)}
+        onPointerLeave={() => {
+          setHoverId(null);
+          setHoverLink(null);
+        }}
       >
         <div
           className={

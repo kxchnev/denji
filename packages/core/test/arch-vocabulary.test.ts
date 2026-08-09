@@ -77,6 +77,10 @@ describe("exported grammar tables", () => {
         message = (e as Error).message;
       }
       expect(message, name).not.toContain("unknown directive");
+      // A name added to the allow-list without a branch to read its argument
+      // reaches the end of the dispatch chain instead — which the check above
+      // does not see, because that complaint is worded differently.
+      expect(message, name).not.toContain("unhandled directive");
     }
     expect(() => parseArchitecture('architecture\napp a "A" @nonsense(0)')).toThrow(
       /unknown directive/,

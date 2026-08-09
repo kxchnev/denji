@@ -6,9 +6,10 @@ import { layout } from "./layout";
 import { spacing } from "./spacing";
 import { styling } from "./styling";
 import { icons } from "./icons";
+import { links } from "./links";
 
 export type { ExampleData };
-export { elements, arrows, blocks, layout, spacing, styling, icons };
+export { elements, arrows, blocks, layout, spacing, styling, icons, links };
 
 /** The headline example shown on the introduction page. */
 export const intro: ExampleData = {
@@ -62,4 +63,5 @@ export const allExamples: ExampleData[] = [
   ...spacing,
   ...styling,
   ...icons,
+  ...links,
 ];

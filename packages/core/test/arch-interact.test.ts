@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
 import { findDeclaration, findHeaderLine } from "../src/dsl/arch-edit.js";
-import { layoutArchitecture } from "../src/layout/arch/index.js";
-import { isBoxed, nodeAt, nodeDepths, pinsFor, snapToGrid } from "../src/interact.js";
+import { DEFAULT_HEADER_H, layoutArchitecture } from "../src/layout/arch/index.js";
+import {
+  isBoxed,
+  linkAt,
+  linkBadgeRect,
+  nodeAt,
+  nodeDepths,
+  pickAt,
+  pinsFor,
+  snapToGrid,
+} from "../src/interact.js";
 import type { ArchDiagram, ArchNode } from "../src/model/arch.js";
 
 /** Parse and lay out, which is the only state these functions are defined on. */
@@ -167,5 +176,100 @@ describe("findHeaderLine", () => {
 
   it("has nothing to point at in a document without one", () => {
     expect(findHeaderLine('app a "A"\n')).toBeNull();
+  });
+});
+
+describe("link buttons", () => {
+  /** The middle of a node's link button, which is what a pointer aims at. */
+  const badge = (d: ArchDiagram, id: string) => {
+    const r = linkBadgeRect(byId(d, id));
+    if (!r) throw new Error(`no link button on ${id}`);
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2, rect: r };
+  };
+
+  it("has no box without a link", () => {
+    const d = laid('architecture\n  app a "A"\n');
+    expect(linkBadgeRect(byId(d, "a"))).toBeNull();
+    expect(linkAt(d, centre(d, "a"))).toBeNull();
+  });
+
+  it("sits inside the silhouette, not the bounding box, for every shape kind", () => {
+    const d = laid(
+      "architecture\n" +
+        '  app a "A" @link(https://x.com/a)\n' +
+        '  database b "B" @below(a) @link(https://x.com/b)\n' +
+        '  queue c "C" @below(b) @link(https://x.com/c)\n' +
+        '  rect e "E" @below(c) @link(https://x.com/e)\n',
+    );
+    for (const id of ["a", "b", "c", "e"]) {
+      const r = byId(d, id).rect!;
+      const box = linkBadgeRect(byId(d, id))!;
+      expect(box.x).toBeGreaterThanOrEqual(r.x);
+      expect(box.y).toBeGreaterThanOrEqual(r.y);
+      expect(box.x + box.width).toBeLessThanOrEqual(r.x + r.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(r.y + r.height);
+    }
+    // A database's lid and a queue's right cap are ellipses, so the corner of
+    // the box is off the drawn shape — these two are inset past it.
+    expect(linkBadgeRect(byId(d, "b"))!.y - byId(d, "b").rect!.y).toBeGreaterThan(
+      linkBadgeRect(byId(d, "a"))!.y - byId(d, "a").rect!.y,
+    );
+    const cRect = byId(d, "c").rect!;
+    const cBadge = linkBadgeRect(byId(d, "c"))!;
+    const aRect = byId(d, "a").rect!;
+    const aBadge = linkBadgeRect(byId(d, "a"))!;
+    expect(cRect.x + cRect.width - (cBadge.x + cBadge.width)).toBeGreaterThan(
+      aRect.x + aRect.width - (aBadge.x + aBadge.width),
+    );
+  });
+
+  it("hangs a container's button in the title band, clear of its corner texts", () => {
+    const d = laid(
+      'architecture\n  group g "G" @link(https://x.com/g) {\n    text "note" @corner(topRight)\n    app a "A"\n  }\n',
+    );
+    const r = byId(d, "g").rect!;
+    const box = linkBadgeRect(byId(d, "g"))!;
+    // Corner texts start at the bottom of the header band; the button ends above it.
+    expect(box.y + box.height).toBeLessThanOrEqual(r.y + DEFAULT_HEADER_H);
+  });
+
+  it("hits inside and misses one pixel out", () => {
+    const d = laid('architecture\n  app a "A" @link(https://x.com/a)\n');
+    const b = badge(d, "a");
+    expect(linkAt(d, { x: b.x, y: b.y })?.url).toBe("https://x.com/a");
+    expect(linkAt(d, { x: b.rect.x - 1, y: b.y })).toBeNull();
+    expect(linkAt(d, { x: b.rect.x + b.rect.width + 1, y: b.y })).toBeNull();
+    expect(linkAt(d, { x: b.x, y: b.rect.y - 1 })).toBeNull();
+    expect(linkAt(d, { x: b.x, y: b.rect.y + b.rect.height + 1 })).toBeNull();
+  });
+
+  it("beats the node under it, which is the whole reason pickAt exists", () => {
+    const d = laid(
+      'architecture\n  service s "S" @link(https://x.com/s) {\n    app a "A"\n  }\n',
+    );
+    const b = badge(d, "s");
+    // The button sits in the title band — the only part of a container you can
+    // grab — so without a fixed order this press would start a drag instead.
+    expect(nodeAt(d, { x: b.x, y: b.y })?.id).toBe("s");
+    const picked = pickAt(d, { x: b.x, y: b.y });
+    expect(picked?.kind).toBe("link");
+    expect(picked?.kind === "link" && picked.hit.node.id).toBe("s");
+    // A step to the left of it is the band again, and drags as it always did.
+    const beside = pickAt(d, { x: b.rect.x - 8, y: b.y });
+    expect(beside?.kind).toBe("node");
+  });
+
+  it("gives a child's button to the child, not to the container behind it", () => {
+    const d = laid(
+      'architecture\n  service s "S" @link(https://x.com/s) {\n    app a "A" @link(https://x.com/a)\n  }\n',
+    );
+    const b = badge(d, "a");
+    expect(linkAt(d, { x: b.x, y: b.y })?.node.id).toBe("a");
+  });
+
+  it("has nothing to say about a diagram that was never laid out", () => {
+    expect(linkAt(null, { x: 0, y: 0 })).toBeNull();
+    expect(pickAt(null, { x: 0, y: 0 })).toBeNull();
+    expect(linkBadgeRect(parse('architecture\napp a "A" @link(https://x.com)').nodes[0]!)).toBeNull();
   });
 });

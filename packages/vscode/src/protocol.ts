@@ -29,5 +29,7 @@ export type FromWebview =
   | { type: "move"; moves: Move[] }
   /** A node was clicked without being moved: put the cursor on its declaration. */
   | { type: "reveal"; id: string }
+  /** A link button was pressed: open this URL outside the editor. */
+  | { type: "open"; url: string }
   /** The webview is listening — the host may send the first source now. */
   | { type: "ready" };

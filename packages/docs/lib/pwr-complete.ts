@@ -153,6 +153,19 @@ const THEME_NAMES: Completion[] = ["light", "dark"].map((v, i) => ({
   boost: 30 - i,
 }));
 
+/**
+ * Typing shortcuts, not the allow-list — that lives in the core and the parser
+ * enforces it. Spelled out rather than derived from `LINK_SCHEMES`, because
+ * `mailto:` takes no slashes and a derivation would have to lie about one of
+ * the three.
+ */
+const LINK_SCHEME_OPTIONS: Completion[] = ["https://", "http://", "mailto:"].map((v, i) => ({
+  label: v,
+  type: "text",
+  detail: "scheme",
+  boost: 30 - i,
+}));
+
 const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: DirectiveCtx[] }> = [
   {
     name: "rightOf",
@@ -236,6 +249,14 @@ const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: Direct
     name: "icon",
     detail: "(name)",
     info: "Draw a brand mark before the label. Leave the label empty for the mark on its own.",
+    in: ["shape", "container"],
+  },
+  {
+    name: "link",
+    detail: "(url)",
+    info:
+      "Put a link button in this element's top-right corner. `http`, `https` or " +
+      "`mailto` only, and the URL is unquoted — it ends at the first `)`.",
     in: ["shape", "container"],
   },
   {
@@ -483,6 +504,16 @@ function maskStrings(text: string): { masked: string; inString: boolean } {
   return { masked, inString };
 }
 
+/**
+ * Blank out `@name(…)` arguments, unclosed ones included, so a `:` inside a URL
+ * is not read as the start of a connection label. Same idea as
+ * {@link maskStrings}: what sits inside an argument is data at this position,
+ * not syntax — and without this one `@link(https:` kills completion for the
+ * rest of the line, including the directives after it.
+ */
+const maskArgs = (text: string): string =>
+  text.replace(/@[A-Za-z][A-Za-z-]*\([^)]*\)?/g, "");
+
 const IDENT = /^[A-Za-z0-9_]*$/;
 
 /** Word-shaped ranges can be refiltered in place; anything else re-queries. */
@@ -555,7 +586,7 @@ export const pwrCompletions: CompletionSource = (ctx) => {
     return { from: ctx.pos - partial.length, options };
   }
 
-  if (masked.includes(":")) return null; // inside a connection label
+  if (maskArgs(masked).includes(":")) return null; // inside a connection label
   if (/\}\s*$/.test(masked)) return null; // `}` stands alone and is already complete
 
   const word = /[A-Za-z0-9_]*$/.exec(before)![0];
@@ -578,6 +609,14 @@ export const pwrCompletions: CompletionSource = (ctx) => {
       return result(anchorOptions(scan), wordFrom);
     }
     if (name === "theme") return result(THEME_NAMES, wordFrom);
+    if (name === "link") {
+      // Only worth offering while the argument is empty: past `https://` there
+      // is nothing this can know. And not `validFor: IDENT` — a URL is made of
+      // characters that would close the popup on the first one typed.
+      return arg.trim() === "" || ctx.explicit
+        ? { from: ctx.pos - arg.length, options: LINK_SCHEME_OPTIONS, validFor: /^[^)]*$/ }
+        : null;
+    }
     if (name === "icon") {
       const declared = scan.icons.map((n, i) => ({
         label: n,

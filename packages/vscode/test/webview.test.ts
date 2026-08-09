@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { JSDOM, VirtualConsole } from "jsdom";
-import { layoutArchitecture, parseArchitecture } from "power";
+import { layoutArchitecture, linkBadgeRect, parseArchitecture } from "power";
 import type { FromWebview, ToWebview } from "../src/protocol.js";
 
 const BUNDLE = fileURLToPath(new URL("../dist/webview.js", import.meta.url));
@@ -172,6 +172,32 @@ function onScreenHeader(h: Harness, id: string): { x: number; y: number } {
   const r = diagram.nodes.find((n) => n.id === id)!.rect!;
   const v = viewport(h);
   return { x: v.x + (r.x + r.width / 2) * v.scale, y: v.y + (r.y + 6) * v.scale };
+}
+
+const LINKED = `architecture
+  service orders "Orders" @link(https://example.com/runbook) {
+    app api "API" @link(https://example.com/api)
+    database db "Postgres" @below(api)
+    api -> db
+  }
+`;
+
+/** The centre of `id`'s link button on screen, taken from core's own geometry. */
+function onScreenLink(h: Harness, id: string): { x: number; y: number } {
+  const diagram = parseArchitecture(LINKED);
+  layoutArchitecture(diagram, { onWarn: () => {} });
+  const r = linkBadgeRect(diagram.nodes.find((n) => n.id === id)!)!;
+  const v = viewport(h);
+  return { x: v.x + (r.x + r.width / 2) * v.scale, y: v.y + (r.y + r.height / 2) * v.scale };
+}
+
+/** Boot, hand over the linked document, and drop the `ready` from the log. */
+function bootLinked(): Harness {
+  const h = boot();
+  h.send({ type: "config", config: { grid: true, theme: "auto" } });
+  h.send({ type: "source", text: LINKED });
+  h.sent.length = 0;
+  return h;
 }
 
 // ── runner ───────────────────────────────────────────────────────────────────
@@ -353,6 +379,69 @@ test("a pinned palette is baked in instead of switched", () => {
   h.send({ type: "source", text: SOURCE });
   const style = h.document.querySelector(".stage svg style")!.textContent ?? "";
   assert.ok(!style.includes(".dark "), "no selector half is emitted for a fixed theme");
+});
+
+
+test("a press on a link button opens it instead of revealing the declaration", () => {
+  const h = bootLinked();
+  const p = onScreenLink(h, "api");
+  h.surface.dispatchEvent(pointer(h.window, "pointerdown", p.x, p.y));
+  h.surface.dispatchEvent(pointer(h.window, "pointerup", p.x, p.y));
+  // deepEqual on the whole log, because the absence of `reveal` is the point.
+  assert.deepEqual(sent(h), [{ type: "open", url: "https://example.com/api" }]);
+});
+
+test("a press beside the button still reveals the node", () => {
+  const h = bootLinked();
+  const diagram = parseArchitecture(LINKED);
+  layoutArchitecture(diagram, { onWarn: () => {} });
+  const r = diagram.nodes.find((n) => n.id === "api")!.rect!;
+  const v = viewport(h);
+  // The left edge of the box, as far from its top-right button as it gets.
+  const p = { x: v.x + (r.x + 8) * v.scale, y: v.y + (r.y + r.height / 2) * v.scale };
+  h.surface.dispatchEvent(pointer(h.window, "pointerdown", p.x, p.y));
+  h.surface.dispatchEvent(pointer(h.window, "pointerup", p.x, p.y));
+  assert.deepEqual(sent(h), [{ type: "reveal", id: "api" }]);
+});
+
+test("a container's link button beats the title band it hangs in", () => {
+  const h = bootLinked();
+  const p = onScreenLink(h, "orders");
+  h.surface.dispatchEvent(pointer(h.window, "pointerdown", p.x, p.y));
+  h.surface.dispatchEvent(pointer(h.window, "pointerup", p.x, p.y));
+  assert.deepEqual(sent(h), [{ type: "open", url: "https://example.com/runbook" }]);
+});
+
+test("a press that wanders off the button opens nothing, and drags nothing", () => {
+  const h = bootLinked();
+  const p = onScreenLink(h, "api");
+  h.surface.dispatchEvent(pointer(h.window, "pointerdown", p.x, p.y));
+  h.surface.dispatchEvent(pointer(h.window, "pointermove", p.x + 200, p.y + 200));
+  h.surface.dispatchEvent(pointer(h.window, "pointerup", p.x + 200, p.y + 200));
+  assert.deepEqual(sent(h), []);
+});
+
+test("Escape cancels an armed link", () => {
+  const h = bootLinked();
+  const p = onScreenLink(h, "api");
+  h.surface.dispatchEvent(pointer(h.window, "pointerdown", p.x, p.y));
+  h.window.dispatchEvent(new h.window.KeyboardEvent("keydown", { key: "Escape" }));
+  h.surface.dispatchEvent(pointer(h.window, "pointerup", p.x, p.y));
+  assert.deepEqual(sent(h), []);
+});
+
+test("says where a link goes before anyone presses it", () => {
+  const h = bootLinked();
+  const p = onScreenLink(h, "api");
+  h.surface.dispatchEvent(pointer(h.window, "pointermove", p.x, p.y));
+  assert.ok(h.surface.classList.contains("over-link"), "the cursor says `this opens`");
+  assert.ok(!h.surface.classList.contains("over-node"), "and not also `this moves`");
+  assert.equal(h.surface.title, "https://example.com/api");
+
+  const q = onScreen(h, "orders");
+  h.surface.dispatchEvent(pointer(h.window, "pointermove", q.x, q.y));
+  assert.ok(!h.surface.classList.contains("over-link"));
+  assert.equal(h.surface.title, "");
 });
 
 // ── go ───────────────────────────────────────────────────────────────────────
