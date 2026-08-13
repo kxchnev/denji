@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { setNodePosition, setNodePositions } from "../src/dsl/arch-edit.js";
+import { setNodePosition, setNodePositions, setNodeRelation } from "../src/dsl/arch-edit.js";
 import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
 
 /** The line `id` is declared on, for asserting on one line at a time. */
@@ -32,6 +32,12 @@ describe("setNodePosition", () => {
     expect(lineOf(out, "b")).toBe(
       '  app b "B" @at(100, 0) @style(hot) @icon(redis) @fill(#fff)',
     );
+  });
+
+  it("strips a nudge along with the other refinements — exact coordinates answer it", () => {
+    const src = 'architecture\n  app a "A"\n  app b "B" @rightOf(a) @nudge(-40, 0)\n';
+    const out = setNodePosition(src, "b", { x: 100, y: 0 })!;
+    expect(lineOf(out, "b")).toBe('  app b "B" @at(100, 0)');
   });
 
   it("leaves other nodes' relations pointing at the moved node", () => {
@@ -69,6 +75,14 @@ describe("setNodePosition", () => {
 
   it("returns null for a node the document does not declare", () => {
     expect(setNodePosition('architecture\n  app a "A"\n', "nope", { x: 0, y: 0 })).toBeNull();
+  });
+});
+
+describe("setNodeRelation", () => {
+  it("keeps a nudge when re-aiming a relation — a drag does not undo a fine-tune", () => {
+    const src = 'architecture\n  app a "A"\n  app b "B" @rightOf(a) @nudge(-40, 0)\n';
+    const out = setNodeRelation(src, "b", "below", "a")!;
+    expect(lineOf(out, "b")).toBe('  app b "B" @below(a) @nudge(-40, 0)');
   });
 });
 

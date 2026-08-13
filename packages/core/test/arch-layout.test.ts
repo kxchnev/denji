@@ -810,3 +810,69 @@ describe("one size for every leaf", () => {
     expect(rectOf(d, "a").width).toBe(rectOf(d, "b").width);
   });
 });
+
+describe("@nudge", () => {
+  const cx = (d: ArchDiagram, id: string): number => {
+    const r = rectOf(d, id);
+    return r.x + r.width / 2;
+  };
+  const laid = (src: string): ArchDiagram => {
+    const d = parse(src);
+    layoutArchitecture(d, { onWarn: () => {} });
+    return d;
+  };
+
+  it("shifts a node off its automatic spot by exactly the nudge", () => {
+    const src = (nudge: string) =>
+      `architecture\n  app a "A"${nudge}\n  app b "B"\n  a -> b\n`;
+    const plain = laid(src(""));
+    const nudged = laid(src(" @nudge(-40, 0)"));
+    // Without the nudge the pair is centred on itself; with it, off by the ask.
+    expect(cx(plain, "a") - cx(plain, "b")).toBeCloseTo(0, 5);
+    expect(cx(nudged, "a") - cx(nudged, "b")).toBeCloseTo(-40, 5);
+  });
+
+  it("lands once in a scope the sweeps never visit, not once per sweep", () => {
+    // Unconnected children make a single layer, which the sweep ranges exclude:
+    // only the one-shot settle can honour the nudge, and it must do so exactly
+    // once — a bias that compounded would come out as some multiple of 40 here.
+    const src = (nudge: string) =>
+      `architecture\n  service s "S" {\n    app a "A"${nudge}\n    app b "B"\n  }\n`;
+    const dist = (d: ArchDiagram): number => rectOf(d, "b").x - rectOf(d, "a").x;
+    expect(dist(laid(src(" @nudge(-40, 0)"))) - dist(laid(src("")))).toBeCloseTo(40, 5);
+  });
+
+  it("cannot push a node into its neighbour — order and the gap hold", () => {
+    const src = 'architecture\n  service s "S" {\n    app a "A" @nudge(200, 0)\n    app b "B"\n  }\n';
+    const d = laid(src);
+    const a = rectOf(d, "a");
+    const b = rectOf(d, "b");
+    // The nudge aims straight at `b`; the solve keeps the order and the gap.
+    expect(a.x + a.width).toBeLessThan(b.x);
+    expect(overlappingSiblings(d)).toEqual([]);
+  });
+
+  it("moves along the flow only within the layer's own band", () => {
+    // A container is taller than the app sharing its layer, so the app has slack.
+    const src = (nudge: string) =>
+      `architecture\n  app top "Top"\n  service s "S" {\n    app inner "Inner"\n  }\n  app side "Side"${nudge}\n  top -> inner\n  top -> side\n`;
+    const plain = rectOf(laid(src("")), "side");
+    const down = rectOf(laid(src(" @nudge(0, 1000)")), "side");
+    const up = rectOf(laid(src(" @nudge(0, -1000)")), "side");
+    const band = rectOf(laid(src("")), "s");
+    // Clamped to the band, not carried into the next rank's corridor.
+    expect(up.y).toBeCloseTo(band.y, 5);
+    expect(down.y + down.height).toBeCloseTo(band.y + band.height, 5);
+    expect(plain.y).toBeGreaterThan(up.y);
+    expect(plain.y).toBeLessThan(down.y);
+  });
+
+  it("is dead under @at, like every other hint", () => {
+    const src = (nudge: string) =>
+      `architecture\n  app a "A" @at(0, 0)${nudge}\n  app b "B" @at(160, 0)\n  a -> b\n`;
+    const plain = laid(src(""));
+    const nudged = laid(src(" @nudge(-40, 24)"));
+    expect(rectOf(nudged, "a")).toEqual(rectOf(plain, "a"));
+    expect(rectOf(nudged, "b")).toEqual(rectOf(plain, "b"));
+  });
+});

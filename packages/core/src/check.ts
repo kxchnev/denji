@@ -210,7 +210,7 @@ function pinnedHintDiagnostics(diagram: ArchDiagram, source: string): Diagnostic
   for (const n of diagram.nodes) {
     const h = n.hint;
     if (!h?.at) continue;
-    const dead = (["rightOf", "leftOf", "above", "below"] as const).filter((k) => h[k]);
+    const dead = (["rightOf", "leftOf", "above", "below", "nudge"] as const).filter((k) => h[k]);
     if (dead.length === 0) continue;
     out.push(
       warn(source, "at-overrides-hint", `"${n.id}" has @at, so @${dead[0]} on it is ignored`, [

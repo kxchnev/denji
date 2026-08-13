@@ -444,6 +444,7 @@ const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
     "below",
     "gap",
     "align",
+    "nudge",
     "style",
     "icon",
     "link",
@@ -456,6 +457,7 @@ const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
     "below",
     "gap",
     "align",
+    "nudge",
     "spacing",
     "spacingx",
     "spacingy",
@@ -588,6 +590,20 @@ function parseDirectives(
         );
       }
       hint().at = { x: nums[0]!, y: nums[1]! };
+    } else if (name === "nudge") {
+      // A nudge is a signed offset — pushing left or up is half the point — so
+      // it parses exactly as @at does, not through `size()`.
+      const parts = arg.split(",").map((p) => p.trim());
+      const nums = parts.map(Number);
+      if (parts.length !== 2 || parts.some((p) => p === "") || nums.some((n) => !Number.isFinite(n))) {
+        throw new DiagramParseError(
+          "@nudge expects two numbers, e.g. @nudge(-40, 0)",
+          lineNo,
+          indentCol(raw),
+          raw,
+        );
+      }
+      hint().nudge = { x: nums[0]!, y: nums[1]! };
     } else if (RELATIONAL[name]) {
       if (!/^[A-Za-z0-9_]+$/.test(arg)) {
         throw new DiagramParseError(`@${m[1]} expects a node id`, lineNo, indentCol(raw), raw);

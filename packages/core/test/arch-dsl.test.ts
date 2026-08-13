@@ -86,6 +86,14 @@ describe("architecture DSL", () => {
     expect(container(d, "s").hint).toMatchObject({ rightOf: "a", align: "center" });
   });
 
+  it("parses @nudge as a signed pair, and rejects anything else", () => {
+    const d = parseArchitecture('architecture\napp a "A"\napp b "B" @nudge(-40, 8.5)');
+    expect(shape(d, "b").hint).toMatchObject({ nudge: { x: -40, y: 8.5 } });
+    for (const bad of ["@nudge(40)", "@nudge(a, 0)", "@nudge(1, )"]) {
+      expect(() => parseArchitecture(`architecture\napp a "A" ${bad}`)).toThrow(/two numbers/);
+    }
+  });
+
   it("reads spacing settings off the architecture header", () => {
     const d = parseArchitecture(`
       architecture @spacing(60) @margin(40)

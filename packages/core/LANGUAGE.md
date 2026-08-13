@@ -206,6 +206,13 @@ app c "C" @below(a) @align(start)
   `@below` and `@above`, **`below` wins**.
 - `@align(start|center|end)` only applies to a node placed next to a pinned one
   (below). Default `center`.
+- `@nudge(dx, dy)` shifts the node from wherever the layout puts it, in page
+  pixels — a preference, not a promise. Sibling order and minimum gaps always
+  win, so a nudge can never make boxes overlap, and the node stays in the
+  automatic arrangement (unlike `@at`). `dy` moves the node only within its own
+  layer's band, never into another layer. Across the flow it lands in 4px
+  steps. Reach for it when a node sits legally but reads slightly off — say,
+  centred over a neighbour when flush left would read better: `@nudge(-40, 0)`.
 - Contradicting yourself (`a @rightOf(b)` and `b @rightOf(a)`) does not fail: the
   relations that close the cycle are dropped and `power check` reports
   `hint-cycle`.
@@ -232,8 +239,9 @@ service edge "Edge" @at(320, 80) {
 - Coordinates may be negative or fractional. At the top level the drawing simply
   extends to hold them. Inside a container the box has to contain its children, so
   content reaching before the container's corner pushes the rest of that scope over.
-- `@at` **beats every relation on the same node** — `@rightOf`, `@align` and
-  `@gap` there do nothing, and `power check` reports `at-overrides-hint`.
+- `@at` **beats every relation on the same node** — `@rightOf`, `@align`,
+  `@gap` and `@nudge` there do nothing, and `power check` reports
+  `at-overrides-hint`.
 - Other nodes may still point **at** a pinned node, and they are placed against
   it, exactly and in order. That is what lets one part of a diagram be drawn by
   hand while the rest keeps arranging itself.
@@ -266,6 +274,7 @@ either way; there is no hidden layout state.
 | `@padding(n)` | — | ✅ | — | border to content |
 | `@margin(n)` | ✅ | — | — | whitespace around the whole drawing |
 | `@gap(n)` | — | ✅ | ✅ | this node's distance to **its own anchor** |
+| `@nudge(dx, dy)` | — | ✅ | ✅ | soft offset off the automatic position (§5) |
 | `@at(x, y)` | — | ✅ | ✅ | exact position in the node's own scope (§5) |
 
 A container's spacing governs its whole subtree until another container
@@ -411,7 +420,7 @@ architecture
 | Context | Allowed |
 |---|---|
 | `architecture` line | `@spacing` `@spacingX` `@spacingY` `@margin` `@theme` |
-| shape | `@rightOf` `@leftOf` `@above` `@below` `@gap` `@align` `@style` `@icon` `@link` + style properties |
+| shape | `@rightOf` `@leftOf` `@above` `@below` `@gap` `@align` `@nudge` `@style` `@icon` `@link` + style properties |
 | container | the shape set, plus `@spacing` `@spacingX` `@spacingY` `@padding` |
 | connection | `@style` + style properties |
 | `text` line | `@corner` |
@@ -443,3 +452,6 @@ Directive names are case-insensitive: `@rightOf` and `@rightof` are the same.
     about where anything goes.
 11. Prefer containers over a long row of top-level nodes — a wide strip is hard to
     read, and `power check` reports it.
+12. **A nudge is a wish, `@at` is an order.** `@at` on the same node silences
+    `@nudge` like every other hint, and the `dy` half of a nudge has nowhere to
+    go when the node is already as tall as its layer.

@@ -34,6 +34,14 @@ export const layout: ExampleData[] = [
     api: `architecture()\n  .database("wide", "Wide Data Store Cluster", { hint: { at: { x: 0, y: 0 } } })\n  .app("top", "start", { hint: { below: "wide", align: "start" } })\n  .app("bottom", "end", { hint: { rightOf: "wide", align: "end" } })\n  .build();`,
   },
   {
+    id: "nudge",
+    title: "@nudge",
+    description:
+      "The layout still decides where a node goes; `@nudge(dx, dy)` shifts it a little off that spot. A preference, not a promise: sibling order and minimum gaps always win, so a nudge can never make boxes overlap, and unlike `@at` the node stays in the automatic arrangement. Without it the gateway here would sit centered over the pair; the nudge slides it left. `dy` moves a node only within its own layer.",
+    dsl: `architecture\n  app gw "Gateway" @nudge(-40, 0)\n  app orders "Orders"\n  app billing "Billing"\n  gw -> orders\n  gw -> billing`,
+    api: `architecture()\n  .app("gw", "Gateway", { hint: { nudge: { x: -40, y: 0 } } })\n  .app("orders", "Orders")\n  .app("billing", "Billing")\n  .connect("gw", "orders")\n  .connect("gw", "billing")\n  .build();`,
+  },
+  {
     id: "scopes",
     title: "every container is its own drawing",
     description:
