@@ -2,7 +2,7 @@
  * The preview itself: parse → layout → render, plus everything a pointer can do
  * to the result.
  *
- * The whole of `power` is bundled into this script and runs here rather than in
+ * The whole of `@kxchnev/denji` is bundled into this script and runs here rather than in
  * the extension host, because a drag re-lays the document out on every frame —
  * that is what makes containers grow and connectors re-aim while the node is
  * still in hand. An IPC round-trip per frame would be felt. The host is asked
@@ -28,7 +28,7 @@ import {
   snapToGrid,
   type ArchDiagram,
   type Point,
-} from "power";
+} from "@kxchnev/denji";
 import { DiagramGrid } from "./grid.js";
 import type { FromWebview, PreviewConfig, ToWebview } from "../src/protocol.js";
 
@@ -70,7 +70,7 @@ const EMPTY: Rendered = {
 function render(source: string, config: PreviewConfig): Rendered {
   try {
     const diagram = parseArchitecture(source);
-    // Warnings belong to `power check`; someone looking at the picture judges it
+    // Warnings belong to `denji check`; someone looking at the picture judges it
     // by looking at it. Without a sink this is a `console.warn` per keystroke.
     layoutArchitecture(diagram, { onWarn: () => {} });
     const svg = renderArchitecture(

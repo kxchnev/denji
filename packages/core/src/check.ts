@@ -1,5 +1,5 @@
 /**
- * Static checks over a `.pwr` document.
+ * Static checks over a `.denji` document.
  *
  * This exists for the case where nobody is looking at the picture. A person
  * editing a diagram sees immediately that it came out wrong; a model writing one

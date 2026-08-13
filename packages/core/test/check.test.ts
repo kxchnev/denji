@@ -155,7 +155,7 @@ describe("checkDiagram — layout warnings", () => {
 
 /**
  * A finding with nowhere to go is barely a finding: a reader cannot jump to it,
- * an editor cannot underline it, and `power check` can only name the file. Every
+ * an editor cannot underline it, and `denji check` can only name the file. Every
  * warning already knew which nodes it was about, so the position was always
  * derivable — these pin that it is actually derived, and derived correctly.
  */

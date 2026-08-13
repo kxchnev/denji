@@ -1,13 +1,13 @@
-# The `.pwr` language
+# The `.denji` language
 
 Reference for the architecture DSL. This file is the ground truth: the docs site
 teaches the same language with pictures, and `packages/core/README.md` covers the
 programmatic API, but where they disagree, this wins.
 
-`power check <file>` reports anything this document forbids, plus layout problems
+`denji check <file>` reports anything this document forbids, plus layout problems
 it cannot see. Run it before handing a diagram to anyone.
 
-## What `power check` reports
+## What `denji check` reports
 
 | Code | Severity | Means |
 |---|---|---|
@@ -226,7 +226,7 @@ app c "C" @below(a)
 - If you write both `@rightOf` and `@leftOf`, **`rightOf` wins**; with both
   `@below` and `@above`, **`below` wins**.
 - Contradicting yourself (`a @rightOf(b)` and `b @rightOf(a)`) does not fail: the
-  relations that close the cycle are dropped and `power check` reports
+  relations that close the cycle are dropped and `denji check` reports
   `hint-cycle`.
 
 A node with no hints is not a problem and never was one to report — it is the
@@ -346,8 +346,8 @@ and `postgres` → `postgresql`, `k8s` → `kubernetes`, `java` → `openjdk`, a
 Apache project answers to its short name (`spark`, `flink`, `cassandra`). An
 unknown name fails at parse time with a suggestion.
 
-**`power icons <text>` searches by slug, title or shorthand — run it instead of
-guessing.** Bare `power icons` says how many there are and which release they
+**`denji icons <text>` searches by slug, title or shorthand — run it instead of
+guessing.** Bare `denji icons` says how many there are and which release they
 came from.
 
 These are technology and vendor marks only: there is no generic device, browser,
@@ -371,7 +371,7 @@ icon acme {
 a bundled name replaces that mark.
 
 This is now for the marks Simple Icons does not carry — AWS, Azure, a company's
-own logo — and nothing else. If `power icons` finds it, do not paste it.
+own logo — and nothing else. If `denji icons` finds it, do not paste it.
 
 ---
 
@@ -437,4 +437,4 @@ Directive names are case-insensitive: `@rightOf` and `@rightof` are the same.
     *are* the layout. A diagram whose boxes are wired up needs nothing else said
     about where anything goes.
 11. Prefer containers over a long row of top-level nodes — a wide strip is hard to
-    read, and `power check` reports it.
+    read, and `denji check` reports it.

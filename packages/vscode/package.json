@@ -1,15 +1,19 @@
 {
-  "name": "power-vscode",
-  "displayName": "power diagrams",
-  "description": "Live preview for .pwr architecture diagrams — drag a node, the source learns where it belongs",
-  "version": "0.0.1",
-  "private": true,
+  "name": "denji",
+  "displayName": "Denji — architecture diagrams",
+  "description": "Live preview for .denji architecture diagrams — drag a node, the source learns where it belongs",
+  "version": "1.0.0",
   "license": "MIT",
   "publisher": "kxchnev",
+  "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kxchnev/power.git",
+    "url": "https://github.com/kxchnev/denji.git",
     "directory": "packages/vscode"
+  },
+  "homepage": "https://github.com/kxchnev/denji#readme",
+  "bugs": {
+    "url": "https://github.com/kxchnev/denji/issues"
   },
   "engines": {
     "vscode": "^1.90.0"
@@ -18,83 +22,96 @@
     "Programming Languages",
     "Visualization"
   ],
+  "keywords": [
+    "architecture",
+    "diagram",
+    "diagram-as-code",
+    "dsl",
+    "svg"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "The extension only parses and renders the open document; it runs nothing from the workspace."
+    }
+  },
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onLanguage:power",
-    "onWebviewPanel:power.preview"
+    "onLanguage:denji",
+    "onWebviewPanel:denji.preview"
   ],
   "contributes": {
     "languages": [
       {
-        "id": "power",
+        "id": "denji",
         "aliases": [
-          "power",
-          "pwr"
+          "Denji",
+          "denji"
         ],
         "extensions": [
-          ".pwr"
+          ".denji"
         ],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language": "power",
-        "scopeName": "source.pwr",
-        "path": "./syntaxes/pwr.tmLanguage.json"
+        "language": "denji",
+        "scopeName": "source.denji",
+        "path": "./syntaxes/denji.tmLanguage.json"
       }
     ],
     "commands": [
       {
-        "command": "power.showPreview",
+        "command": "denji.showPreview",
         "title": "Open Preview",
-        "category": "power",
+        "category": "denji",
         "icon": "$(open-preview)"
       },
       {
-        "command": "power.showPreviewToSide",
+        "command": "denji.showPreviewToSide",
         "title": "Open Preview to the Side",
-        "category": "power",
+        "category": "denji",
         "icon": "$(open-preview)"
       }
     ],
     "keybindings": [
       {
-        "command": "power.showPreview",
+        "command": "denji.showPreview",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v",
-        "when": "editorLangId == power"
+        "when": "editorLangId == denji"
       },
       {
-        "command": "power.showPreviewToSide",
+        "command": "denji.showPreviewToSide",
         "key": "ctrl+k v",
         "mac": "cmd+k v",
-        "when": "editorLangId == power"
+        "when": "editorLangId == denji"
       }
     ],
     "menus": {
       "editor/title": [
         {
-          "command": "power.showPreviewToSide",
-          "when": "editorLangId == power",
+          "command": "denji.showPreviewToSide",
+          "when": "editorLangId == denji",
           "group": "navigation"
         }
       ],
       "commandPalette": [
         {
-          "command": "power.showPreview",
-          "when": "editorLangId == power"
+          "command": "denji.showPreview",
+          "when": "editorLangId == denji"
         },
         {
-          "command": "power.showPreviewToSide",
-          "when": "editorLangId == power"
+          "command": "denji.showPreviewToSide",
+          "when": "editorLangId == denji"
         }
       ]
     },
     "configuration": {
-      "title": "power",
+      "title": "denji",
       "properties": {
-        "power.diagnostics": {
+        "denji.diagnostics": {
           "type": "string",
           "enum": [
             "all",
@@ -102,24 +119,24 @@
             "off"
           ],
           "enumDescriptions": [
-            "Errors and layout warnings, the same list `power check` prints.",
+            "Errors and layout warnings, the same list `denji check` prints.",
             "Only what stops the diagram rendering.",
             "Nothing."
           ],
           "default": "all",
           "description": "What to report in the Problems panel."
         },
-        "power.preview.codeLens": {
+        "denji.preview.codeLens": {
           "type": "boolean",
           "default": true,
-          "description": "Offer 'Open preview to the side' above the first line of a .pwr file, until a preview is open."
+          "description": "Offer 'Open preview to the side' above the first line of a .denji file, until a preview is open."
         },
-        "power.preview.grid": {
+        "denji.preview.grid": {
           "type": "boolean",
           "default": true,
           "description": "Draw a dot grid behind the diagram."
         },
-        "power.preview.theme": {
+        "denji.preview.theme": {
           "type": "string",
           "enum": [
             "auto",
@@ -138,12 +155,10 @@
     "watch": "npm run grammar && node esbuild.mjs --watch",
     "test": "npm run build && tsx test/diff.test.ts && tsx test/extension.test.ts && tsx test/grammar.test.ts && tsx test/open.test.ts && tsx test/webview.test.ts",
     "typecheck": "tsc --noEmit",
-    "package": "npm run build && vsce package --no-dependencies -o power-vscode.vsix"
-  },
-  "dependencies": {
-    "power": "*"
+    "package": "npm run build && vsce package --no-dependencies -o denji.vsix"
   },
   "devDependencies": {
+    "@kxchnev/denji": "*",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^26.1.1",
     "@types/vscode": "^1.90.0",

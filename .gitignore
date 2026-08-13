@@ -7,9 +7,9 @@ packages/vscode/syntaxes/
 # the history never carries them.
 packages/core/src/model/icon.data.ts
 packages/core/src/model/icon.names.ts
-# Стенд для выбора автоматической раскладки: шесть кандидатов, корпус диаграмм и
-# генератор контрольного листа. Прототипное качество и одноразовая задача —
-# выбрать движок; то, что выберут, переезжает в src уже с тестами.
+# A bench for choosing the layout engine: six candidates, a corpus of diagrams
+# and a scorecard generator. Prototype quality and a one-off question — pick an
+# engine; whatever wins moves into src with tests of its own.
 packages/core/lab/
 # Copied from LANGUAGE.md and the skill by packages/docs/scripts/copy-agent-files.ts,
 # so the site can never serve an older grammar than the parser speaks.
@@ -21,3 +21,6 @@ out/
 *.tsbuildinfo
 *.vsix
 .DS_Store
+
+# Next.js regenerates it on every build; tracking it only produces noise.
+packages/docs/next-env.d.ts

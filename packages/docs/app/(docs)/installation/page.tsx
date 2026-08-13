@@ -49,7 +49,7 @@ export default function InstallationPage() {
         The same package installs a <InlineCode>{PRODUCT.cli}</InlineCode> binary. Run it without
         installing anything permanently:
       </p>
-      <ShellBlock code={`npx ${PRODUCT.cli} render diagram.pwr`} />
+      <ShellBlock code={`npx ${PRODUCT.cli} render diagram.denji`} />
       <p className="mt-4 leading-7">Or put it on your path for good:</p>
       <ShellBlock code={`npm install -g ${PRODUCT.pkg}`} />
       <p className="mt-4 leading-7">
@@ -77,17 +77,17 @@ export default function InstallationPage() {
 
       <h2 className="mt-10 text-xl font-semibold tracking-tight">Your first diagram</h2>
       <p className="mt-2 leading-7">
-        Put this in <InlineCode>diagram.pwr</InlineCode>. Nothing in it says where a box goes: the
+        Put this in <InlineCode>diagram.denji</InlineCode>. Nothing in it says where a box goes: the
         connections decide, and the hints only constrain the order.
       </p>
       <CodeBlock code={FIRST_DIAGRAM} lang="pwr" />
       <p className="mt-4 leading-7">Render it to a file:</p>
-      <ShellBlock code={`npx ${PRODUCT.cli} render diagram.pwr -o diagram.svg`} />
+      <ShellBlock code={`npx ${PRODUCT.cli} render diagram.denji -o diagram.svg`} />
       <p className="mt-4 leading-7">
         Or keep a preview open that redraws every time you save — the portable half of the editor
         experience, in any editor:
       </p>
-      <ShellBlock code={`npx ${PRODUCT.cli} watch diagram.pwr`} />
+      <ShellBlock code={`npx ${PRODUCT.cli} watch diagram.denji`} />
 
       <h2 className="mt-10 text-xl font-semibold tracking-tight">Nothing installed?</h2>
       <p className="mt-2 leading-7">

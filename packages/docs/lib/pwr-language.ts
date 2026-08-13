@@ -1,5 +1,5 @@
 import { StreamLanguage, type StreamParser, type StringStream } from "@codemirror/language";
-import { LINK_SCHEMES, STYLE_PROPS, normalizePropName, type StylePropSpec } from "power";
+import { LINK_SCHEMES, STYLE_PROPS, normalizePropName, type StylePropSpec } from "@kxchnev/denji";
 import { pwrCompletions } from "./pwr-complete";
 
 /** Mirrors SHAPE_KINDS / CONTAINER_KINDS in packages/core/src/dsl/arch-parse.ts — case-sensitive. */

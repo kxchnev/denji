@@ -13,7 +13,10 @@
  * free.
  */
 
-const KEY = "power.playground.diagrams.v1";
+const KEY = "denji.playground.diagrams.v1";
+/** What the key was called before the product was named. Read once, so a rename
+ *  does not quietly throw away the diagrams someone already saved. */
+const LEGACY_KEY = "power.playground.diagrams.v1";
 const VERSION = 1;
 
 /** How long a deleted diagram stays recoverable before it is dropped for good. */
@@ -22,7 +25,7 @@ export const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export interface SavedDiagram {
   id: string;
   name: string;
-  /** The `.pwr` source. */
+  /** The `.denji` source. */
   dsl: string;
   createdAt: number;
   updatedAt: number;
@@ -63,7 +66,7 @@ function read(): SavedDiagram[] {
   if (typeof window === "undefined") return [];
   let raw: string | null = null;
   try {
-    raw = window.localStorage.getItem(KEY);
+    raw = window.localStorage.getItem(KEY) ?? window.localStorage.getItem(LEGACY_KEY);
   } catch {
     return [];
   }

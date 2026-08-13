@@ -1,3 +1,4 @@
+import { NAME } from "../../brand.js";
 import type { ArchDiagram, ContainerText, Corner, Shape, StyleProps } from "../../model/arch.js";
 import { resolveStyle } from "../../model/style.js";
 import type { Size } from "../../model/geometry.js";
@@ -39,14 +40,14 @@ export interface ArchLayoutOptions {
   /**
    * Called for anything the layout could not honour literally — today only a
    * cycle in relative hints. Defaults to a `console.warn`, which is right for a
-   * person watching a build but useless to `power check`, which needs to collect
+   * person watching a build but useless to `denji check`, which needs to collect
    * them. Pass a sink (even an empty one) to take over.
    */
   onWarn?: (warning: LayoutWarning) => void;
 }
 
 const warnToConsole = (w: LayoutWarning): void => {
-  console.warn(`power: ${w.message}.`);
+  console.warn(`${NAME}: ${w.message}.`);
 };
 
 const DEFAULT_GAP = 40;

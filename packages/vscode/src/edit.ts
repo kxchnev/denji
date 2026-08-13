@@ -2,7 +2,7 @@
  * Turning a drop into an edit of the user's file.
  */
 import * as vscode from "vscode";
-import { findDeclaration, setNodeRelation } from "power";
+import { findDeclaration, setNodeRelation } from "@kxchnev/denji";
 import { changedLines } from "./diff.js";
 import type { Move } from "./protocol.js";
 

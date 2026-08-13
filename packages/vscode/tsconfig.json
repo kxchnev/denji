@@ -3,7 +3,7 @@
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
     "module": "ESNext",
-    // `power` is ESM-only and its exports map has no `require` condition, which
+    // `@kxchnev/denji` is ESM-only and its exports map has no `require` condition, which
     // NodeNext resolution would refuse. Everything here goes through esbuild
     // anyway, so resolve the way the bundler does.
     "moduleResolution": "bundler",

@@ -1,5 +1,5 @@
 /**
- * Small, surgical edits to `.pwr` source — what an interactive editor writes back
+ * Small, surgical edits to `.denji` source — what an interactive editor writes back
  * after the reader has dragged something.
  *
  * Deliberately a line rewriter rather than a printer over the model. Printing the

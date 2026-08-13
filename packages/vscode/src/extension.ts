@@ -19,8 +19,8 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("power.showPreview", open(false)),
-    vscode.commands.registerCommand("power.showPreviewToSide", open(true)),
+    vscode.commands.registerCommand("denji.showPreview", open(false)),
+    vscode.commands.registerCommand("denji.showPreviewToSide", open(true)),
   );
 
   new OpenPreviewLens(previews).register(context);

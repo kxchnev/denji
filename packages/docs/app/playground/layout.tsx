@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Playground",
-  description: "Write .pwr and watch the diagram render as you type.",
+  description: "Write .denji and watch the diagram render as you type.",
 };
 
 /**

@@ -8,7 +8,7 @@ import {
   STYLE_PROPS,
   themes,
   type DirectiveCtx,
-} from "power";
+} from "@kxchnev/denji";
 import { CodeBlock } from "@/components/CodeBlock";
 import { InlineCode } from "@/components/InlineCode";
 import { inlineMarkdown } from "@/components/Prose";

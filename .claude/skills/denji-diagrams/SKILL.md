@@ -1,11 +1,11 @@
 ---
-name: power-diagrams
-description: Write and edit architecture diagrams in the .pwr DSL (power). Use when asked to draw, sketch or update an architecture, system, service or infrastructure diagram, or when editing a .pwr file. Covers the grammar, the check/preview loop, and the layout rules that decide whether a diagram reads well.
+name: denji-diagrams
+description: Write and edit architecture diagrams in the .denji DSL. Use when asked to draw, sketch or update an architecture, system, service or infrastructure diagram, or when editing a .denji file. Covers the grammar, the check/preview loop, and the layout rules that decide whether a diagram reads well.
 ---
 
-# Writing `.pwr` diagrams
+# Writing `.denji` diagrams
 
-`power` draws free-form architecture diagrams — shapes, containers and
+`denji` draws free-form architecture diagrams — shapes, containers and
 connections. **Declare the boxes, wire them up, and stop.** The layout is
 computed from the connections, so a diagram that is wired up is finished, and
 hints exist to overrule it for one pair. **There is no way to write a
@@ -14,20 +14,20 @@ you measured it on.
 
 ## The loop
 
-1. Write or edit the `.pwr` file.
-2. `power check <file>` — syntax errors *and* layout problems. Fix everything it
+1. Write or edit the `.denji` file.
+2. `denji check <file>` — syntax errors *and* layout problems. Fix everything it
    lists. Every finding points at a line and column (`file:12:3  warning  …`
    plus the source line and a caret), so go straight there. `--json` for
    structured output, `--strict` to fail on warnings too.
-3. **`power render <file> -o /tmp/preview.png` and look at the image.** Do this;
+3. **`denji render <file> -o /tmp/preview.png` and look at the image.** Do this;
    do not skip it. `check` can only judge the things it has a rule for — it says
    nothing about a label colliding with a container frame, a connector cutting
    across a third box, or a layout that is merely confusing. Reading the picture
    is the only way to catch those, and you can read pictures.
 4. Only then hand it over. They are most likely watching in the VS Code preview
-   (it opens beside any `.pwr` file and re-renders as you type), so your edits
+   (it opens beside any `.denji` file and re-renders as you type), so your edits
    land in front of them and they can tell you what to change without a round
-   trip. `power watch <file>` is the same thing in a browser, for someone not in
+   trip. `denji watch <file>` is the same thing in a browser, for someone not in
    VS Code.
 
 ⚠️ **In that preview they can drag a node, and the drag rewrites their file** —
@@ -39,13 +39,13 @@ The six things `check` reports: `parse-error` and `build-error` (errors —
 nothing renders, or ids/icons/styles do not hold together), then the layout
 warnings `hint-cycle`, `overlapping-siblings`, `unconnected-node` and
 `extreme-aspect-ratio`. Each one, with what to do about it, is on the docs
-site under Diagnostics; `power spec` prints the grammar.
+site under Diagnostics; `denji spec` prints the grammar.
 
-**Run `power spec` and read it before writing anything non-trivial** — it prints
-the complete grammar. `power icons <text>` searches the bundled marks; run it
+**Run `denji spec` and read it before writing anything non-trivial** — it prints
+the complete grammar. `denji icons <text>` searches the bundled marks; run it
 rather than guessing at a slug.
 
-If `power` is not on the PATH, run it as `npx power …`. Working inside the
+If `denji` is not on the PATH, run it as `npx denji …`. Working inside the
 library's own repository it is `node <repo>/packages/core/dist/cli.js` after
 `npm run build`. Either way, resolve it to an absolute path once and reuse it —
 the working directory does not persist between commands.
@@ -102,7 +102,7 @@ bottomLeft|bottomRight)` writes a free line in that corner.
 - **Reach for `@icon(...)` when the technology is the point** (`postgres`,
   `kafka`, `k8s`, `redis`); skip it when the role matters more than the vendor.
   **The whole of Simple Icons is bundled**, so nearly any product you can name is
-  there under its slug — `power icons <text>` searches by slug, title or
+  there under its slug — `denji icons <text>` searches by slug, title or
   shorthand, and it is the fastest way to confirm one. Do not paste path data
   into a diagram for a mark that is already in the set.
   Two things are still missing and no slug will find them: **AWS, Azure, Amazon

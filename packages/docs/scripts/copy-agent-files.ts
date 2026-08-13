@@ -21,7 +21,7 @@ const out = join(here, "..", "public");
 
 const files: Array<[from: string, to: string]> = [
   [join(repo, "packages", "core", "LANGUAGE.md"), join(out, "llms.txt")],
-  [join(repo, ".claude", "skills", "power-diagrams", "SKILL.md"), join(out, "skill.md")],
+  [join(repo, ".claude", "skills", "denji-diagrams", "SKILL.md"), join(out, "skill.md")],
 ];
 
 mkdirSync(out, { recursive: true });

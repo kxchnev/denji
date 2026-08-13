@@ -43,7 +43,7 @@ export default function EditorPage() {
       <ShellBlock code={`code --install-extension ${PRODUCT.extension}`} />
       <p className="mt-4 leading-7">
         It carries its own copy of the engine, so nothing has to be installed in the project you are
-        drawing. Opening any <InlineCode>.pwr</InlineCode> file activates it.
+        drawing. Opening any <InlineCode>.denji</InlineCode> file activates it.
       </p>
 
       <h2 className="mt-10 text-xl font-semibold tracking-tight">Opening a preview</h2>

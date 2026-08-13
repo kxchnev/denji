@@ -2,11 +2,11 @@
  * Two bundles, because the extension runs in two places at once.
  *
  * The host half is CJS on Node with `vscode` provided by the runtime. The
- * webview half is a browser script that carries the whole of `power` with it:
+ * webview half is a browser script that carries the whole of `@kxchnev/denji` with it:
  * the preview parses, lays out and renders on every keystroke and on every frame
  * of a drag, and putting a postMessage round-trip in the middle of that loop
  * would be felt. Bundling is also what makes the extension self-contained —
- * `power` is ESM-only with no `require` condition, so it could not be required
+ * `@kxchnev/denji` is ESM-only with no `require` condition, so it could not be required
  * from the host anyway.
  */
 import { build, context } from "esbuild";

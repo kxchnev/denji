@@ -1,5 +1,5 @@
 /**
- * Live preview for a `.pwr` file.
+ * Live preview for a `.denji` file.
  *
  * The workflow this serves: a model edits the file, a person watches the picture
  * and says what to change. So the page has to survive a document that is broken
@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { readFileSync, watch as fsWatch, type FSWatcher } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
 import { basename, dirname, resolve } from "node:path";
+import { NAME } from "./brand.js";
 import { parseArchitecture } from "./dsl/arch-parse.js";
 import { DiagramParseError } from "./dsl/error.js";
 import { layoutArchitecture } from "./layout/arch/index.js";
@@ -35,7 +36,7 @@ function render(file: string, theme: ThemeName | undefined): Payload {
   }
   try {
     const diagram = parseArchitecture(source);
-    // Warnings belong to `power check`, which the model runs; a person looking
+    // Warnings belong to `denji check`, which the model runs; a person looking
     // at the picture judges it by looking at it.
     layoutArchitecture(diagram, { onWarn: () => {} });
     const svg = renderArchitecture(
@@ -56,7 +57,7 @@ function render(file: string, theme: ThemeName | undefined): Payload {
 const PAGE = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>power preview</title>
+<title>${NAME} preview</title>
 <style>
   :root { color-scheme: light dark; --bg: #f8fafc; --fg: #0f172a; --err-bg: #fef2f2; --err-fg: #b91c1c; --err-bd: #fecaca; }
   @media (prefers-color-scheme: dark) {
@@ -158,8 +159,8 @@ export async function watchDiagram(input: string, opts: WatchOptions): Promise<v
 
   const port = await listen(server, opts.port);
   const url = `http://localhost:${port}`;
-  console.log(`power: watching ${input}`);
-  console.log(`power: preview at ${url}`);
+  console.log(`${NAME}: watching ${input}`);
+  console.log(`${NAME}: preview at ${url}`);
   if (opts.open) openBrowser(url);
 
   const stop = (): void => {

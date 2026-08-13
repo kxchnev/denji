@@ -27,8 +27,8 @@ describe("themed rendering", () => {
   it("declares the theme as custom properties with literal fallbacks", () => {
     const out = svg(SAMPLE);
     const css = sheet(out);
-    expect(css).toContain(`--pwr-app-fill:${lightTheme.slots.app.fill}`);
-    expect(css).toContain(`fill:var(--pwr-app-fill,${lightTheme.slots.app.fill})`);
+    expect(css).toContain(`--denji-app-fill:${lightTheme.slots.app.fill}`);
+    expect(css).toContain(`fill:var(--denji-app-fill,${lightTheme.slots.app.fill})`);
   });
 
   it("never emits a var() without a literal fallback", () => {
@@ -51,17 +51,17 @@ describe("themed rendering", () => {
   it("ships both palettes in auto and selector mode, and only there", () => {
     const auto = sheet(svg(SAMPLE, { themeMode: "auto" }));
     expect(auto).toContain("@media(prefers-color-scheme:dark)");
-    expect(auto).not.toContain(".dark .pwr-");
+    expect(auto).not.toContain(".dark .denji-");
 
     // A host with its own toggle gets the class and no media query — the query
     // would win back whenever the reader set the toggle against their OS.
     const sel = sheet(svg(SAMPLE, { themeMode: "selector" }));
-    expect(sel).toContain(".dark .pwr-");
+    expect(sel).toContain(".dark .denji-");
     expect(sel).not.toContain("prefers-color-scheme");
 
     for (const css of [auto, sel]) {
-      expect(css).toContain(`--pwr-app-fill:${lightTheme.slots.app.fill}`);
-      expect(css).toContain(`--pwr-app-fill:${darkTheme.slots.app.fill}`);
+      expect(css).toContain(`--denji-app-fill:${lightTheme.slots.app.fill}`);
+      expect(css).toContain(`--denji-app-fill:${darkTheme.slots.app.fill}`);
     }
 
     // Anything destined for a file is baked: an export must not repaint itself
@@ -69,18 +69,18 @@ describe("themed rendering", () => {
     for (const opts of [{}, { theme: "light" as const }, { theme: "dark" as const }]) {
       const css = sheet(svg(SAMPLE, opts));
       expect(css).not.toContain("@media");
-      expect(css).not.toContain(".dark .pwr-");
+      expect(css).not.toContain(".dark .denji-");
     }
   });
 
   it("honours a custom dark selector", () => {
     const css = sheet(svg(SAMPLE, { themeMode: "selector", darkSelector: '[data-theme="dark"]' }));
-    expect(css).toContain('[data-theme="dark"] .pwr-');
+    expect(css).toContain('[data-theme="dark"] .denji-');
   });
 
   it("switches only the variables, so every rule is stated once", () => {
     for (const mode of ["auto", "selector"] as const) {
-      expect(sheet(svg(SAMPLE, { themeMode: mode })).match(/\.pwr-app \.pwr-b\{/g)).toHaveLength(1);
+      expect(sheet(svg(SAMPLE, { themeMode: mode })).match(/\.denji-app \.denji-b\{/g)).toHaveLength(1);
     }
   });
 
@@ -90,8 +90,8 @@ describe("themed rendering", () => {
 
   it("lets @theme in the document beat the caller's option", () => {
     const css = sheet(svg(`architecture @theme(dark)\napp a "A"`, { theme: "light", themeMode: "auto" }));
-    expect(css).toContain(`--pwr-app-fill:${darkTheme.slots.app.fill}`);
-    expect(css).not.toContain(`--pwr-app-fill:${lightTheme.slots.app.fill}`);
+    expect(css).toContain(`--denji-app-fill:${darkTheme.slots.app.fill}`);
+    expect(css).not.toContain(`--denji-app-fill:${lightTheme.slots.app.fill}`);
     // Naming a theme pins it: there is no second palette left to switch to.
     expect(css).not.toContain("@media");
   });
@@ -108,14 +108,14 @@ describe("the style cascade in CSS", () => {
   it("orders theme, then kind selector, then named, then inline", () => {
     const css = sheet(svg(src));
     const at = (needle: string) => css.indexOf(needle);
-    expect(at(`var(--pwr-app-fill`)).toBeLessThan(at(".pwr-app .pwr-b{fill:#aaaaaa}"));
-    expect(at(".pwr-app .pwr-b{fill:#aaaaaa}")).toBeLessThan(at(".pwr-s-named .pwr-b{fill:#bbbbbb}"));
-    expect(at(".pwr-s-named .pwr-b{fill:#bbbbbb}")).toBeLessThan(at(".pwr-i-a .pwr-b{fill:#cccccc}"));
+    expect(at(`var(--denji-app-fill`)).toBeLessThan(at(".denji-app .denji-b{fill:#aaaaaa}"));
+    expect(at(".denji-app .denji-b{fill:#aaaaaa}")).toBeLessThan(at(".denji-s-named .denji-b{fill:#bbbbbb}"));
+    expect(at(".denji-s-named .denji-b{fill:#bbbbbb}")).toBeLessThan(at(".denji-i-a .denji-b{fill:#cccccc}"));
   });
 
   it("gives every layer the same specificity so order alone decides", () => {
     const css = sheet(svg(src));
-    for (const rule of [".pwr-app .pwr-b", ".pwr-s-named .pwr-b", ".pwr-i-a .pwr-b"]) {
+    for (const rule of [".denji-app .denji-b", ".denji-s-named .denji-b", ".denji-i-a .denji-b"]) {
       expect(css).toContain(rule);
     }
   });
@@ -129,7 +129,7 @@ describe("the style cascade in CSS", () => {
         app a "A" @style(second) @style(first)
       `),
     );
-    expect(css.indexOf(".pwr-s-first")).toBeLessThan(css.indexOf(".pwr-s-second"));
+    expect(css.indexOf(".denji-s-first")).toBeLessThan(css.indexOf(".denji-s-second"));
   });
 
   it("keeps a connection's line unfilled whatever a named style says", () => {
@@ -143,14 +143,14 @@ describe("the style cascade in CSS", () => {
     const css = sheet(out);
     // A CSS declaration outranks the fill="none" attribute, so the guard rule
     // has to come last.
-    expect(css.trimEnd().endsWith(".pwr-e .pwr-b{fill:none}")).toBe(true);
+    expect(css.trimEnd().endsWith(".denji-e .denji-b{fill:none}")).toBe(true);
   });
 
   it("does not emit rules for slots a style is never attached to", () => {
     const css = sheet(svg(`architecture\nstyle s { fill: #123456 }\napp a "A" @style(s)`));
-    expect(css).toContain(".pwr-s-s .pwr-b{fill:#123456}");
+    expect(css).toContain(".denji-s-s .denji-b{fill:#123456}");
     // `a` is a shape, so the connection-chip variant would never match.
-    expect(css).not.toContain(".pwr-s-s .pwr-c");
+    expect(css).not.toContain(".denji-s-s .denji-c");
   });
 });
 
@@ -158,7 +158,7 @@ describe("generated ids", () => {
   it("scopes classes and marker ids per instance", () => {
     const a = svg(SAMPLE);
     const b = svg(`architecture\napp x "X"\napp y "Y" @rightOf(x)\nx -> y`);
-    const scope = (s: string) => /class="pwr (pwr-[a-z0-9]+)"/.exec(s)![1]!;
+    const scope = (s: string) => /class="denji (denji-[a-z0-9]+)"/.exec(s)![1]!;
     expect(scope(a)).not.toEqual(scope(b));
     // Two diagrams inlined in one page must not share `url(#…)` targets.
     expect(/id="([^"]+)"/.exec(a)![1]).not.toEqual(/id="([^"]+)"/.exec(b)![1]);
@@ -167,7 +167,7 @@ describe("generated ids", () => {
   it("re-scopes when only the stylesheet differs", () => {
     // Same markup, different CSS: sharing a scope class would let the second
     // diagram's rules repaint the first one on the same page.
-    const scope = (s: string) => /class="pwr (pwr-[a-z0-9]+)"/.exec(s)![1]!;
+    const scope = (s: string) => /class="denji (denji-[a-z0-9]+)"/.exec(s)![1]!;
     expect(scope(svg(SAMPLE, { theme: "light" }))).not.toEqual(
       scope(svg(SAMPLE, { theme: "dark" })),
     );
@@ -176,7 +176,7 @@ describe("generated ids", () => {
 
   it("honours an explicit idPrefix and emits no duplicate ids", () => {
     const out = svg(SAMPLE, { idPrefix: "fixed" });
-    expect(out).toContain('class="pwr fixed"');
+    expect(out).toContain('class="denji fixed"');
     expect(out).toContain('id="fixed-a0"');
     const ids = [...out.matchAll(/id="([^"]+)"/g)].map((m) => m[1]!);
     expect(new Set(ids).size).toBe(ids.length);
@@ -195,7 +195,7 @@ describe("generated ids", () => {
     const markers = [...out.matchAll(/<marker id="[^"]*-a(\d+)"/g)].map((m) => m[1]);
     expect(markers).toEqual(["0", "1"]);
     expect(out).toContain('fill="#ef4444"');
-    expect(out).toContain('fill="var(--pwr-edge-stroke,#334155)"');
+    expect(out).toContain('fill="var(--denji-edge-stroke,#334155)"');
   });
 });
 
@@ -215,7 +215,7 @@ describe("output shape", () => {
       layoutArchitecture(d);
       const out = renderArchitecture(d);
       const rect = d.nodes.find((n) => n.id === id)!.rect!;
-      const [, x, y] = /<text class="pwr-t" x="([\d.]+)" y="([\d.]+)"/.exec(out)!;
+      const [, x, y] = /<text class="denji-t" x="([\d.]+)" y="([\d.]+)"/.exec(out)!;
       return {
         x: Number(x),
         y: Number(y),
@@ -258,11 +258,11 @@ describe("output shape", () => {
     `);
     const at = (text: string) => {
       const m = new RegExp(
-        `<text class="pwr-t" x="([\\d.]+)" y="([\\d.]+)"[^>]*text-anchor="(start|end)"[^>]*>${text}</text>`,
+        `<text class="denji-t" x="([\\d.]+)" y="([\\d.]+)"[^>]*text-anchor="(start|end)"[^>]*>${text}</text>`,
       ).exec(out)!;
       return { x: Number(m[1]), y: Number(m[2]), anchor: m[3] };
     };
-    const g = /<rect class="pwr-b" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/.exec(
+    const g = /<rect class="denji-b" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/.exec(
       out,
     )!;
     const [x, y, w, h] = g.slice(1, 5).map(Number) as [number, number, number, number];
@@ -286,8 +286,8 @@ describe("output shape", () => {
       }
     `);
     const yOf = (text: string) =>
-      Number(new RegExp(`<text class="pwr-t" x="[\\d.]+" y="([\\d.]+)"[^>]*>${text}</text>`).exec(out)![1]);
-    const g = /<rect class="pwr-b" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(out)!;
+      Number(new RegExp(`<text class="denji-t" x="[\\d.]+" y="([\\d.]+)"[^>]*>${text}</text>`).exec(out)![1]);
+    const g = /<rect class="denji-b" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(out)!;
     const [y, h] = g.slice(1, 3).map(Number) as [number, number];
 
     // Source order reads downwards, and a line box is 20 tall.
@@ -326,40 +326,40 @@ architecture
 
   it("draws one button per linked element and nothing for the rest", () => {
     const out = svg(LINKED);
-    expect(out.match(/class="pwr-lk-p"/g)).toHaveLength(2);
-    expect(svg(SAMPLE)).not.toContain("pwr-lk");
+    expect(out.match(/class="denji-lk-p"/g)).toHaveLength(2);
+    expect(svg(SAMPLE)).not.toContain("denji-lk");
   });
 
   it("leaves a link-free diagram's stylesheet exactly as it was", () => {
     // The scope class is a hash of markup plus palette, so a rule that leaked
     // into every diagram would repaint every already-published one.
     const css = sheet(svg(SAMPLE));
-    expect(css).not.toContain("--pwr-link-");
-    expect(css).not.toContain(".pwr-lk");
+    expect(css).not.toContain("--denji-link-");
+    expect(css).not.toContain(".denji-lk");
   });
 
   it("draws the buttons over the connections", () => {
     // A connector docks within ten pixels of a corner, so an arrow really does
     // cross this patch — and a button with a line through it is not a button.
     const out = svg(LINKED);
-    expect(out.indexOf('class="pwr-lks"')).toBeGreaterThan(out.lastIndexOf('class="pwr-e'));
+    expect(out.indexOf('class="denji-lks"')).toBeGreaterThan(out.lastIndexOf('class="denji-e'));
   });
 
   it("carries its own chrome in both palettes, with literal fallbacks", () => {
     for (const theme of ["light", "dark"] as const) {
       const css = sheet(svg(LINKED, { theme }));
       const chrome = theme === "dark" ? darkTheme.link! : lightTheme.link!;
-      expect(css).toContain(`--pwr-link-fill:${chrome.fill}`);
-      expect(css).toContain(`fill:var(--pwr-link-fill,${chrome.fill})`);
-      expect(css).toContain(`stroke:var(--pwr-link-glyph,${chrome.glyph})`);
+      expect(css).toContain(`--denji-link-fill:${chrome.fill}`);
+      expect(css).toContain(`fill:var(--denji-link-fill,${chrome.fill})`);
+      expect(css).toContain(`stroke:var(--denji-link-glyph,${chrome.glyph})`);
       expect(css.match(/var\(--[a-z0-9-]+\)/g)).toBeNull();
     }
   });
 
   it("restates the chrome for the dark half of a two-palette render", () => {
     const css = sheet(svg(LINKED, { themeMode: "selector" }));
-    expect(css).toContain(`--pwr-link-fill:${lightTheme.link!.fill}`);
-    expect(css).toContain(`--pwr-link-fill:${darkTheme.link!.fill}`);
+    expect(css).toContain(`--denji-link-fill:${lightTheme.link!.fill}`);
+    expect(css).toContain(`--denji-link-fill:${darkTheme.link!.fill}`);
   });
 
   it("is inert markup by default, and an anchor only when asked", () => {
@@ -371,7 +371,7 @@ architecture
     expect(plain).not.toMatch(/href="(?!#)/);
 
     const anchored = svg(LINKED, { linkAnchors: true });
-    expect(anchored.match(/<a class="pwr-lk"/g)).toHaveLength(2);
+    expect(anchored.match(/<a class="denji-lk"/g)).toHaveLength(2);
     expect(anchored).toContain('href="https://example.com/gw"');
     expect(anchored).toContain('rel="noopener noreferrer"');
   });
@@ -388,7 +388,7 @@ architecture
     const out = svg(LINKED);
     expect(out).not.toContain("<image");
     expect(out).not.toContain("<use");
-    expect(out).toContain('class="pwr-lk-i"');
+    expect(out).toContain('class="denji-lk-i"');
   });
 
   it("is deterministic", () => {
@@ -398,7 +398,7 @@ architecture
 
 describe("labels on two lines", () => {
   const texts = (out: string): Array<{ x: number; y: number; text: string }> =>
-    [...out.matchAll(/<text class="pwr-t" x="([-\d.]+)" y="([-\d.]+)"[^>]*>([^<]*)<\/text>/g)].map(
+    [...out.matchAll(/<text class="denji-t" x="([-\d.]+)" y="([-\d.]+)"[^>]*>([^<]*)<\/text>/g)].map(
       (m) => ({ x: Number(m[1]), y: Number(m[2]), text: m[3]! }),
     );
 
@@ -430,7 +430,7 @@ describe("labels on two lines", () => {
 
   it("keeps a wrapped label on the barrel's face, clear of the lid", () => {
     const out = svg('architecture\n  database db "Order history archive"\n');
-    const lid = /<ellipse class="pwr-b" cx="[-\d.]+" cy="([-\d.]+)" rx="[-\d.]+" ry="([-\d.]+)"/.exec(out)!;
+    const lid = /<ellipse class="denji-b" cx="[-\d.]+" cy="([-\d.]+)" rx="[-\d.]+" ry="([-\d.]+)"/.exec(out)!;
     const cy = Number(lid[1]);
     const ry = Number(lid[2]);
     const lines = texts(out);
@@ -441,13 +441,13 @@ describe("labels on two lines", () => {
 
   it("gives the database a lid rather than a slot", () => {
     const out = svg('architecture\n  app a "A"\n  database db "B" @rightOf(a)\n');
-    const ry = Number(/<ellipse class="pwr-b"[^>]*ry="([-\d.]+)"/.exec(out)![1]);
+    const ry = Number(/<ellipse class="denji-b"[^>]*ry="([-\d.]+)"/.exec(out)![1]);
     expect(ry).toBe(12);
   });
 
   it("keeps the mark centred against a pair of lines", () => {
     const marks = (out: string) =>
-      [...out.matchAll(/<path class="pwr-ic[^"]*" transform="translate\([-\d.]+ ([-\d.]+)\)/g)].map(
+      [...out.matchAll(/<path class="denji-ic[^"]*" transform="translate\([-\d.]+ ([-\d.]+)\)/g)].map(
         (m) => Number(m[1]),
       );
     const one = marks(svg('architecture\n  app a "A" @icon(react)\n  app b "Storefront web service"\n'));
@@ -473,7 +473,7 @@ describe("labels on two lines", () => {
 describe("rounded corners", () => {
   /** Every connector's path data, in document order. */
   const connectors = (out: string): string[] =>
-    [...out.matchAll(/<g class="pwr-e[^"]*"><path[^>]*\sd="([^"]+)"/g)].map((m) => m[1]!);
+    [...out.matchAll(/<g class="denji-e[^"]*"><path[^>]*\sd="([^"]+)"/g)].map((m) => m[1]!);
 
   /** The radius of each quadratic corner, and how many smooth transitions. */
   function corners(d: string): { radii: number[]; blends: number } {

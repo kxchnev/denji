@@ -19,17 +19,17 @@ export class OpenPreviewLens implements vscode.CodeLensProvider {
   register(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
       this.changed,
-      vscode.languages.registerCodeLensProvider({ language: "power" }, this),
+      vscode.languages.registerCodeLensProvider({ language: "denji" }, this),
       this.previews.onDidChange(() => this.changed.fire()),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration("power.preview.codeLens")) this.changed.fire();
+        if (e.affectsConfiguration("denji.preview.codeLens")) this.changed.fire();
       }),
     );
   }
 
   provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
     const on = vscode.workspace
-      .getConfiguration("power.preview", document.uri)
+      .getConfiguration("denji.preview", document.uri)
       .get<boolean>("codeLens", true);
     // Once the preview is open the offer has been taken up, and the line is
     // better spent on the diagram than on a button that would do nothing new.
@@ -37,7 +37,7 @@ export class OpenPreviewLens implements vscode.CodeLensProvider {
     return [
       new vscode.CodeLens(new vscode.Range(0, 0, 0, 0), {
         title: "$(open-preview) Open preview to the side",
-        command: "power.showPreviewToSide",
+        command: "denji.showPreviewToSide",
         // Naming the document rather than leaning on whichever editor happens
         // to be active when the click lands.
         arguments: [document.uri],

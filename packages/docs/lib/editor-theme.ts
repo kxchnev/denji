@@ -61,7 +61,7 @@ export const codeEditorTheme = EditorView.theme({
     color: "hsl(var(--code-fg))",
   },
   // Whitespace marks (playground only — the read-only viewers leave the extension
-  // out). Faint on purpose: `.pwr` labels are prose, so a dot between every word
+  // out). Faint on purpose: `.denji` labels are prose, so a dot between every word
   // has to stay quieter than the words.
   // The dot is a background gradient with a hard-coded grey in CodeMirror's base
   // theme, not a coloured glyph, so it is the gradient that has to be redrawn to

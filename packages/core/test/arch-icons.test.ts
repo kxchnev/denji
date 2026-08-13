@@ -49,7 +49,7 @@ describe("the bundled icon set", () => {
     const PATH = /^[MmLlHhVvCcSsQqTtAaZz0-9eE,.+\-\s]+$/;
     expect(Object.keys(ICONS).length).toBeGreaterThan(30);
     for (const [name, icon] of Object.entries(ICONS)) {
-      // A name is only ever a *suffix* — `pwr-icon-42`, `--pwr-icon-42` — so a
+      // A name is only ever a *suffix* — `denji-icon-42`, `--denji-icon-42` — so a
       // leading digit is fine where a bare class would be invalid, and `_` is
       // an ordinary identifier character. Anything else would need escaping,
       // which is exactly what must never be needed here.
@@ -95,7 +95,7 @@ describe("@icon", () => {
     expect(shape(d, "db").icon).toBe("pg");
     expect(resolveIcon("pg")).toBe(ICONS.postgresql);
     // One CSS class and one variable, whichever spelling was used.
-    expect(svg(`architecture\ndatabase db "PG" @icon(pg)`)).toContain("pwr-icon-postgresql");
+    expect(svg(`architecture\ndatabase db "PG" @icon(pg)`)).toContain("denji-icon-postgresql");
   });
 
   it("rejects an unknown name, with a suggestion", () => {
@@ -138,7 +138,7 @@ describe("icon blocks", () => {
       viewBox: undefined,
       title: undefined,
     });
-    expect(svg(acme)).toContain("pwr-icon-acme");
+    expect(svg(acme)).toContain("denji-icon-acme");
   });
 
   it("accepts the single-line form", () => {
@@ -283,8 +283,8 @@ describe("icons in the output", () => {
 
   it("declares a colour variable only for the marks actually drawn", () => {
     const out = svg(`architecture\napp a "A" @icon(react)`);
-    expect(out).toContain("--pwr-icon-react:");
-    expect(out).not.toContain("--pwr-icon-dotnet:");
+    expect(out).toContain("--denji-icon-react:");
+    expect(out).not.toContain("--denji-icon-dotnet:");
   });
 
   it("uses the dark variant, in the variable and in the fallback", () => {
@@ -292,15 +292,15 @@ describe("icons in the output", () => {
     // baked into a dark render would be invisible in PNG output.
     const out = svg(`architecture\napp a "A" @icon(openjdk)`, true);
     const dark = ICONS.openjdk!.darkColor!;
-    expect(out).toContain(`--pwr-icon-openjdk:${dark}`);
-    expect(out).toContain(`fill:var(--pwr-icon-openjdk,${dark})`);
+    expect(out).toContain(`--denji-icon-openjdk:${dark}`);
+    expect(out).toContain(`fill:var(--denji-icon-openjdk,${dark})`);
   });
 
   it("lets @iconColor beat the brand colour", () => {
     const out = svg(`architecture\napp a "A" @icon(python) @iconColor(#94a3b8)`);
     // Higher specificity than the single-class brand rule, so order cannot
     // accidentally undo it.
-    expect(out).toContain(".pwr-i-a .pwr-ic{fill:#94a3b8}");
+    expect(out).toContain(".denji-i-a .denji-ic{fill:#94a3b8}");
   });
 
   it("stays deterministic", () => {
@@ -312,7 +312,7 @@ describe("icons in the output", () => {
 describe("icon geometry", () => {
   /** Every mark is drawn as one transformed path; pull its placement back out. */
   function marks(out: string): { x: number; y: number; scale: number }[] {
-    const re = /class="pwr-ic[^"]*" transform="translate\((-?[\d.]+) (-?[\d.]+)\) scale\(([\d.]+)\)"/g;
+    const re = /class="denji-ic[^"]*" transform="translate\((-?[\d.]+) (-?[\d.]+)\) scale\(([\d.]+)\)"/g;
     return [...out.matchAll(re)].map((m) => ({
       x: Number(m[1]),
       y: Number(m[2]),
@@ -441,7 +441,7 @@ describe("the whole of Simple Icons", () => {
     // insist on a leading letter, which put them out of reach entirely.
     const d = parseArchitecture('architecture\n  app a "Vault" @icon(1password)');
     expect(shape(d, "a").icon).toBe("1password");
-    expect(svg('architecture\n  app a "Vault" @icon(1password)')).toContain("pwr-icon-1password");
+    expect(svg('architecture\n  app a "Vault" @icon(1password)')).toContain("denji-icon-1password");
   });
 
   it("suggests a real mark for a typo, and nothing at all for a brand that is gone", () => {

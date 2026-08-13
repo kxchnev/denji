@@ -8,7 +8,7 @@
  * changes how many lines a document has.
  */
 import assert from "node:assert/strict";
-import { setNodeRelation } from "power";
+import { setNodeRelation } from "@kxchnev/denji";
 import { changedLines } from "../src/diff.js";
 
 const tests: Array<[string, () => void]> = [];

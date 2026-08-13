@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
-import sharp from "sharp";
+import { NAME } from "./brand.js";
 import { checkDiagram } from "./check.js";
 import { ICON_ALIASES, ICON_NAMES, ICONS, ICONSET_VERSION } from "./model/icon.js";
 import { POPULAR_ICONS } from "./model/icon.popular.js";
@@ -13,13 +13,44 @@ import { watchDiagram } from "./watch.js";
 
 const program = new Command();
 
+/**
+ * The one version anyone can trust: the manifest's. A second copy here drifts
+ * from the first release onwards, and `--version` is the one answer nobody
+ * double-checks. `dist/cli.js` → the package root, shipped via `files`.
+ */
+function version(): string {
+  try {
+    const manifest = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+    return (JSON.parse(manifest) as { version?: string }).version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
 program
-  .name("power")
+  .name(NAME)
   .description("Architecture diagrams that lay themselves out")
-  .version("0.0.1");
+  .version(version());
 
 /** Render at 2x the diagram's own units so raster output stays crisp. */
 const RASTER_DENSITY = 144;
+
+/**
+ * `sharp`, loaded only when someone actually asks for a raster.
+ *
+ * It is an optional dependency, and a native one at that — some 20 MB of libvips
+ * per platform, with a post-install step that fails behind a proxy or under
+ * `--ignore-scripts`. A library consumer who only lays diagrams out, and a CLI
+ * user writing SVG, should never pay for it; loading it at the top of this file
+ * charged even `denji check` for it.
+ */
+async function rasterizer() {
+  try {
+    return (await import("sharp")).default;
+  } catch {
+    throw new Error(`PNG and JPEG need the optional "sharp" package — install it, or write .svg`);
+  }
+}
 
 function formatFor(out: string): "svg" | "png" | "jpeg" | null {
   const ext = out.slice(out.lastIndexOf(".") + 1).toLowerCase();
@@ -31,21 +62,21 @@ function formatFor(out: string): "svg" | "png" | "jpeg" | null {
 
 program
   .command("render")
-  .description("Render a .pwr architecture diagram to SVG, PNG, or JPEG")
-  .argument("<input>", "input diagram file (.pwr DSL)")
+  .description("Render a .denji architecture diagram to SVG, PNG, or JPEG")
+  .argument("<input>", "input diagram file (.denji DSL)")
   .option("-o, --out <file>", "output path: .svg/.png/.jpg (defaults to <input>.svg)")
   .option("-t, --theme <name>", "light or dark", "light")
   .action(async (input: string, opts: { out?: string; theme: string }) => {
     const out = opts.out ?? input.replace(/\.[^.]+$/, "") + ".svg";
     const format = formatFor(out);
     if (opts.theme !== "light" && opts.theme !== "dark") {
-      console.error(`power: unknown theme "${opts.theme}" (use light or dark)`);
+      console.error(`${NAME}: unknown theme "${opts.theme}" (use light or dark)`);
       process.exitCode = 1;
       return;
     }
     if (!format) {
       const ext = out.slice(out.lastIndexOf("."));
-      console.error(`power: unsupported output format "${ext}" (use .svg, .png or .jpg)`);
+      console.error(`${NAME}: unsupported output format "${ext}" (use .svg, .png or .jpg)`);
       process.exitCode = 1;
       return;
     }
@@ -53,7 +84,7 @@ program
     try {
       source = readFileSync(input, "utf8");
     } catch {
-      console.error(`power: cannot read "${input}"`);
+      console.error(`${NAME}: cannot read "${input}"`);
       process.exitCode = 1;
       return;
     }
@@ -71,6 +102,7 @@ program
         // JPEG has no alpha, so the transparent backdrop must be flattened onto
         // the theme's own surface — white would ruin a dark diagram.
         const surface = resolveTheme(diagram.theme ?? name).surface;
+        const sharp = await rasterizer();
         const raster = await sharp(Buffer.from(svg), { density: RASTER_DENSITY })
           .flatten(format === "jpeg" ? { background: surface } : false)
           [format]()
@@ -80,9 +112,9 @@ program
       console.log(`wrote ${out}`);
     } catch (err) {
       if (err instanceof DiagramParseError) {
-        console.error(`power: ${err.message}`);
+        console.error(`${NAME}: ${err.message}`);
       } else {
-        console.error(`power: ${(err as Error).message}`);
+        console.error(`${NAME}: ${(err as Error).message}`);
       }
       process.exitCode = 1;
     }
@@ -95,34 +127,34 @@ function readSource(input: string): string {
 
 program
   .command("watch")
-  .description("Serve a live preview of a .pwr file that re-renders as it is edited")
-  .argument("<input>", "input diagram file (.pwr DSL)")
+  .description("Serve a live preview of a .denji file that re-renders as it is edited")
+  .argument("<input>", "input diagram file (.denji DSL)")
   .option("-p, --port <n>", "port to serve on (takes the next free one if busy)", "4400")
   .option("-t, --theme <name>", "pin the palette to light or dark (default: follow the device)")
   .option("--no-open", "do not open a browser")
   .action(async (input: string, opts: { port: string; theme?: string; open: boolean }) => {
     if (opts.theme !== undefined && opts.theme !== "light" && opts.theme !== "dark") {
-      console.error(`power: unknown theme "${opts.theme}" (use light or dark)`);
+      console.error(`${NAME}: unknown theme "${opts.theme}" (use light or dark)`);
       process.exitCode = 1;
       return;
     }
     const port = Number(opts.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      console.error(`power: invalid port "${opts.port}"`);
+      console.error(`${NAME}: invalid port "${opts.port}"`);
       process.exitCode = 1;
       return;
     }
     try {
       await watchDiagram(input, { port, theme: opts.theme, open: opts.open });
     } catch (err) {
-      console.error(`power: ${(err as Error).message}`);
+      console.error(`${NAME}: ${(err as Error).message}`);
       process.exitCode = 1;
     }
   });
 
 program
   .command("check")
-  .description("Report errors and layout problems in a .pwr file without rendering it")
+  .description("Report errors and layout problems in a .denji file without rendering it")
   .argument("<input>", "input diagram file, or - for stdin")
   .option("--json", "machine-readable diagnostics on stdout")
   .option("--strict", "exit non-zero on warnings too")
@@ -131,7 +163,7 @@ program
     try {
       source = readSource(input);
     } catch {
-      console.error(`power: cannot read "${input}"`);
+      console.error(`${NAME}: cannot read "${input}"`);
       process.exitCode = 1;
       return;
     }
@@ -185,7 +217,7 @@ program
       console.log(
         `${ICON_NAMES.length} marks bundled — the whole of Simple Icons ${ICONSET_VERSION} — ` +
           `plus ${Object.keys(ICON_ALIASES).length} shorthands.\n` +
-          "Search by name, title or shorthand:  power icons <text>\n\n" +
+          `Search by name, title or shorthand:  ${NAME} icons <text>\n\n` +
           "Common ones:\n" +
           POPULAR_ICONS.reduce<string[]>((lines, name, i) => {
             if (i % 6 === 0) lines.push("  ");
@@ -199,7 +231,7 @@ program
 
     const q = query.toLowerCase();
     const titleOf = (name: string) => ICONS[name]!.title ?? name;
-    /** Ranked, so `power icons go` does not open on `agora` and `algolia`. */
+    /** Ranked, so `denji icons go` does not open on `agora` and `algolia`. */
     const rank = (name: string): number => {
       const title = titleOf(name).toLowerCase();
       const shorthands = aliasesOf.get(name) ?? [];
@@ -242,14 +274,14 @@ program
 
 program
   .command("spec")
-  .description("Print the .pwr language reference — pipe it into any model that has no file access")
+  .description("Print the .denji language reference — pipe it into any model that has no file access")
   .action(() => {
     // dist/cli.js → the package root. Shipped via `files` in package.json.
     const spec = new URL("../LANGUAGE.md", import.meta.url);
     try {
       process.stdout.write(readFileSync(spec, "utf8"));
     } catch {
-      console.error("power: LANGUAGE.md is missing from this install");
+      console.error(`${NAME}: LANGUAGE.md is missing from this install`);
       process.exitCode = 1;
     }
   });

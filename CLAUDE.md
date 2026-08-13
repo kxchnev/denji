@@ -19,13 +19,13 @@ TypeScript, SVG.
 ```
 packages/core/   пакет power — библиотека + CLI
 packages/docs/   Next.js + shadcn дока с живым playground (зависит от power)
-packages/vscode/ расширение VS Code: живое превью .pwr с драгом
+packages/vscode/ расширение VS Code: живое превью .denji с драгом
 package.json     workspace-root (скрипты-прокси)
 ```
 
 ### packages/core (ядро)
 
-Слои: `DSL (.pwr) → Model → Layout (граф + контейнеры) → Router → Renderer → SVG`.
+Слои: `DSL (.denji) → Model → Layout (граф + контейнеры) → Router → Renderer → SVG`.
 
 - `src/model/` — `geometry.ts`, `arch.ts` (типы), `arch-builder.ts` (билдер),
   `icon.data.ts` — **весь** Simple Icons (3450 марок, ~4.9 МБ). Генерируется
@@ -104,7 +104,7 @@ package.json     workspace-root (скрипты-прокси)
   кнопка, перечёркнутая стрелкой, перестаёт читаться как кнопка. Хром кнопки —
   `Theme.link`, а не свойства стиля: аффорданс, который автор может
   перекрасить или закрасить, аффордансом быть перестаёт.
-- `src/dsl/` — `arch-parse.ts` (парсер `.pwr`), `arch-edit.ts` (построчная правка
+- `src/dsl/` — `arch-parse.ts` (парсер `.denji`), `arch-edit.ts` (построчная правка
   объявления — `setNodeRelation`, единственный писатель: драг пишет отношение, а
   не координату. Число строк не меняется, на чём стоит минимальный дифф в
   расширении; там же `findDeclaration` и `findHeaderLine`:
@@ -146,7 +146,7 @@ package.json     workspace-root (скрипты-прокси)
 
 **Грамматика для моделей.** `packages/core/LANGUAGE.md` — единственный источник
 правды по языку (английский), печатается через `power spec`. `AGENTS.md` в корне
-и `.claude/skills/power-diagrams/SKILL.md` ссылаются на него и несут правила
+и `.claude/skills/denji-diagrams/SKILL.md` ссылаются на него и несут правила
 авторства. При правке `arch-parse.ts` синхронно обновляй `LANGUAGE.md`.
 
 ⚠️ Цикл в хинтах теперь идёт в `ArchLayoutOptions.onWarn`; по умолчанию —
@@ -202,7 +202,7 @@ Next.js App Router + Tailwind + shadcn-компоненты. Ядро подкл
 затрутся.
 
 Подсветка синтаксиса и автокомплит — на CodeMirror 6: `lib/pwr-language.ts`
-(токенайзер `.pwr`, `StreamLanguage`), `lib/ts-language.ts` (обёртка над
+(токенайзер `.denji`, `StreamLanguage`), `lib/ts-language.ts` (обёртка над
 `@lezer/javascript` для API-таба), `lib/pwr-symbols.ts` + `lib/pwr-complete.ts`
 (скан документа и контекстный автокомплит в плейграунде), `lib/editor-theme.ts`
 (общая тема редактора). `components/CodeViewer.tsx` — read-only редактор для
@@ -210,14 +210,14 @@ Next.js App Router + Tailwind + shadcn-компоненты. Ядро подкл
 для `app/playground/page.tsx`. Палитра токенов — CSS-переменные `--tok-*` /
 `--code-*` в `globals.css`, **вне `@layer base`** (Tailwind иначе вычищает эти
 классы, т.к. они не встречаются как литералы в файлах из `content`).
-⚠️ Токенайзер `.pwr` дублирует грамматику ядра — при правках
+⚠️ Токенайзер `.denji` дублирует грамматику ядра — при правках
 `core/src/dsl/arch-parse.ts` синхронно обновляй `lib/pwr-language.ts`,
 `lib/pwr-symbols.ts` и `lib/pwr-complete.ts` (там же таблица директив с
 разрешёнными контекстами и списки значений аргументов — самый большой кусок).
 
 ### packages/vscode (расширение)
 
-Живое превью `.pwr` как у markdown, плюс драг узлов прямо в файл пользователя.
+Живое превью `.denji` как у markdown, плюс драг узлов прямо в файл пользователя.
 Две сборки (esbuild, `esbuild.mjs`):
 
 - `dist/extension.js` (CJS, host) — `src/extension.ts` (команды
@@ -280,7 +280,7 @@ round-trip внутри 60fps-цикла заметен. Расширение с
   `NEXT_DIST_DIR`.
 - `npm run -w docs validate` — прогнать все примеры доки через ядро
 - `npm run vscode` — пересборка расширения по изменениям; F5 (`.vscode/launch.json`)
-  открывает Extension Development Host на `packages/vscode/examples/sample.pwr`
+  открывает Extension Development Host на `packages/vscode/examples/sample.denji`
 - `npm run vscode:package` — `.vsix`
 
 ## Конвенции

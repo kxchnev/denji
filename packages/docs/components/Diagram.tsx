@@ -19,7 +19,7 @@ import {
   type Rect,
   type Relation,
   type ThemeName,
-} from "power";
+} from "@kxchnev/denji";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiagramGrid } from "@/components/DiagramGrid";

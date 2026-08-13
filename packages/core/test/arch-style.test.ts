@@ -282,7 +282,7 @@ describe("sizing through the cascade", () => {
     // of one rather than anywhere in the text.
     expect(css).not.toMatch(/[{;]width:/);
     expect(css).not.toMatch(/[{;]height:/);
-    expect(css).not.toContain("--pwr-app-width");
+    expect(css).not.toContain("--denji-app-width");
   });
 
   it("is meaningless on a connection", () => {

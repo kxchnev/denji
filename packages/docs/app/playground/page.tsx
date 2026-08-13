@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useDeferredValue, useRef, useState } from "react";
-import { setNodeRelation, type Relation } from "power";
+import { setNodeRelation, type Relation } from "@kxchnev/denji";
 import { CopyButton } from "@/components/CopyButton";
 import { Diagram } from "@/components/Diagram";
 import { PwrEditor } from "@/components/PwrEditor";

@@ -69,7 +69,7 @@ export default function DiagnosticsPage() {
         . Each carries the line, the column and the span of the id it is about, so an editor can put
         a squiggle exactly under it.
       </p>
-      <ShellBlock code={`npx ${PRODUCT.cli} check diagram.pwr --strict`} />
+      <ShellBlock code={`npx ${PRODUCT.cli} check diagram.denji --strict`} />
 
       <Finding
         code="parse-error"

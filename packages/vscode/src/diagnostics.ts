@@ -1,16 +1,16 @@
 /**
- * `power check` in the Problems panel.
+ * `denji check` in the Problems panel.
  *
  * The same findings the CLI prints, on the lines they are about — errors from
  * the parser and the builder, plus the layout warnings that say a diagram
  * renders but probably is not what was meant.
  *
- * These are heuristics, not rules. `power.diagnostics` exists because someone
+ * These are heuristics, not rules. `denji.diagnostics` exists because someone
  * who disagrees with one of them should be able to turn the lot down rather
  * than argue with a squiggle on every file they open.
  */
 import * as vscode from "vscode";
-import { checkDiagram, findDeclaration, type Diagnostic as Finding } from "power";
+import { checkDiagram, findDeclaration, type Diagnostic as Finding } from "@kxchnev/denji";
 
 /**
  * Longer than the preview's 60 ms, on purpose. A repaint that lags looks
@@ -20,15 +20,15 @@ import { checkDiagram, findDeclaration, type Diagnostic as Finding } from "power
  */
 const DEBOUNCE_MS = 300;
 
-const LANGUAGE = "power";
+const LANGUAGE = "denji";
 
 type Level = "all" | "errors" | "off";
 
 const level = (uri: vscode.Uri): Level =>
-  vscode.workspace.getConfiguration("power", uri).get<Level>("diagnostics", "all");
+  vscode.workspace.getConfiguration("denji", uri).get<Level>("diagnostics", "all");
 
 export function registerDiagnostics(context: vscode.ExtensionContext): void {
-  const collection = vscode.languages.createDiagnosticCollection("power");
+  const collection = vscode.languages.createDiagnosticCollection("denji");
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
   const refresh = (document: vscode.TextDocument): void => {
@@ -77,7 +77,7 @@ export function registerDiagnostics(context: vscode.ExtensionContext): void {
     // panel would be a list of problems in a file nobody can see.
     vscode.workspace.onDidCloseTextDocument(forget),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (!e.affectsConfiguration("power.diagnostics")) return;
+      if (!e.affectsConfiguration("denji.diagnostics")) return;
       for (const d of vscode.workspace.textDocuments) refresh(d);
     }),
     { dispose: () => timers.forEach(clearTimeout) },
@@ -99,7 +99,7 @@ function toVscode(
       ? vscode.DiagnosticSeverity.Error
       : vscode.DiagnosticSeverity.Warning,
   );
-  d.source = "power";
+  d.source = "denji";
   // The stable code, not the prose — it is what the panel filters on and what
   // someone looks up when they want to know why a warning exists.
   d.code = finding.code;

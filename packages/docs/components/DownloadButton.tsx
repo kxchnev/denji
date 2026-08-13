@@ -37,7 +37,7 @@ export function DownloadButton({
   width: number;
   height: number;
   name?: string;
-  /** The diagram's `.pwr` source. Given one, the menu can also save the code. */
+  /** The diagram's `.denji` source. Given one, the menu can also save the code. */
   source?: string;
   /**
    * Which way the menu opens. Use `"up"` when the button sits at the bottom of
@@ -86,7 +86,7 @@ export function DownloadButton({
                   downloadSource(source, name);
                 }}
               >
-                Code (.pwr)
+                Code (.denji)
               </button>
               <div className="my-1 h-px bg-border" />
             </>

@@ -41,7 +41,7 @@ export default function CliPage() {
         Draws a diagram to a file. The output format comes from the extension you ask for — SVG, PNG
         or JPEG — so there is no format flag.
       </p>
-      <ShellBlock code={`npx ${PRODUCT.cli} render diagram.pwr -o diagram.png -t dark`} />
+      <ShellBlock code={`npx ${PRODUCT.cli} render diagram.denji -o diagram.png -t dark`} />
       <Flags
         rows={[
           {
@@ -81,7 +81,7 @@ export default function CliPage() {
         Serves a preview that redraws as you edit, for when your editor has no preview of its own.
         Keep it on one side and the file on the other.
       </p>
-      <ShellBlock code={`npx ${PRODUCT.cli} watch diagram.pwr`} />
+      <ShellBlock code={`npx ${PRODUCT.cli} watch diagram.denji`} />
       <Flags
         rows={[
           {
@@ -116,7 +116,7 @@ export default function CliPage() {
         Reports what is wrong without drawing anything — for a commit hook, for CI, or for a script
         that wants the findings as data.
       </p>
-      <ShellBlock code={`npx ${PRODUCT.cli} check diagram.pwr --strict`} />
+      <ShellBlock code={`npx ${PRODUCT.cli} check diagram.denji --strict`} />
       <Flags
         rows={[
           { flag: "--json", means: "Machine-readable diagnostics on stdout instead of a report." },

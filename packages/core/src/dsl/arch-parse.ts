@@ -101,7 +101,7 @@ const BLOCK_OPEN = /^(style|icon)\s+([A-Za-z][A-Za-z0-9_-]*)\s*\{(.*)$/;
 /** One `name: value` declaration; a trailing `;` is tolerated. */
 const STYLE_PROP = /^([A-Za-z][A-Za-z-]*)\s*:\s*(.+?)\s*;?$/;
 
-/** Parse `.pwr` architecture DSL source into an ArchDiagram (via the builder). */
+/** Parse `.denji` architecture DSL source into an ArchDiagram (via the builder). */
 export function parseArchitecture(src: string): ArchDiagram {
   const lines = src.split(/\r?\n/);
   const b = architecture();
@@ -678,7 +678,7 @@ function parseDirectives(
     } else if (name === "icon") {
       // A leading digit is legal: the set has `1password`, `7zip`, `42` and
       // fourteen more, and the name only ever reaches CSS as a *suffix* of
-      // `pwr-icon-`, where a digit is fine.
+      // `denji-icon-`, where a digit is fine.
       if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(arg)) {
         throw new DiagramParseError("@icon expects an icon name", lineNo, indentCol(raw), raw);
       }

@@ -1,6 +1,6 @@
 // Renders every documented example through the core so a broken DSL fails CI
 // (and the docs) without needing a browser. Run: `npm run -w docs validate`.
-import { parseArchitecture, layoutArchitecture, renderArchitecture, checkDiagram } from "power";
+import { parseArchitecture, layoutArchitecture, renderArchitecture, checkDiagram } from "@kxchnev/denji";
 import { allExamples } from "../examples/index.js";
 
 let failed = 0;
@@ -23,7 +23,7 @@ for (const ex of allExamples) {
       if (bare) throw new Error(`var() without a fallback: ${bare.join(", ")}`);
     }
     // Siblings drawn on top of each other are a layout bug, not a feature. The
-    // check lives in the core so `power check` and the docs judge it the same
+    // check lives in the core so `denji check` and the docs judge it the same
     // way. Only this one code is fatal here: the others are authoring advice,
     // and the examples are deliberately minimal — most have a single unconnected
     // node, which is exactly what a one-shape example is.

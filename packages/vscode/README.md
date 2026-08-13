@@ -1,12 +1,15 @@
-# power for VS Code
+# Denji for VS Code
 
-Live preview for `.pwr` architecture diagrams, the way the Markdown preview
+Live preview for `.denji` architecture diagrams, the way the Markdown preview
 works — and draggable: move a node in the picture and the file learns where it
 belongs.
 
+You describe the boxes and wire them up; the connections decide the layout, and
+the connectors go around the boxes instead of through them.
+
 ## Using it
 
-Open a `.pwr` file and click **Open preview to the side** above the first line —
+Open a `.denji` file and click **Open preview to the side** above the first line —
 or hit `Cmd/Ctrl+K V`, or use the preview button in the editor title bar. The
 preview follows the buffer as you type, saved or not. While the document is
 momentarily broken the last drawing that parsed stays on screen with the error
@@ -16,7 +19,7 @@ The file itself is syntax-highlighted: keywords, ids, labels, connection
 operators and `@directives`, with a directive the language does not know painted
 as an error rather than as a directive.
 
-What `power check` reports shows up in the Problems panel as you type: parse and
+What `denji check` reports shows up in the Problems panel as you type: parse and
 build errors, plus the layout warnings — a node nothing points at, a shape
 nobody connects to, hints that contradict each other, a diagram that has
 become a strip. Each one squiggles the id it is about, and a warning naming two
@@ -35,47 +38,28 @@ Nothing else in the document is touched: the drop is one relation on one line,
 and the drawing holds still until you let go, so you are aiming at a target that
 is not running away.
 
-### Settings
+## Settings
 
 | Setting | Default | |
 |---|---|---|
-| `power.diagnostics` | `all` | What lands in the Problems panel: `all`, `errors`, or `off`. The layout warnings are heuristics — turn them down rather than argue with them. |
-| `power.preview.codeLens` | `true` | Offer "Open preview to the side" above the first line, until a preview is open. |
-| `power.preview.grid` | `true` | Draw the dot grid behind the diagram. |
-| `power.preview.theme` | `auto` | `auto` follows the editor's colour theme. A document with `@theme(...)` overrides it either way. |
+| `denji.diagnostics` | `all` | What lands in the Problems panel: `all`, `errors`, or `off`. The layout warnings are heuristics — turn them down rather than argue with them. |
+| `denji.preview.codeLens` | `true` | Offer "Open preview to the side" above the first line, until a preview is open. |
+| `denji.preview.grid` | `true` | Draw the dot grid behind the diagram. |
+| `denji.preview.theme` | `auto` | `auto` follows the editor's colour theme. A document with `@theme(...)` overrides it either way. |
 
-## Working on it
+## The language
 
-```
-npm install          # from the repo root
-npm run build        # core, then the extension's two bundles
-npm run vscode       # rebuild both on change
-```
+The complete grammar is in
+[LANGUAGE.md](https://github.com/kxchnev/denji/blob/main/packages/core/LANGUAGE.md),
+and the same language has a library and a command line —
+[`@kxchnev/denji`](https://www.npmjs.com/package/@kxchnev/denji).
 
-Then press F5, or run **Run the extension** from the debug panel — it opens a
-second window on `examples/sample.pwr`.
+## Contributing
 
-```
-npm run -w power-vscode test        # builds, then drives the real bundle
-npm run -w power-vscode typecheck
-npm run vscode:package              # power-vscode.vsix
-```
+Building the extension, running its tests and how the two bundles fit together:
+[CONTRIBUTING.md](https://github.com/kxchnev/denji/blob/main/CONTRIBUTING.md).
 
-The extension is two bundles plus a generated grammar. `dist/extension.js` runs
-in the extension host and does three things: hand the document to the preview,
-write drops back into it, and offer the CodeLens. `dist/webview.js` carries the
-whole of `power` and does everything else — parse, layout, render, pan, zoom,
-hit-test, drag. Rendering lives there because a drag re-lays the document out on
-every frame, and an IPC round-trip per frame would be felt.
+## License
 
-`syntaxes/pwr.tmLanguage.json` is **generated**, not written:
-`scripts/generate-grammar.ts` takes the words from the core's exported
-vocabulary and supplies only the line shapes itself. The grammar already exists
-in five places in this repo; a hand-written sixth would be the one that drifts
-without anyone noticing. Add a kind or a directive to the core, export it, and
-the highlighter picks it up on the next build. `test/grammar.test.ts` runs real
-`.pwr` text through the real TextMate engine and asserts on scopes — checking
-that the JSON merely contains the right words would have passed happily while
-nothing was coloured at all.
-
-See `CLAUDE.md` in the repo root for the rest.
+MIT. Brand marks come from [Simple Icons](https://simpleicons.org) under CC0;
+the logos remain trademarks of their owners.

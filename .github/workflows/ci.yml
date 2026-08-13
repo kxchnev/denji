@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # A plain install, not --omit=dev: the icon set is generated from
+      # `simple-icons`, which is a devDependency, and every build, test and
+      # typecheck run regenerates it first.
+      - run: npm ci
+
+      # The docs site and the extension consume the core's built `dist`, so the
+      # build has to come before anything that reads it.
+      - run: npm run build
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run -w packages/docs validate
+      - run: npm run -w packages/docs typecheck
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # The static export is its own failure mode — it catches what only shows
+      # up when Next renders every page ahead of time.
+      - run: npm run docs:build

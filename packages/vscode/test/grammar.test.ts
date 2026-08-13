@@ -1,5 +1,5 @@
 /**
- * Runs `.pwr` text through the generated grammar with the real TextMate engine —
+ * Runs `.denji` text through the generated grammar with the real TextMate engine —
  * the same `vscode-textmate` + `vscode-oniguruma` pair VS Code itself uses.
  *
  * Asserting that the generated JSON *contains* the right words would pass
@@ -13,10 +13,10 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import * as oniguruma from "vscode-oniguruma";
 import { INITIAL, Registry, parseRawGrammar, type IGrammar } from "vscode-textmate";
-import { ARCH_OPERATORS, CONTAINER_KIND_NAMES, DIRECTIVE_NAMES, SHAPE_KIND_NAMES } from "power";
+import { ARCH_OPERATORS, CONTAINER_KIND_NAMES, DIRECTIVE_NAMES, SHAPE_KIND_NAMES } from "@kxchnev/denji";
 
-const GRAMMAR = fileURLToPath(new URL("../syntaxes/pwr.tmLanguage.json", import.meta.url));
-const SAMPLE = fileURLToPath(new URL("../examples/sample.pwr", import.meta.url));
+const GRAMMAR = fileURLToPath(new URL("../syntaxes/denji.tmLanguage.json", import.meta.url));
+const SAMPLE = fileURLToPath(new URL("../examples/sample.denji", import.meta.url));
 const WASM = createRequire(import.meta.url).resolve("vscode-oniguruma/release/onig.wasm");
 
 async function load(): Promise<IGrammar> {
@@ -27,11 +27,11 @@ async function load(): Promise<IGrammar> {
       createOnigString: (s) => new oniguruma.OnigString(s),
     }),
     loadGrammar: async (scope) =>
-      scope === "source.pwr"
+      scope === "source.denji"
         ? parseRawGrammar(readFileSync(GRAMMAR, "utf8"), GRAMMAR)
         : null,
   });
-  const grammar = await registry.loadGrammar("source.pwr");
+  const grammar = await registry.loadGrammar("source.denji");
   assert.ok(grammar, "the generated grammar loads");
   return grammar;
 }

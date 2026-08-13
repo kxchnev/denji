@@ -4,7 +4,7 @@
  *
  * Not a capability boundary — every Simple Icons slug resolves. This is a
  * starting vocabulary, for the three places that have to show *something*
- * before anyone has typed a character: `power icons` with no query, the docs
+ * before anyone has typed a character: `denji icons` with no query, the docs
  * gallery on first paint, and an empty `@icon(`. Sorted alphabetically the full
  * set opens on `1001tracklists`, which reads as a bug.
  *

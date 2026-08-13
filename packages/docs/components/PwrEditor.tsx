@@ -23,7 +23,7 @@ const extensions = [
   highlightActiveLineGutter(),
   highlightActiveLine(),
   // Spaces and tabs are visible here but not in the read-only viewers: indentation
-  // is what nesting in `.pwr` is made of, so it is worth seeing while you type.
+  // is what nesting in `.denji` is made of, so it is worth seeing while you type.
   highlightWhitespace(),
   drawSelection(),
   history(),

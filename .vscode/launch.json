@@ -10,7 +10,7 @@
         "${workspaceFolder}/packages/vscode/examples/sample.pwr"
       ],
       "outFiles": ["${workspaceFolder}/packages/vscode/dist/**/*.js"],
-      "preLaunchTask": "npm: build - power-vscode"
+      "preLaunchTask": "npm: build - denji"
     }
   ]
 }

@@ -3,20 +3,20 @@
 Instructions for coding agents. Two different jobs live here, so start by
 working out which one you are doing.
 
-## A. Drawing a diagram with `power`
+## A. Drawing a diagram with `denji`
 
-You are writing a `.pwr` file, not changing the library.
+You are writing a `.denji` file, not changing the library.
 
 **Read [`packages/core/LANGUAGE.md`](./packages/core/LANGUAGE.md) first** — it is
-the complete, authoritative grammar. `power spec` prints it to stdout.
+the complete, authoritative grammar. `denji spec` prints it to stdout.
 
 The loop:
 
 ```bash
 npm run build                                          # once; the CLI runs from dist/
-node packages/core/dist/cli.js check  diagram.pwr      # errors + layout problems
-node packages/core/dist/cli.js render diagram.pwr -o /tmp/p.png   # then LOOK at it
-node packages/core/dist/cli.js watch  diagram.pwr      # live preview in a browser
+node packages/core/dist/cli.js check  diagram.denji      # errors + layout problems
+node packages/core/dist/cli.js render diagram.denji -o /tmp/p.png   # then LOOK at it
+node packages/core/dist/cli.js watch  diagram.denji      # live preview in a browser
 node packages/core/dist/cli.js icons <text>            # search 3450 brand marks
 ```
 
@@ -30,7 +30,7 @@ under you, so re-read it before your next edit.
 
 The rules that decide whether a diagram reads well, and the syntax traps worth
 knowing before you start, are in
-[`.claude/skills/power-diagrams/SKILL.md`](./.claude/skills/power-diagrams/SKILL.md).
+[`.claude/skills/denji-diagrams/SKILL.md`](./.claude/skills/denji-diagrams/SKILL.md).
 The short version:
 
 - Declare the boxes, wire them up, and write no hints at all — the layout is
@@ -44,7 +44,7 @@ The short version:
 
 ## B. Changing the library itself
 
-Monorepo: `packages/core` is the library (`power`), `packages/docs` is a Next.js
+Monorepo: `packages/core` is the library (`@kxchnev/denji`), `packages/docs` is a Next.js
 documentation site, `packages/vscode` is the editor extension — both depend on
 the built `dist`.
 
@@ -53,8 +53,9 @@ npm run build              # core → packages/core/dist, then the extension bun
 npm test                   # core tests (vitest) + extension tests
 npm run typecheck          # core and extension types
 npm run docs               # docs dev server on :3000, plus core tsc --watch
-npm run docs:build         # static export → packages/docs/out
-npm run -w docs validate   # render every documented example through the core
+npm run docs:build         # static export → packages/docs/out; safe while `npm run docs`
+                           # is up, because the dev server works in its own .next-dev
+npm run -w packages/docs validate   # render every documented example through the core
 npm run vscode             # rebuild the extension on change; F5 launches it
 ```
 
@@ -72,11 +73,11 @@ Conventions:
   re-derive it in a component.
 
 **Documentation is part of done.** A change to core behaviour needs an example in
-`packages/docs/examples/*.ts` and a green `npm run -w docs validate`. A new
+`packages/docs/examples/*.ts` and a green `npm run -w packages/docs validate`. A new
 category also needs a page under `packages/docs/app/(docs)/` and an entry in
 `packages/docs/lib/nav.ts`.
 
-⚠️ The `.pwr` grammar exists in more than one place: the parser
+⚠️ The `.denji` grammar exists in more than one place: the parser
 (`packages/core/src/dsl/arch-parse.ts`), the editor tokenizer
 (`packages/docs/lib/pwr-language.ts`), the document scan
 (`packages/docs/lib/pwr-symbols.ts`), the autocomplete

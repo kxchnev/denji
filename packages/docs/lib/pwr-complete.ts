@@ -22,7 +22,7 @@ import {
   normalizePropName,
   type DirectiveCtx as CoreDirectiveCtx,
   type StylePropSpec,
-} from "power";
+} from "@kxchnev/denji";
 import { scanPwr, uniqueIds, type PwrKind, type PwrScan, type PwrSymbol } from "./pwr-symbols";
 
 /* ------------------------------------------------------------------ sections */

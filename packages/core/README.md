@@ -1,118 +1,134 @@
-# power
+# @kxchnev/denji
 
-Библиотека и CLI для **архитектурных диаграмм в свободном стиле**. Раскладку
-задают **связи**: объявляешь коробки, соединяешь их, а движок решает, где что
-стоит, и проводит связи **в обход** коробок. Хинты (`rightOf/below/...`) —
-ограничения для движка, а не координаты; контейнеры сами обнимают содержимое.
-Вывод — SVG.
+Architecture diagrams as text. You declare the boxes and wire them up; **the
+connections decide the layout**, and the connectors go around the boxes instead
+of through them.
 
-Фигуры: **приложение** (скруглённый прямоугольник), **база** (вертикальный
-цилиндр), **очередь** (горизонтальный цилиндр), простой прямоугольник.
-Группировка: **сервис** (акцентный блок с заголовком) и **группа** (рамка).
+The same package is a library and a command line. The complete grammar lives in
+[LANGUAGE.md](./LANGUAGE.md), which `denji spec` prints to stdout — this file
+covers the package.
 
-> **Язык описан в [`LANGUAGE.md`](./LANGUAGE.md)** — это единственный источник
-> правды по грамматике, и его же печатает `power spec`. Здесь только пакет:
-> установка, программный API и CLI. Живые примеры и playground — на доке-сайте
-> (`npm run docs` из корня монорепо).
-
-## Установка
+## Install
 
 ```bash
-npm install power
+npm install @kxchnev/denji
 ```
 
-ESM-only, типы в комплекте. Node 18.17+. Растр (PNG/JPEG) тянет нативную
-зависимость; для SVG её не нужно.
+Node 18.17 or newer. ESM only: reach for it with `import`, not `require`. Types
+ship with the package. Rendering to PNG or JPEG uses `sharp`, which is an
+**optional** dependency loaded on demand — SVG needs nothing extra.
 
-## Из текста
+## Use it from text
 
 ```ts
-import { parseArchitecture, toSvg } from "power";
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
+import { parse, toSvg } from "@kxchnev/denji";
 
-const diagram = parseArchitecture(readFileSync("diagram.pwr", "utf8"));
+const diagram = parse(`architecture
+  app gw "API Gateway"
+  app api "Orders API" @below(gw)
+  database db "Postgres" @below(api)
+  gw -> api : http
+  api -> db
+`);
+
 writeFileSync("diagram.svg", toSvg(diagram));
 ```
 
-`parseArchitecture` бросает `DiagramParseError` с номером строки, колонкой и
-самой строкой — этого хватает, чтобы показать каретку под ошибкой.
+`toSvg` is the whole pipeline in one call. The string it returns is a complete
+`<svg>` document with its stylesheet inlined and its ids scoped, so two diagrams
+can sit on one page without colliding.
 
-## Из кода
+## Use it from code
 
 ```ts
-import { architecture, toSvg } from "power";
+import { architecture, toSvg } from "@kxchnev/denji";
 
 const diagram = architecture()
   .app("gw", "API Gateway")
-  .app("oapi", "Orders API")
-  .database("odb", "Postgres", { hint: { below: "oapi" } })
-  .container("orders", "Orders", {
-    kind: "service",
-    children: ["oapi", "odb"],
-    hint: { below: "gw" },
-  })
+  .app("api", "Orders API")
+  .database("db", "Postgres", { hint: { below: "api" } })
+  .container("orders", "Orders", { kind: "service", children: ["api", "db"] })
   .connect("gw", "orders", { label: "http" })
   .build();
 
-writeFileSync("out.svg", toSvg(diagram));
+const svg = toSvg(diagram);
 ```
 
-Билдер и парсер дают **одну и ту же модель**. Методы: `app` · `database` ·
-`queue` · `rect` · `container` · `connect` · `place` · `theme` · `spacing` ·
-`margin` · `defineStyle` · `defineIcon` · `build`. Каждый возвращает билдер;
-`build()` проверяет ссылки — неизвестный id, узел в двух контейнерах, цикл
-вложенности, неизвестный стиль или иконка бросаются здесь, а не рисуются молча.
+Useful when the diagram comes from something you already have — a service
+registry, a Terraform state, a dependency graph. `build()` validates: unknown
+ids, a node claimed by two containers, a container cycle and an unusable link
+all throw rather than drawing something wrong.
 
-## Шаги по отдельности
-
-`toSvg` — это три шага, и иногда нужен доступ к среднему:
+## Take the pipeline apart
 
 ```ts
-const diagram = parseArchitecture(src);
-layoutArchitecture(diagram); // проставляет rect/local каждому узлу и path связям
+import {
+  parseArchitecture,
+  layoutArchitecture,
+  renderArchitecture,
+  checkDiagram,
+} from "@kxchnev/denji";
+
+const diagram = parseArchitecture(source);
+layoutArchitecture(diagram, { gap: 56, onWarn: () => {} });
 const svg = renderArchitecture(diagram, { themeMode: "selector" });
 ```
 
-- `layoutArchitecture(diagram, opts?)` — `gap` / `gapX` / `gapY`, `padding`,
-  `margin`, `headerH`, `onWarn`. Документ бьёт опции: `@spacing` в исходнике
-  сильнее переданного `gap`.
-- `renderArchitecture(diagram, opts?)` — `theme` (имя или целый `Theme`),
-  `darkTheme`, `themeMode` (`fixed` — одна палитра запечена; `auto` — обе, через
-  `prefers-color-scheme`; `selector` — обе, переключаются классом `darkSelector`),
-  `background`, `padding`, `fontFamily`, `idPrefix`, `linkAnchors`.
-  `@theme(...)` в документе форсирует `fixed`.
-- `checkDiagram(src)` — разбор, раскладка и проверки одним вызовом: возвращает
-  `{ diagnostics, failed }`, каждая находка со `code`, `line`, `col`, `endCol`.
+Split it when you need what is in the middle: the laid-out model carries every
+node's rectangle, which is what a viewer hit-tests against.
 
-## Своё превью
+`layoutArchitecture` takes `gap` (or `gapX` / `gapY`), `padding`, `margin` and
+`onWarn` — warnings go to `console.warn` unless you pass a sink, as above.
+`renderArchitecture` takes the palette (`theme`, `darkTheme`) and how it should
+switch: `themeMode` is `fixed` by default, which bakes one palette in; `auto`
+ships both and follows the reader's device; `selector` ships both and follows an
+ancestor class, which is what a page with its own theme toggle wants.
 
-Всё, что нужно интерактивному просмотрщику поверх разложенной диаграммы, лежит
-в пакете и не требует переизобретения: `nodeAt` / `pickAt` / `linkAt` (хит-тест),
-`relationFor` (во что превращается бросок), `setNodeRelation` (построчная правка
-исходника), `dropEdgeRect`, `snapToGrid`, `findDeclaration`. На них построены и
-playground, и расширение VS Code.
+Where the document and the caller disagree, the document wins: a `@theme(...)`
+in the source pins the palette, and `@spacing` beats the `gap` you passed.
 
-## CLI
+`checkDiagram(source)` answers with `{ diagnostics, failed }` — the same
+findings the CLI prints and the editor shows, each with a `code`, a `line` and a
+`col`.
+
+## Build your own viewer
+
+Everything an interactive viewer needs on top of a laid-out diagram is exported,
+so it does not have to be reinvented: `nodeAt` / `pickAt` / `linkAt` for
+hit-testing, `relationFor` for what a drop means, `setNodeRelation` to rewrite
+one declaration in place, plus `dropEdgeRect`, `snapToGrid` and
+`findDeclaration`. The playground and the VS Code extension are both built on
+them.
+
+## Command line
 
 ```bash
-power render <input.pwr> [-o out.svg|png|jpg] [-t light|dark]
-power watch  <input.pwr> [-p 4400] [--no-open]
-power check  <input.pwr> [--json] [--strict]
-power icons  [запрос]
-power spec
+denji render <input.denji> [-o out.svg|png|jpg] [-t light|dark]
+denji watch  <input.denji> [-p 4400] [--no-open]
+denji check  <input.denji> [--json] [--strict]
+denji icons  [query]
+denji spec
 ```
 
-`render` берёт формат из расширения `-o`. `check` пишет находки в stderr, а с
-`--json` — структуру в stdout, и читает stdin по `-`. `icons` ищет по слагу,
-названию и алиасу. `spec` печатает `LANGUAGE.md`.
+`render` takes the output format from the `-o` extension. `check` writes its
+findings to stderr, or a structure to stdout with `--json`, and reads stdin when
+the input is `-`. `icons` searches by slug, title and shorthand. `spec` prints
+the grammar.
 
-## Редактор
+## Editors
 
-`power watch` поднимает живое превью в браузере. В VS Code есть расширение —
-[`packages/vscode`](../vscode/README.md): превью рядом с файлом, обновление по
-мере набора (без сохранения), проблемы в панели Problems и драг узлов, который
-вписывает в исходник, рядом с кем узел оказался.
+`denji watch` serves a live preview in a browser, which works alongside any
+editor. In VS Code there is an extension — preview beside the file, updating as
+you type, problems in the Problems panel, and nodes you can drag, which writes
+into the source which sibling a node ended up next to.
 
-## Лицензия
+## Third-party assets
 
-MIT
+Brand marks come from [Simple Icons](https://simpleicons.org), released under
+CC0. The logos remain the trademarks of their respective owners, and bundling
+them implies no affiliation or endorsement. See [NOTICE](./NOTICE).
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

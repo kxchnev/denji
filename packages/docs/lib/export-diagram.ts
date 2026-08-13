@@ -110,10 +110,10 @@ export async function downloadDiagram(
   triggerDownload(done.blob, `${filename}${suffix}.${format === "jpeg" ? "jpg" : "png"}`);
 }
 
-/** Save the diagram's own `.pwr` source, so an export can be edited back. */
+/** Save the diagram's own `.denji` source, so an export can be edited back. */
 export function downloadSource(dsl: string, filename = "diagram"): void {
   triggerDownload(
     new Blob([`${dsl.trimEnd()}\n`], { type: "text/plain;charset=utf-8" }),
-    `${filename}.pwr`,
+    `${filename}.denji`,
   );
 }

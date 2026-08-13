@@ -90,5 +90,5 @@ export function toSvg(
   return renderArchitecture(diagram, opts.render);
 }
 
-/** Convenience alias: parse `.pwr` architecture DSL into a diagram model. */
+/** Convenience alias: parse `.denji` architecture DSL into a diagram model. */
 export const parse = parseArchitecture;

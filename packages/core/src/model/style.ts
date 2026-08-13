@@ -6,7 +6,7 @@ export type StyleValueKind = "color" | "size" | "unit" | "dash" | "weight";
 /**
  * How the renderer gets a property into the output.
  *
- * - `var` — a CSS declaration reading `--pwr-<slot>-<cssVar>`, so the theme can
+ * - `var` — a CSS declaration reading `--denji-<slot>-<cssVar>`, so the theme can
  *   switch it.
  * - `literal` — a CSS declaration written out in full. For `stroke-dasharray`,
  *   which librsvg drops entirely if it contains `var()`.
@@ -22,7 +22,7 @@ export interface StylePropSpec {
   /** Slots the property means anything on. */
   slots: readonly StyleSlot[];
   emit: StyleEmit;
-  /** CSS custom-property suffix: `--pwr-<slot>-<suffix>`. Only for `emit: "var"`. */
+  /** CSS custom-property suffix: `--denji-<slot>-<suffix>`. Only for `emit: "var"`. */
   cssVar: string;
   /** Shown by the docs autocomplete. */
   detail: string;
@@ -46,25 +46,25 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     kind: "color",
     slots: STYLE_SLOTS,
     cssVar: "fill",
-    detail: "Заливка тела; у связи — фон плашки с меткой",
+    detail: "Body fill; on a connection, the chip behind the label",
   },
-  stroke: { key: "stroke", kind: "color", slots: STYLE_SLOTS, emit: "var", cssVar: "stroke", detail: "Цвет обводки" },
+  stroke: { key: "stroke", kind: "color", slots: STYLE_SLOTS, emit: "var", cssVar: "stroke", detail: "Stroke colour" },
   strokewidth: {
     emit: "var",
     key: "strokeWidth",
     kind: "size",
     slots: STYLE_SLOTS,
     cssVar: "sw",
-    detail: "Толщина обводки",
+    detail: "Stroke width",
   },
-  text: { key: "text", kind: "color", slots: LABELLED, emit: "var", cssVar: "text", detail: "Цвет подписи" },
+  text: { key: "text", kind: "color", slots: LABELLED, emit: "var", cssVar: "text", detail: "Label colour" },
   width: {
     key: "width",
     kind: "size",
     slots: BOXES,
     emit: "geometry",
     cssVar: "",
-    detail: "Ширина: у фигуры точная, у контейнера минимальная",
+    detail: "Width — exact on a shape, a floor on a container",
   },
   height: {
     key: "height",
@@ -72,7 +72,7 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     slots: BOXES,
     emit: "geometry",
     cssVar: "",
-    detail: "Высота: у фигуры точная, у контейнера минимальная",
+    detail: "Height — exact on a shape, a floor on a container",
   },
   radius: {
     emit: "geometry",
@@ -80,7 +80,7 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     kind: "size",
     slots: ["app", "rect", "service", "group"],
     cssVar: "radius",
-    detail: "Радиус скругления (цилиндры игнорируют)",
+    detail: "Corner radius; cylinders ignore it",
   },
   dash: {
     emit: "literal",
@@ -88,16 +88,16 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     kind: "dash",
     slots: STYLE_SLOTS,
     cssVar: "dash",
-    detail: "Пунктир, например 6 4",
+    detail: "Dash pattern, e.g. 6 4",
   },
-  opacity: { key: "opacity", kind: "unit", slots: STYLE_SLOTS, emit: "var", cssVar: "opacity", detail: "Прозрачность 0..1" },
+  opacity: { key: "opacity", kind: "unit", slots: STYLE_SLOTS, emit: "var", cssVar: "opacity", detail: "Opacity, 0 to 1" },
   fontweight: {
     emit: "var",
     key: "fontWeight",
     kind: "weight",
     slots: LABELLED,
     cssVar: "fw",
-    detail: "Насыщенность подписи",
+    detail: "Label weight",
   },
   headerfill: {
     emit: "var",
@@ -105,7 +105,7 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     kind: "color",
     slots: ["service"],
     cssVar: "header-fill",
-    detail: "service: заливка полосы заголовка",
+    detail: "service: title band fill",
   },
   iconcolor: {
     emit: "var",
@@ -113,7 +113,7 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     kind: "color",
     slots: [...SHAPES, "service", "group"],
     cssVar: "ic",
-    detail: "Перекрасить иконку в один цвет вместо фирменного",
+    detail: "Flatten the mark to a single colour instead of the brand colour",
   },
   headertext: {
     emit: "var",
@@ -121,7 +121,7 @@ export const STYLE_PROPS: Readonly<Record<string, StylePropSpec>> = {
     kind: "color",
     slots: ["service"],
     cssVar: "header-text",
-    detail: "service: цвет текста заголовка",
+    detail: "service: title text colour",
   },
 };
 

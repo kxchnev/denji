@@ -43,7 +43,7 @@ interface Recorder {
   serializers: string[];
   subscriptions: unknown[];
   lensProviders: Array<{ selector: { language?: string }; provider: LensProvider }>;
-  /** What `power.preview.codeLens` and friends answer during a test. */
+  /** What `denji.preview.codeLens` and friends answer during a test. */
   config: Record<string, unknown>;
   /** Documents the extension believes are open, which it checks on activation. */
   documents: unknown[];
@@ -202,12 +202,12 @@ const test = (name: string, fn: () => void): void => {
 /** The slice of a `TextDocument` a CodeLens provider looks at. */
 const doc = (uri: string): unknown => ({ uri: { toString: () => uri } });
 
-/** A .pwr document as the diagnostics code reads it: text, plus line lookup. */
-function pwrDoc(uri: string, text: string): unknown {
+/** A .denji document as the diagnostics code reads it: text, plus line lookup. */
+function denjiDoc(uri: string, text: string): unknown {
   const lines = text.split("\n");
   return {
     uri: { toString: () => uri },
-    languageId: "power",
+    languageId: "denji",
     getText: () => text,
     lineCount: lines.length,
     lineAt: (i: number) => ({
@@ -228,7 +228,7 @@ const STRAY = [
 
 /** Open a document, run every handler that would fire, and read what was published. */
 function publish(uri: string, text: string): FakeDiagnostic[] {
-  const d = pwrDoc(uri, text);
+  const d = denjiDoc(uri, text);
   for (const h of rec.onOpen) h(d);
   return rec.published.get(uri) ?? [];
 }
@@ -244,13 +244,13 @@ test("activates without throwing", () => {
 
 test("registers both commands", () => {
   assert.deepEqual(rec.commands.slice().sort(), [
-    "power.showPreview",
-    "power.showPreviewToSide",
+    "denji.showPreview",
+    "denji.showPreviewToSide",
   ]);
 });
 
 test("registers a serializer, so a preview survives a window reload", () => {
-  assert.deepEqual(rec.serializers, ["power.preview"]);
+  assert.deepEqual(rec.serializers, ["denji.preview"]);
 });
 
 test("registers exactly what the manifest promises", () => {
@@ -271,18 +271,18 @@ test("registers exactly what the manifest promises", () => {
   );
 });
 
-test("offers a CodeLens on .pwr files, so the button cannot hide", () => {
+test("offers a CodeLens on .denji files, so the button cannot hide", () => {
   const registered = rec.lensProviders;
   assert.equal(registered.length, 1, "one provider");
-  assert.equal(registered[0]!.selector.language, "power", "for .pwr files only");
+  assert.equal(registered[0]!.selector.language, "denji", "for .denji files only");
 
-  const lenses = registered[0]!.provider.provideCodeLenses(doc("file:///a.pwr"));
+  const lenses = registered[0]!.provider.provideCodeLenses(doc("file:///a.denji"));
   assert.equal(lenses.length, 1);
-  assert.equal(lenses[0]!.command.command, "power.showPreviewToSide");
+  assert.equal(lenses[0]!.command.command, "denji.showPreviewToSide");
   assert.match(lenses[0]!.command.title, /preview/i);
   // The lens names its own document rather than trusting whichever editor is
   // active when the click lands.
-  assert.deepEqual(lenses[0]!.command.arguments?.map(String), ["file:///a.pwr"]);
+  assert.deepEqual(lenses[0]!.command.arguments?.map(String), ["file:///a.denji"]);
 });
 
 test("the lens command is one the manifest declares", () => {
@@ -290,19 +290,19 @@ test("the lens command is one the manifest declares", () => {
   const declared: string[] = manifest.contributes.commands.map(
     (c: { command: string }) => c.command,
   );
-  const lens = rec.lensProviders[0]!.provider.provideCodeLenses(doc("file:///a.pwr"))[0]!;
+  const lens = rec.lensProviders[0]!.provider.provideCodeLenses(doc("file:///a.denji"))[0]!;
   assert.ok(declared.includes(lens.command.command));
 });
 
 test("the lens can be turned off, and the setting is declared", () => {
   const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
   assert.ok(
-    "power.preview.codeLens" in manifest.contributes.configuration.properties,
+    "denji.preview.codeLens" in manifest.contributes.configuration.properties,
     "a lens on every file is the kind of thing someone turns off",
   );
   rec.config["codeLens"] = false;
   try {
-    const lenses = rec.lensProviders[0]!.provider.provideCodeLenses(doc("file:///a.pwr"));
+    const lenses = rec.lensProviders[0]!.provider.provideCodeLenses(doc("file:///a.denji"));
     assert.deepEqual(lenses, []);
   } finally {
     delete rec.config["codeLens"];
@@ -313,15 +313,15 @@ test("activates on the language, or the lens is never there to be clicked", () =
   const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
   // Commands self-activate; a CodeLens has to already exist. Without this the
   // offer only appears after something else has woken the extension.
-  assert.ok(manifest.activationEvents.includes("onLanguage:power"));
+  assert.ok(manifest.activationEvents.includes("onLanguage:denji"));
 });
 
 test("puts check's findings in the Problems panel, on the right line", () => {
-  const found = publish("file:///stray.pwr", STRAY);
+  const found = publish("file:///stray.denji", STRAY);
   const lonely = found.find((d) => d.code === "unconnected-node");
   assert.ok(lonely, "the unconnected shape is reported");
   assert.equal(lonely.severity, 1, "as a warning");
-  assert.equal(lonely.source, "power", "attributed, so the panel can group it");
+  assert.equal(lonely.source, "denji", "attributed, so the panel can group it");
   // The `stray` declaration is line 4 (0-based 3), and `stray` starts at column 6.
   assert.deepEqual(
     { line: lonely.range.line, start: lonely.range.start, end: lonely.range.end },
@@ -334,7 +334,7 @@ test("makes both ends of an overlap-style finding reachable", () => {
   // Two nodes, one message: the second is somewhere else in the file, and a
   // reader who cannot get there has half a diagnostic.
   const src = 'architecture\n  app a "A" @rightOf(b)\n  app b "B" @rightOf(a)\n';
-  const found = publish("file:///cycle.pwr", src);
+  const found = publish("file:///cycle.denji", src);
   const cycle = found.find((d) => d.code === "hint-cycle");
   assert.ok(cycle, "the cycle is reported");
   assert.ok(
@@ -344,7 +344,7 @@ test("makes both ends of an overlap-style finding reachable", () => {
 });
 
 test("reports a parse error where the parser stopped", () => {
-  const found = publish("file:///bad.pwr", 'architecture\n  app a "A" @nope(1)\n');
+  const found = publish("file:///bad.denji", 'architecture\n  app a "A" @nope(1)\n');
   assert.equal(found.length, 1, "an error stops the checks, so nothing else is listed");
   assert.equal(found[0]!.severity, 0, "as an error");
   assert.equal(found[0]!.code, "parse-error");
@@ -354,44 +354,44 @@ test("reports a parse error where the parser stopped", () => {
 test("can be turned down to errors, or off altogether", () => {
   rec.config["diagnostics"] = "errors";
   try {
-    assert.deepEqual(publish("file:///stray.pwr", STRAY), [], "the heuristics go quiet");
+    assert.deepEqual(publish("file:///stray.denji", STRAY), [], "the heuristics go quiet");
     assert.equal(
-      publish("file:///bad.pwr", 'architecture\n  app a "A" @nope(1)\n').length,
+      publish("file:///bad.denji", 'architecture\n  app a "A" @nope(1)\n').length,
       1,
       "but a broken document still says so",
     );
     rec.config["diagnostics"] = "off";
-    publish("file:///bad.pwr", 'architecture\n  app a "A" @nope(1)\n');
-    assert.equal(rec.published.has("file:///bad.pwr"), false, "and off means nothing at all");
+    publish("file:///bad.denji", 'architecture\n  app a "A" @nope(1)\n');
+    assert.equal(rec.published.has("file:///bad.denji"), false, "and off means nothing at all");
   } finally {
     delete rec.config["diagnostics"];
   }
 });
 
 test("clears a document's findings when it is closed", () => {
-  const d = pwrDoc("file:///gone.pwr", STRAY);
+  const d = denjiDoc("file:///gone.denji", STRAY);
   for (const h of rec.onOpen) h(d);
-  assert.ok(rec.published.has("file:///gone.pwr"));
+  assert.ok(rec.published.has("file:///gone.denji"));
   for (const h of rec.onClose) h(d);
   assert.equal(
-    rec.published.has("file:///gone.pwr"),
+    rec.published.has("file:///gone.denji"),
     false,
     "a list of problems in a file nobody can see is not useful",
   );
 });
 
 test("leaves documents in other languages alone", () => {
-  const other = { ...(pwrDoc("file:///a.ts", STRAY) as object), languageId: "typescript" };
+  const other = { ...(denjiDoc("file:///a.ts", STRAY) as object), languageId: "typescript" };
   for (const h of rec.onOpen) h(other);
   assert.equal(rec.published.has("file:///a.ts"), false);
 });
 
 test("declares the setting it reads", () => {
   const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
-  const prop = manifest.contributes.configuration.properties["power.diagnostics"];
-  assert.ok(prop, "power.diagnostics is declared");
+  const prop = manifest.contributes.configuration.properties["denji.diagnostics"];
+  assert.ok(prop, "denji.diagnostics is declared");
   assert.deepEqual(prop.enum, ["all", "errors", "off"]);
-  assert.equal(prop.default, "all", "matching what `power check` reports");
+  assert.equal(prop.default, "all", "matching what `denji check` reports");
 });
 
 test("hands everything it registered to the context, so it all gets disposed", () => {

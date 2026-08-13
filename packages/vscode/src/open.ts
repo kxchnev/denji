@@ -9,7 +9,7 @@
  *
  * Kept free of `vscode` imports so it can be tested outside the editor.
  */
-import { LINK_SCHEMES } from "power";
+import { LINK_SCHEMES } from "@kxchnev/denji";
 
 /** The URL to open, or null when it is not one this preview may open. */
 export function safeLink(raw: string): string | null {

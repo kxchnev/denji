@@ -1,18 +1,19 @@
 /**
  * The public identifiers, in one place.
  *
- * The name is not settled yet, and an installation page cannot be written
- * without one — so every page interpolates these instead of spelling a name out.
- * Picking a name is then this file plus the real renames (the package's `name`
- * and `bin`, and the extension's setting ids), not a search across the site.
+ * Every page interpolates these instead of spelling a name out, so the day the
+ * package, the binary or the extension is renamed is one edit here rather than
+ * a search across the site.
  */
 export const PRODUCT = {
   /** The npm package: what `npm install` takes. */
-  pkg: "<package>",
+  pkg: "@kxchnev/denji",
   /** The binary the package installs, and what `npx` resolves. */
-  cli: "<package>",
+  cli: "denji",
   /** How the extension is listed in the VS Code Marketplace. */
-  extension: "<extension>",
-  /** Namespace of the extension's settings — `<prefix>.diagnostics`. */
-  settings: "<package>",
+  extension: "kxchnev.denji",
+  /** Namespace of the extension's settings — `denji.diagnostics`. */
+  settings: "denji",
+  /** Where the source lives. */
+  repo: "https://github.com/kxchnev/denji",
 } as const;

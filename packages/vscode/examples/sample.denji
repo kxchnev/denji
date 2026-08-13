@@ -15,7 +15,7 @@ architecture
 
   # An invisible wrapper: no label, transparent frame, no padding. It groups
   # the two services for the layout without leaving any trace of itself.
-  group core "" @fill(transparent) @stroke(transparent) @padding(0) {
+  group core "" @fill(transparent) @stroke(transparent) {
     service orders "Orders" {
       app api "Orders API" @icon(nodedotjs)
       database db "Postgres" @leftOf(bus) @icon(postgresql)

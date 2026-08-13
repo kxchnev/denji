@@ -19,15 +19,15 @@ export const metadata = {
  * for the language, which is the failure this whole site is arranged against.
  */
 const SKILL = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..", ".claude", "skills", "power-diagrams", "SKILL.md"),
+  join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..", ".claude", "skills", "denji-diagrams", "SKILL.md"),
   "utf8",
 ).trim();
 
 const LOOP = `# 1. write the file, then
-npx ${PRODUCT.cli} check diagram.pwr
+npx ${PRODUCT.cli} check diagram.denji
 
 # 2. draw it and look at the picture
-npx ${PRODUCT.cli} render diagram.pwr -o /tmp/preview.png`;
+npx ${PRODUCT.cli} render diagram.denji -o /tmp/preview.png`;
 
 export default function AgentsPage() {
   return (
@@ -69,8 +69,8 @@ export default function AgentsPage() {
         when the task looks like the one it describes:
       </p>
       <ShellBlock
-        code={`mkdir -p .claude/skills/power-diagrams
-curl -o .claude/skills/power-diagrams/SKILL.md https://<docs>/skill.md`}
+        code={`mkdir -p .claude/skills/denji-diagrams
+curl -o .claude/skills/denji-diagrams/SKILL.md https://<docs>/skill.md`}
       />
       <p className="mt-4 leading-7">
         Commit it and every agent working in that repository picks it up. For a tool with no skill

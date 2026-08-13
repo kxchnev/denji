@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { JSDOM, VirtualConsole } from "jsdom";
-import { layoutArchitecture, linkBadgeRect, parseArchitecture } from "power";
+import { layoutArchitecture, linkBadgeRect, parseArchitecture } from "@kxchnev/denji";
 import type { FromWebview, ToWebview } from "../src/protocol.js";
 
 const BUNDLE = fileURLToPath(new URL("../dist/webview.js", import.meta.url));
@@ -53,7 +53,7 @@ function boot(): Harness {
   console_.on("jsdomError", (e: Error) => {
     throw e;
   });
-  const dom = new JSDOM("<!doctype html><html><body data-uri='file:///x.pwr'></body></html>", {
+  const dom = new JSDOM("<!doctype html><html><body data-uri='file:///x.denji'></body></html>", {
     pretendToBeVisual: true,
     runScripts: "dangerously",
     virtualConsole: console_,

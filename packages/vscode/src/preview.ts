@@ -19,10 +19,10 @@ import type { FromWebview, PreviewConfig, PreviewTheme, ToWebview } from "./prot
  *  number is `watch.ts`'s, which has had the same job for longer. */
 const DEBOUNCE_MS = 60;
 
-export const VIEW_TYPE = "power.preview";
+export const VIEW_TYPE = "denji.preview";
 
 function readConfig(uri: vscode.Uri): PreviewConfig {
-  const c = vscode.workspace.getConfiguration("power.preview", uri);
+  const c = vscode.workspace.getConfiguration("denji.preview", uri);
   return {
     grid: c.get<boolean>("grid", true),
     theme: c.get<PreviewTheme>("theme", "auto"),
@@ -135,7 +135,7 @@ class Preview {
       // the whole of what closing it means here.
 
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration("power.preview", this.uri)) this.postConfig();
+        if (e.affectsConfiguration("denji.preview", this.uri)) this.postConfig();
       }),
     );
 
@@ -233,7 +233,7 @@ class Preview {
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="${asset("webview.css")}">
-<title>power preview</title>
+<title>denji preview</title>
 </head>
 <body data-uri="${escapeAttr(this.key)}">
 <script nonce="${nonce}" src="${asset("webview.js")}"></script>

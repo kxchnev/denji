@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
-import { ICONS, ICON_ALIASES, ICON_NAMES, ICONSET_VERSION, POPULAR_ICONS } from "power";
+import { ICONS, ICON_ALIASES, ICON_NAMES, ICONSET_VERSION, POPULAR_ICONS } from "@kxchnev/denji";
 
 /**
  * How many marks a search may show at once. The whole set is three and a half

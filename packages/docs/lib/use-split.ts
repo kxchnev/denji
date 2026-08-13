@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const KEY = "power.playground.split.v1";
+const KEY = "denji.playground.split.v1";
 
 /** Half and half — the playground opens even-handed. */
 export const DEFAULT_RATIO = 0.5;

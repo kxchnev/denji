@@ -33,7 +33,7 @@ export default function Home() {
         through them.
       </p>
       <p className="mt-6 leading-7">
-        Write it as <InlineCode>.pwr</InlineCode> text or build it in code — both produce one model,
+        Write it as <InlineCode>.denji</InlineCode> text or build it in code — both produce one model,
         and the model renders to SVG. Containers size themselves to what they hold. Where you do
         want a say, hints like <InlineCode>@below</InlineCode> and <InlineCode>@rightOf</InlineCode>{" "}
         constrain the arrangement instead of replacing it, so a diagram survives having something

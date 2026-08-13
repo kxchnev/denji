@@ -7,3 +7,4 @@ scripts/**
 esbuild.mjs
 tsconfig.json
 **/*.map
+examples/**

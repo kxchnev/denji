@@ -90,12 +90,12 @@ const DEFAULTS = {
 type Part = "body" | "label" | "header" | "headerText" | "chip" | "icon";
 
 const CLASS: Record<Part, string> = {
-  body: "pwr-b",
-  label: "pwr-t",
-  header: "pwr-h",
-  headerText: "pwr-ht",
-  chip: "pwr-c",
-  icon: "pwr-ic",
+  body: "denji-b",
+  label: "denji-t",
+  header: "denji-h",
+  headerText: "denji-ht",
+  chip: "denji-c",
+  icon: "denji-ic",
 };
 
 /** Render a laid-out architecture diagram (every node has a rect) to SVG. */
@@ -118,7 +118,7 @@ export function renderArchitecture(diagram: ArchDiagram, opts: ArchRenderOptions
   const styled = new StyleModel(theme, sheet, opts.background, diagram.icons);
 
   const body: string[] = [];
-  body.push(`<rect class="pwr-bg" width="${width}" height="${height}"/>`);
+  body.push(`<rect class="denji-bg" width="${width}" height="${height}"/>`);
 
   // Containers back-to-front (outer first), then shapes, then connections on top.
   const depth = containerDepths(diagram);
@@ -141,7 +141,7 @@ export function renderArchitecture(diagram: ArchDiagram, opts: ArchRenderOptions
     .map(({ n, box }) => linkBadge(n.link!, box!, opts.linkAnchors ?? false));
   if (badges.length > 0) {
     styled.usedLinks = true;
-    body.push(`<g class="pwr-lks">${badges.join("")}</g>`);
+    body.push(`<g class="denji-lks">${badges.join("")}</g>`);
   }
 
   const markup = body.join("\n");
@@ -151,7 +151,7 @@ export function renderArchitecture(diagram: ArchDiagram, opts: ArchRenderOptions
   // one's rules repaint the first.
   const prefix =
     opts.idPrefix ??
-    `pwr-${hash(
+    `denji-${hash(
       markup +
         JSON.stringify([mode, theme, darkTheme, opts.darkSelector ?? null, opts.background ?? null]),
     )}`;
@@ -166,7 +166,7 @@ export function renderArchitecture(diagram: ArchDiagram, opts: ArchRenderOptions
   });
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" class="pwr ${prefix}" width="${width}" height="${height}" ` +
+    `<svg xmlns="http://www.w3.org/2000/svg" class="denji ${prefix}" width="${width}" height="${height}" ` +
       `viewBox="0 0 ${width} ${height}" font-family="${esc(fontFamily)}">`,
     `<style>${css}</style>`,
     defs(prefix, styled),
@@ -217,19 +217,19 @@ class StyleModel {
 
   /** Classes for one element, plus the resolved values the renderer needs in JS. */
   classesFor(slot: StyleSlot, key: string, refs: string[] | undefined, own: StyleProps | undefined) {
-    const classes = [`pwr-${slot}`];
+    const classes = [`denji-${slot}`];
     for (const ref of refs ?? []) {
       const props = this.sheet[ref];
       if (props) {
         const entry = this.named.get(ref) ?? { props, slots: new Set<StyleSlot>() };
         entry.slots.add(slot);
         this.named.set(ref, entry);
-        classes.push(`pwr-s-${ref}`);
+        classes.push(`denji-s-${ref}`);
       }
     }
     if (own && Object.keys(own).length > 0) {
       this.inline.set(key, { props: own, slots: new Set([slot]) });
-      classes.push(`pwr-i-${key}`);
+      classes.push(`denji-i-${key}`);
     }
     return classes.join(" ");
   }
@@ -295,7 +295,7 @@ class StyleModel {
       );
     }
 
-    rules.push(`${o.scope} .pwr-bg{fill:var(--pwr-bg,${o.background ?? o.theme.background})}`);
+    rules.push(`${o.scope} .denji-bg{fill:var(--denji-bg,${o.background ?? o.theme.background})}`);
 
     // The button's chrome is fixed, not styleable — see LinkChrome. Literal
     // fallbacks for the same reason as everywhere else: librsvg ignores custom
@@ -304,18 +304,18 @@ class StyleModel {
     if (this.usedLinks) {
       const c = linkChrome(o.theme);
       rules.push(
-        `${o.scope} .pwr-lk{cursor:pointer}`,
-        `${o.scope} .pwr-lk-p{${guard(
-          `fill:var(--pwr-link-fill,${c.fill});stroke:var(--pwr-link-stroke,${c.stroke});stroke-width:1`,
+        `${o.scope} .denji-lk{cursor:pointer}`,
+        `${o.scope} .denji-lk-p{${guard(
+          `fill:var(--denji-link-fill,${c.fill});stroke:var(--denji-link-stroke,${c.stroke});stroke-width:1`,
         )}}`,
-        `${o.scope} .pwr-lk-i{${guard(
-          `fill:none;stroke:var(--pwr-link-glyph,${c.glyph});stroke-width:2;stroke-linecap:round;stroke-linejoin:round`,
+        `${o.scope} .denji-lk-i{${guard(
+          `fill:none;stroke:var(--denji-link-glyph,${c.glyph});stroke-width:2;stroke-linecap:round;stroke-linejoin:round`,
         )}}`,
       );
     }
 
     // One rule per mark. Deliberately a single class — lower specificity than
-    // the `.pwr-<slot> .pwr-ic` rule an `iconColor` produces, so overriding a
+    // the `.denji-<slot> .denji-ic` rule an `iconColor` produces, so overriding a
     // brand colour works from any layer of the cascade.
     for (const [name, icon] of this.usedIcons) {
       // The fallback has to be the *active* palette's colour, not always the
@@ -323,55 +323,55 @@ class StyleModel {
       // fallback, so a hardcoded light hex would leave dark PNGs unreadable.
       const literal = (o.theme.dark && icon.darkColor) || icon.color;
       rules.push(
-        `${o.scope} .pwr-icon-${name}{${guard(`fill:var(--pwr-icon-${name},${literal})`)}}`,
+        `${o.scope} .denji-icon-${name}{${guard(`fill:var(--denji-icon-${name},${literal})`)}}`,
       );
     }
 
     // 1. Theme, read through the variables declared above.
     for (const slot of STYLE_SLOTS) {
-      rules.push(...ruleset(`${o.scope} .pwr-${slot}`, o.theme.slots[slot], slot, true));
+      rules.push(...ruleset(`${o.scope} .denji-${slot}`, o.theme.slots[slot], slot, true));
     }
     // 2. Per-kind selectors from the document.
     for (const slot of STYLE_SLOTS) {
       const props = this.sheet[slot];
-      if (props) rules.push(...ruleset(`${o.scope} .pwr-${slot}`, props, slot, false));
+      if (props) rules.push(...ruleset(`${o.scope} .denji-${slot}`, props, slot, false));
     }
     // 3. Named styles, in declaration order — later declaration wins, as in CSS.
     for (const name of Object.keys(this.sheet)) {
       if (isStyleSlot(name)) continue;
       const used = this.named.get(name);
       if (used) {
-        rules.push(...ruleset(`${o.scope} .pwr-s-${name}`, used.props, undefined, false, used.slots));
+        rules.push(...ruleset(`${o.scope} .denji-s-${name}`, used.props, undefined, false, used.slots));
       }
     }
     // 4. Inline, the strongest layer.
     for (const [key, used] of this.inline) {
-      rules.push(...ruleset(`${o.scope} .pwr-i-${key}`, used.props, undefined, false, used.slots));
+      rules.push(...ruleset(`${o.scope} .denji-i-${key}`, used.props, undefined, false, used.slots));
     }
 
     // A connection is a stroked line, never a filled one. This has to outrank
     // every layer above — a CSS declaration beats the `fill="none"` attribute,
     // so a named style's fill would otherwise flood the path.
-    rules.push(`${o.scope} .pwr-e .pwr-b{fill:none}`);
+    rules.push(`${o.scope} .denji-e .denji-b{fill:none}`);
 
     return rules.join("");
   }
 }
 
-/** `--pwr-<slot>-<suffix>` declarations for one theme. */
+/** `--denji-<slot>-<suffix>` declarations for one theme. */
 function vars(
   theme: Theme,
   background: string | undefined,
   icons: ReadonlyMap<string, Icon>,
   links: boolean,
 ): string {
-  const out: string[] = [`--pwr-bg:${background ?? theme.background}`];
+  const out: string[] = [`--denji-bg:${background ?? theme.background}`];
   if (links) {
     const c = linkChrome(theme);
-    out.push(`--pwr-link-fill:${c.fill}`, `--pwr-link-stroke:${c.stroke}`, `--pwr-link-glyph:${c.glyph}`);
+    out.push(`--denji-link-fill:${c.fill}`, `--denji-link-stroke:${c.stroke}`, `--denji-link-glyph:${c.glyph}`);
   }
   for (const [name, icon] of icons) {
-    out.push(`--pwr-icon-${name}:${(theme.dark && icon.darkColor) || icon.color}`);
+    out.push(`--denji-icon-${name}:${(theme.dark && icon.darkColor) || icon.color}`);
   }
   for (const slot of STYLE_SLOTS) {
     for (const spec of Object.values(STYLE_PROPS)) {
@@ -379,7 +379,7 @@ function vars(
       // rest are geometry, or literals that librsvg would otherwise drop.
       if (spec.emit !== "var") continue;
       const v = theme.slots[slot][spec.key];
-      if (v !== undefined) out.push(`--pwr-${slot}-${spec.cssVar}:${v}`);
+      if (v !== undefined) out.push(`--denji-${slot}-${spec.cssVar}:${v}`);
     }
   }
   return out.join(";");
@@ -389,7 +389,7 @@ function cssVar(slot: StyleSlot, prop: keyof StyleProps, fallback: unknown): str
   const spec = Object.values(STYLE_PROPS).find((s) => s.key === prop)!;
   // The literal fallback is not optional: librsvg (CLI raster) and a canvas-
   // rasterized <img> both handle var() poorly or not at all.
-  return `var(--pwr-${slot}-${spec.cssVar},${String(fallback)})`;
+  return `var(--denji-${slot}-${spec.cssVar},${String(fallback)})`;
 }
 
 /**
@@ -415,7 +415,7 @@ function ruleset(
   };
   const isEdge = slot === "edge";
   // A `service` has no body label — its only text is the title band, so `text`
-  // and `fontWeight` land there instead of on a `.pwr-t` that does not exist.
+  // and `fontWeight` land there instead of on a `.denji-t` that does not exist.
   const textParts: Part[] =
     slot === "service"
       ? ["headerText"]
@@ -461,7 +461,7 @@ function ruleset(
     // Written literally, never through a variable: librsvg (the CLI's raster
     // path) drops a `stroke-dasharray` that contains var(), fallback and all,
     // which would quietly turn every dashed border solid in PNG and JPEG.
-    const gate = isEdge ? `${sel}.pwr-dashed` : sel;
+    const gate = isEdge ? `${sel}.denji-dashed` : sel;
     out.push(`${gate} .${CLASS.body}{${guard(`stroke-dasharray:${props.dash}`)}}`);
   }
   return out;
@@ -504,7 +504,7 @@ function renderShape(n: Shape, styled: StyleModel): string {
       break;
     default:
       body =
-        `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}"` +
+        `<rect class="denji-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}"` +
         (radius > 0 ? ` rx="${radius}" ry="${radius}"` : "") +
         `/>`;
   }
@@ -538,7 +538,7 @@ function renderShape(n: Shape, styled: StyleModel): string {
   } else {
     content = labelStack(lines, c.x, c.y, "middle");
   }
-  return `<g class="pwr-n ${cls}">${body}${content}</g>`;
+  return `<g class="denji-n ${cls}">${body}${content}</g>`;
 }
 
 /**
@@ -580,7 +580,7 @@ function iconMarkup(mark: { key: string; icon: Icon }, x: number, y: number, siz
   const dx = (size - vw * scale) / 2;
   const dy = (size - vh * scale) / 2;
   return (
-    `<path class="pwr-ic pwr-icon-${mark.key}" ` +
+    `<path class="denji-ic denji-icon-${mark.key}" ` +
     `transform="translate(${round(x + dx - vx * scale)} ${round(y + dy - vy * scale)}) scale(${round(scale)})" ` +
     `d="${mark.icon.path}"/>`
   );
@@ -605,12 +605,12 @@ function linkBadge(url: string, b: Rect, anchor: boolean): string {
     // The URL as a tooltip wherever a DOM renders this, and as the accessible
     // name. Inert in librsvg, and free.
     `<title>${esc(url)}</title>` +
-    `<rect class="pwr-lk-p" x="${round(b.x)}" y="${round(b.y)}" ` +
+    `<rect class="denji-lk-p" x="${round(b.x)}" y="${round(b.y)}" ` +
     `width="${b.width}" height="${b.height}" rx="5" ry="5"/>` +
-    `<path class="pwr-lk-i" transform="translate(${gx} ${gy}) scale(${round(scale)})" d="${LINK_GLYPH}"/>`;
+    `<path class="denji-lk-i" transform="translate(${gx} ${gy}) scale(${round(scale)})" d="${LINK_GLYPH}"/>`;
   return anchor
-    ? `<a class="pwr-lk" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
-    : `<g class="pwr-lk">${inner}</g>`;
+    ? `<a class="denji-lk" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+    : `<g class="denji-lk">${inner}</g>`;
 }
 
 /** Keep generated coordinates short and byte-stable across runs. */
@@ -627,8 +627,8 @@ function cylinderVertical(r: Rect): string {
     `M ${r.x},${r.y + ry} A ${rx},${ry} 0 0 1 ${r.x + r.width},${r.y + ry} ` +
     `V ${r.y + r.height - ry} A ${rx},${ry} 0 0 1 ${r.x},${r.y + r.height - ry} Z`;
   return (
-    `<path class="pwr-b" d="${body}"/>` +
-    `<ellipse class="pwr-b" cx="${cx}" cy="${r.y + ry}" rx="${rx}" ry="${ry}"/>`
+    `<path class="denji-b" d="${body}"/>` +
+    `<ellipse class="denji-b" cx="${cx}" cy="${r.y + ry}" rx="${rx}" ry="${ry}"/>`
   );
 }
 
@@ -641,8 +641,8 @@ function cylinderHorizontal(r: Rect): string {
     `M ${r.x + rx},${r.y} H ${r.x + r.width - rx} A ${rx},${ry} 0 0 1 ${r.x + r.width - rx},${r.y + r.height} ` +
     `H ${r.x + rx} A ${rx},${ry} 0 0 1 ${r.x + rx},${r.y} Z`;
   return (
-    `<path class="pwr-b" d="${body}"/>` +
-    `<ellipse class="pwr-b" cx="${r.x + rx}" cy="${cy}" rx="${rx}" ry="${ry}"/>`
+    `<path class="denji-b" d="${body}"/>` +
+    `<ellipse class="denji-b" cx="${r.x + rx}" cy="${cy}" rx="${rx}" ry="${ry}"/>`
   );
 }
 
@@ -667,8 +667,8 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
     hh === 0
       ? ""
       : n.kind === "service"
-        ? `<text class="pwr-ht" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}">${esc(n.label)}</text>`
-        : `<text class="pwr-t" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}" text-anchor="start">${esc(n.label)}</text>`;
+        ? `<text class="denji-ht" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}">${esc(n.label)}</text>`
+        : `<text class="denji-t" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}" text-anchor="start">${esc(n.label)}</text>`;
 
   if (n.kind === "service") {
     // The header band repeats the body's top corners, so its path is built from
@@ -677,11 +677,11 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
     const header =
       hh === 0
         ? ""
-        : `<path class="pwr-h" d="M ${r.x},${r.y + k} q 0,${-k} ${k},${-k} H ${r.x + r.width - k} ` +
+        : `<path class="denji-h" d="M ${r.x},${r.y + k} q 0,${-k} ${k},${-k} H ${r.x + r.width - k} ` +
           `q ${k},0 ${k},${k} V ${r.y + hh} H ${r.x} Z"/>`;
     return (
-      `<g class="pwr-n ${cls}">` +
-      `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
+      `<g class="denji-n ${cls}">` +
+      `<rect class="denji-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
       header +
       headerIcon +
       title +
@@ -690,8 +690,8 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
   }
   // group: plain dashed rectangle with a top-left label
   return (
-    `<g class="pwr-n ${cls}">` +
-    `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
+    `<g class="denji-n ${cls}">` +
+    `<rect class="denji-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
     headerIcon +
     title +
     CORNERS.map((c) => cornerStack(noteLines(n.texts, c), c, r, hh)).join("") +
@@ -704,7 +704,7 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
  * them. A top stack hangs from under the title; a bottom one is flush with the
  * bottom edge, so the corner keeps its meaning however many lines it holds.
  *
- * They wear `pwr-t` so the group's own text colour — theme, named style or
+ * They wear `denji-t` so the group's own text colour — theme, named style or
  * `@text(…)` alike — reaches them with no extra plumbing; the opacity is an
  * attribute so the stylesheet stays out of it.
  */
@@ -723,7 +723,7 @@ function cornerStack(
     .map((t, i) => {
       const y = first + i * NOTE_LINE_H + NOTE_LINE_H / 2;
       return (
-        `<text class="pwr-t" x="${round(x)}" y="${round(y)}" dominant-baseline="central" ` +
+        `<text class="denji-t" x="${round(x)}" y="${round(y)}" dominant-baseline="central" ` +
         `font-size="${NOTE_FONT_SIZE}" text-anchor="${right ? "end" : "start"}" opacity="0.72">` +
         `${esc(t.text)}</text>`
       );
@@ -845,17 +845,17 @@ function renderConnection(c: Connection, index: number, styled: StyleModel): str
     ? `M ${round(a.x)} ${round(a.y)} C ${round(c.curve.c1.x)} ${round(c.curve.c1.y)} ` +
       `${round(c.curve.c2.x)} ${round(c.curve.c2.y)} ${round(b.x)} ${round(b.y)}`
     : polyline(c.path, c.radius ?? 0);
-  const dashed = c.style === "dashed" ? " pwr-dashed" : "";
+  const dashed = c.style === "dashed" ? " denji-dashed" : "";
   const start = c.fromArrow ? ` marker-start="url(#{{ID}}-a${marker})"` : "";
   const end = c.toArrow ? ` marker-end="url(#{{ID}}-a${marker})"` : "";
 
-  let out = `<g class="pwr-e ${cls}${dashed}">`;
-  out += `<path class="pwr-b" d="${d}" fill="none"${start}${end}/>`;
+  let out = `<g class="denji-e ${cls}${dashed}">`;
+  out += `<path class="denji-b" d="${d}" fill="none"${start}${end}/>`;
   if (c.label && c.labelPos) {
     const w = c.label.length * 7 + 8;
     out +=
-      `<rect class="pwr-c" x="${c.labelPos.x - w / 2}" y="${c.labelPos.y - 9}" width="${w}" height="18" rx="3"/>` +
-      `<text class="pwr-t" x="${c.labelPos.x}" y="${c.labelPos.y}" text-anchor="middle" dominant-baseline="central" font-size="12">${esc(c.label)}</text>`;
+      `<rect class="denji-c" x="${c.labelPos.x - w / 2}" y="${c.labelPos.y - 9}" width="${w}" height="18" rx="3"/>` +
+      `<text class="denji-t" x="${c.labelPos.x}" y="${c.labelPos.y}" text-anchor="middle" dominant-baseline="central" font-size="12">${esc(c.label)}</text>`;
   }
   return `${out}</g>`;
 }
@@ -885,7 +885,7 @@ function labelStack(
   return lines
     .map(
       (line, i) =>
-        `<text class="pwr-t" x="${round(x)}" y="${round(top + i * LABEL_LINE_H)}" ` +
+        `<text class="denji-t" x="${round(x)}" y="${round(top + i * LABEL_LINE_H)}" ` +
         `text-anchor="${anchor}" dominant-baseline="central" ` +
         `font-size="${size}">${esc(line)}</text>`,
     )
