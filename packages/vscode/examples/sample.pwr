@@ -27,7 +27,7 @@ architecture
     papi -> pdb
   }
 
-  app worker "Payouts" @above(ledger) @icon(go)
+  app worker "Payouts" @below(orders) @icon(go)
   database ledger "Ledger" @below(worker)
 
   waf -> api : https
