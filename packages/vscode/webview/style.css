@@ -180,17 +180,23 @@ body {
 }
 
 .controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 24px;
-  min-width: 24px;
-  padding: 0 6px;
+  width: 24px;
+  padding: 0;
   border: 1px solid var(--vscode-button-border, transparent);
   border-radius: 3px;
   background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
   color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 1;
   cursor: pointer;
+}
+
+/* Inline SVGs are baseline-aligned like text; block display is what lets the
+   flex centring above actually centre them. */
+.controls button svg {
+  display: block;
 }
 
 .controls button:hover {

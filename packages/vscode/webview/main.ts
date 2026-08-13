@@ -142,10 +142,27 @@ const controls = document.createElement("div");
 controls.className = "controls";
 const zoomLabel = document.createElement("span");
 zoomLabel.className = "zoom";
-const button = (label: string, title: string, onClick: () => void): HTMLButtonElement => {
+/**
+ * Drawn icons rather than text glyphs: a glyph sits on the font's baseline, so
+ * "−" and "⤢" landed visibly off-centre in a square button — and ⤢ reads as
+ * "fullscreen", which is not what the fit button does.
+ */
+const icon = (paths: string): string =>
+  `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"` +
+  ` stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
+  `${paths}</svg>`;
+const ICON_MINUS = icon('<path d="M3.5 8h9"/>');
+const ICON_PLUS = icon('<path d="M8 3.5v9M3.5 8h9"/>');
+/** A box settling between a frame's corners — fit, not fullscreen. */
+const ICON_FIT = icon(
+  '<path d="M2 5V3.5A1.5 1.5 0 0 1 3.5 2H5M11 2h1.5A1.5 1.5 0 0 1 14 3.5V5' +
+    'M14 11v1.5a1.5 1.5 0 0 1-1.5 1.5H11M5 14H3.5A1.5 1.5 0 0 1 2 12.5V11"/>' +
+    '<rect x="5" y="6" width="6" height="4" rx="1"/>',
+);
+const button = (svg: string, title: string, onClick: () => void): HTMLButtonElement => {
   const b = document.createElement("button");
   b.type = "button";
-  b.textContent = label;
+  b.innerHTML = svg;
   b.title = title;
   b.setAttribute("aria-label", title);
   b.addEventListener("click", onClick);
@@ -153,9 +170,9 @@ const button = (label: string, title: string, onClick: () => void): HTMLButtonEl
 };
 controls.append(
   zoomLabel,
-  button("−", "Zoom out", () => zoomBy(1 / 1.2)),
-  button("+", "Zoom in", () => zoomBy(1.2)),
-  button("⤢", "Fit to view", () => {
+  button(ICON_MINUS, "Zoom out", () => zoomBy(1 / 1.2)),
+  button(ICON_PLUS, "Zoom in", () => zoomBy(1.2)),
+  button(ICON_FIT, "Fit to view", () => {
     touched = false; // let resizes re-centre again
     fit();
   }),

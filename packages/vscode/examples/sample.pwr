@@ -6,7 +6,7 @@
 # Nothing below says where anything goes. The connections do.
 
 architecture
-  group edge "Edge" {
+  group edge "Edge" @above(orders) {
     text "public"
     app cdn "CDN"
     app waf "WAF"
@@ -15,20 +15,20 @@ architecture
 
   service orders "Orders" {
     app api "Orders API" @icon(nodedotjs)
-    database db "Postgres" @icon(postgresql)
+    database db "Postgres" @leftOf(bus) @icon(postgresql)
     queue bus "Events"
     api -> db
     api -> bus
   }
 
-  service pay "Payments" {
+  service pay "Payments" @leftOf(orders) {
     app papi "Payments API"
     database pdb "Postgres"
     papi -> pdb
   }
 
-  app worker "Payouts" @icon(go)
-  database ledger "Ledger"
+  app worker "Payouts" @above(ledger) @icon(go)
+  database ledger "Ledger" @below(worker)
 
   waf -> api : https
   api -> papi : charge
