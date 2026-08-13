@@ -929,6 +929,17 @@ function assignAcross(
           ? [...sides.up.get(id)!, ...sides.dn.get(id)!]
           : (forward ? sides.up : sides.dn).get(id)!;
         if (ns.length === 0) {
+          // Nothing points at this node, but the author said what it sits
+          // under, and `below` means under — not under and to the left. The
+          // anchor is the only thing in the drawing that says where across,
+          // so it gets to. Connections still decide wherever there are any:
+          // this branch is reached only when there are none to ask.
+          const anchor = v.anchorAlong;
+          if (anchor !== undefined && V.has(anchor)) {
+            want.push(centre(anchor));
+            weight.push(1);
+            continue;
+          }
           want.push(centre(id));
           weight.push(IDLE_WEIGHT);
           continue;

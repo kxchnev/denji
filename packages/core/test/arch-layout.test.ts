@@ -78,6 +78,40 @@ describe("architecture layout", () => {
     expect(c.y).toBeCloseTo(a.y, 5);
   });
 
+  it("centres a node on the anchor it was placed under, whatever their widths", () => {
+    // Three apps of one width cannot tell centred from left-aligned, which is
+    // how a node under its anchor came to hug the anchor's left edge: a barrel
+    // is narrower than a box, so the two only look aligned until they differ.
+    const d = architecture()
+      .app("a", "Orders API")
+      .database("b", "Postgres", { hint: { below: "a" } })
+      .build();
+    layoutArchitecture(d);
+    const a = rectOf(d, "a");
+    const b = rectOf(d, "b");
+    expect(b.width).toBeLessThan(a.width);
+    expect(b.x + b.width / 2).toBeCloseTo(a.x + a.width / 2, 5);
+    expect(b.x).toBeGreaterThan(a.x);
+  });
+
+  it("lets a connection outrank the anchor it was placed under", () => {
+    // The anchor speaks only where the connections say nothing. Here `b` is
+    // pulled by `far`, which sits well to the right of its own anchor, so the
+    // cross axis is the connection's to decide.
+    const d = architecture()
+      .app("a", "A")
+      .app("far", "Far", { hint: { rightOf: "a" } })
+      .database("b", "B", { hint: { below: "a" } })
+      .connect("far", "b")
+      .build();
+    layoutArchitecture(d);
+    const a = rectOf(d, "a");
+    const far = rectOf(d, "far");
+    const b = rectOf(d, "b");
+    expect(b.x + b.width / 2).toBeCloseTo(far.x + far.width / 2, 5);
+    expect(b.x + b.width / 2).toBeGreaterThan(a.x + a.width / 2);
+  });
+
   it("sizes a container to wrap its children with padding", () => {
     const d = architecture()
       .app("api", "API")
