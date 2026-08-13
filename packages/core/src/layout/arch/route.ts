@@ -12,11 +12,14 @@ import { center, type Point, type Rect } from "../../model/geometry.js";
  * gathered into a bundle and spread across it at a fixed pitch, like a cable
  * loom.
  *
- * The path itself is orthogonal, then rounded. A wide radius is what keeps the
- * result reading as a curve rather than as a circuit diagram, and the first and
- * last segments are perpendicular to the box they touch by construction — which
- * is the property an earlier jogging router could not hold, and the reason it
- * was replaced with plain cubics in the first place.
+ * The path itself is orthogonal, then rounded. What makes the rounding read as a
+ * curve rather than as a circuit diagram is not how wide it is but how *even* it
+ * is: one radius on every corner of every connector, which is why
+ * {@link CORNER_RADIUS} is derived from the shortest segment this router can
+ * produce instead of being picked for looks. The first and last segments are
+ * perpendicular to the box they touch by construction — the property an earlier
+ * jogging router could not hold, and the reason it was replaced with plain
+ * cubics in the first place.
  */
 
 /** Which edge of a box a connector meets. */
@@ -71,8 +74,20 @@ export const DOCK_PITCH = 14;
 export const DOCK_INSET = 10;
 /** Tightest dock spacing on a short side. */
 const MIN_DOCK_PITCH = 6;
-/** How wide the corners of a route are rounded. */
-export const CORNER_RADIUS = 20;
+/**
+ * How wide the corners of a route are rounded.
+ *
+ * Half of {@link DOCK_RUN}, and written as that rather than as a number, because
+ * the two cannot be chosen apart. A corner can never be rounded by more than
+ * half of either segment touching it, and the shortest segment this router ever
+ * emits is the straight run out of a dock — exactly `DOCK_RUN`, which
+ * `never moves a segment that holds a dock` pins. Ask for more and the answer is
+ * not a wider curve, it is a different radius at every corner: the bend beside a
+ * box comes out small, the one in the middle of a long run comes out large, and
+ * the drawing reads as sloppy rather than as generous. A radius that fits
+ * everywhere is worth more than a radius that fits somewhere.
+ */
+export const CORNER_RADIUS = DOCK_RUN / 2;
 /** Rects must share more than this on an axis to count as facing each other. */
 const MIN_OVERLAP = 2;
 /**
@@ -131,7 +146,7 @@ export interface RouteOptions {
   ancestorsOf: (id: string) => ReadonlySet<string>;
   /** Per connection index, the corridor the layout kept clear for it. */
   lanes?: ReadonlyMap<number, Point[]>;
-  /** Corner radius; the default is wide enough that a turn reads as a curve. */
+  /** Corner radius; the default is as wide as every corner can actually be. */
   radius?: number;
 }
 

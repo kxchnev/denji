@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { parseArchitecture } from "../src/dsl/arch-parse.js";
 import { layoutArchitecture } from "../src/layout/arch/index.js";
 import { renderArchitecture, type ArchRenderOptions } from "../src/render/arch-svg.js";
+import { capRx, capRy } from "../src/layout/arch/measure.js";
+import { CORNER_RADIUS, DOCK_RUN } from "../src/layout/arch/route.js";
 import { darkTheme, lightTheme } from "../src/render/theme.js";
 
 function svg(src: string, opts: ArchRenderOptions = {}): string {
@@ -206,24 +208,41 @@ describe("output shape", () => {
   });
 
   it("puts a cylinder's label on its optical centre, not its geometric one", () => {
-    // A database is drawn with a lid, so the visible face starts below the top
-    // of the box; text centred on the box reads as sitting too high.
-    const labelY = (src: string, id: string) => {
+    // A cylinder's rim is drawn inside its own box, so the visible face starts a
+    // whole rim in; text centred on the box reads as pushed into the rim.
+    const label = (src: string, id: string) => {
       const d = parseArchitecture(src);
       layoutArchitecture(d);
       const out = renderArchitecture(d);
       const rect = d.nodes.find((n) => n.id === id)!.rect!;
-      const y = Number(/<text class="pwr-t" x="[\d.]+" y="([\d.]+)"/.exec(out)![1]);
-      return { y, middle: rect.y + rect.height / 2 };
+      const [, x, y] = /<text class="pwr-t" x="([\d.]+)" y="([\d.]+)"/.exec(out)!;
+      return {
+        x: Number(x),
+        y: Number(y),
+        middle: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
+        // The seam-free face: past the rim, out to the far bulge.
+        face: {
+          x: (rect.x + 2 * capRx(rect.width) + rect.x + rect.width) / 2,
+          y: (rect.y + 2 * capRy(rect.height) + rect.y + rect.height) / 2,
+        },
+      };
     };
-    const db = labelY(`architecture\ndatabase db "PG"`, "db");
-    expect(db.y).toBeGreaterThan(db.middle);
+    // The database's lid is on top, so its face — and its label — sit low.
+    const db = label(`architecture\ndatabase db "PG"`, "db");
+    expect(db.y).toBe(db.face.y);
+    expect(db.y).toBeGreaterThan(db.middle.y);
+    expect(db.x).toBe(db.middle.x);
 
-    // A queue's caps are left and right, so it stays vertically centred.
-    const q = labelY(`architecture\nqueue q "Events"`, "q");
-    expect(q.y).toBe(q.middle);
-    const app = labelY(`architecture\napp a "A"`, "a");
-    expect(app.y).toBe(app.middle);
+    // The queue's rim is on the left, so the same shift is horizontal.
+    const q = label(`architecture\nqueue q "Events"`, "q");
+    expect(q.x).toBe(q.face.x);
+    expect(q.x).toBeGreaterThan(q.middle.x);
+    expect(q.y).toBe(q.middle.y);
+
+    // A box has no rim to dodge either way.
+    const app = label(`architecture\napp a "A"`, "a");
+    expect(app.x).toBe(app.middle.x);
+    expect(app.y).toBe(app.middle.y);
   });
 
   it("draws a group's corner texts in their own corners", () => {
@@ -442,5 +461,95 @@ describe("labels on two lines", () => {
   it("is deterministic with a wrapped label", () => {
     const src = 'architecture\n  app a "Storefront web service"\n  database b "Order archive" @below(a)\n';
     expect(svg(src)).toBe(svg(src));
+  });
+});
+
+/**
+ * A bend is read against the other bends on the same drawing, so an even radius
+ * matters more than a wide one. These read the radius back out of the emitted
+ * path — the distance from where the straight run stops to the corner the
+ * quadratic bends through — because that is the number a reader actually sees.
+ */
+describe("rounded corners", () => {
+  /** Every connector's path data, in document order. */
+  const connectors = (out: string): string[] =>
+    [...out.matchAll(/<g class="pwr-e[^"]*"><path[^>]*\sd="([^"]+)"/g)].map((m) => m[1]!);
+
+  /** The radius of each quadratic corner, and how many smooth transitions. */
+  function corners(d: string): { radii: number[]; blends: number } {
+    const nums = (t: string): number[] => t.slice(1).trim().split(/[\s,]+/).map(Number);
+    const radii: number[] = [];
+    let blends = 0;
+    let at: { x: number; y: number } | null = null;
+    for (const tok of d.match(/[MLQC][^MLQC]*/g) ?? []) {
+      const n = nums(tok);
+      if (tok[0] === "M" || tok[0] === "L") at = { x: n[0]!, y: n[1]! };
+      else if (tok[0] === "Q") {
+        radii.push(Math.hypot(n[0]! - at!.x, n[1]! - at!.y));
+        at = { x: n[2]!, y: n[3]! };
+      } else {
+        blends++;
+        at = { x: n[4]!, y: n[5]! };
+      }
+    }
+    return { radii, blends };
+  }
+
+  const WIRED = [
+    "architecture",
+    '  app edge "Edge"',
+    '  app one "One"',
+    '  app two "Two"',
+    '  app three "Three"',
+    '  database store "Store"',
+    "  edge -> one",
+    "  edge -> two",
+    "  edge -> three",
+    "  one -> store",
+    "  two -> store",
+    "  three -> store",
+    "  edge -> store",
+  ].join("\n");
+
+  it("rounds every corner by the same radius, wherever it falls on the path", () => {
+    // The bend beside a box used to come out at 6 and the one in open space at
+    // 20, on the same line: the straight run out of a dock is DOCK_RUN long, and
+    // both the half-segment cap and the arrowhead's room are measured off it.
+    const drawn = connectors(svg(WIRED)).flatMap((d) => corners(d).radii);
+    expect(drawn.length).toBeGreaterThan(8);
+    expect([...new Set(drawn.map((r) => Math.round(r * 100) / 100))]).toEqual([CORNER_RADIUS]);
+  });
+
+  it("draws a step too short to round as one transition, not two kinks", () => {
+    // Two boxes a few pixels out of line — pinned, so the step is the test's and
+    // not the layout's to change. The router has to move sideways by 6px, and
+    // neither corner of that step has room for a radius.
+    const stepped = (off: number): ReturnType<typeof corners> =>
+      corners(
+        connectors(svg(`architecture\n  app a "A" @at(0, 0)\n  app b "B" @at(${off}, 140)\n  a -> b\n`))[0]!,
+      );
+    const tight = stepped(6);
+    expect(tight.blends).toBe(1);
+    expect(tight.radii).toEqual([]);
+    // Wide enough to round both corners properly, and then it is two corners
+    // again — at the same radius as everywhere else, not at half the step.
+    const roomy = stepped(2 * CORNER_RADIUS + 4);
+    expect(roomy.blends).toBe(0);
+    expect(roomy.radii.map((r) => Math.round(r * 100) / 100)).toEqual([
+      CORNER_RADIUS,
+      CORNER_RADIUS,
+    ]);
+  });
+
+  it("keeps a straight run at each end for the arrowhead to sit on", () => {
+    // What is left of the dock's run once the first corner has taken its cut:
+    // the radius is half that run, so half of it survives — and that half is the
+    // arrowhead's length. The three constants meet here, which is the whole
+    // reason one radius fits everywhere.
+    for (const d of connectors(svg(WIRED))) {
+      const first = /^M ([-\d.]+) ([-\d.]+) L ([-\d.]+) ([-\d.]+)/.exec(d)!;
+      const run = Math.hypot(Number(first[3]) - Number(first[1]), Number(first[4]) - Number(first[2]));
+      expect(run).toBeGreaterThanOrEqual(DOCK_RUN - CORNER_RADIUS - 0.01);
+    }
   });
 });

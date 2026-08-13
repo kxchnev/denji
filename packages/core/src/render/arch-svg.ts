@@ -544,16 +544,22 @@ function renderShape(n: Shape, styled: StyleModel): string {
 /**
  * Where a shape's label sits.
  *
- * A database is drawn with an elliptical lid and an elliptical bottom, so the
- * face a label lives on runs from the underside of the lid (`y + 2·capRy`) to
- * the bottom of the bulge (`y + height`) — a band exactly `BASE_HEIGHT` tall
- * whatever the lid is, because that is how the height was built. Its centre is
- * one lid below the box's, and that is where two lines land with equal air above
- * and below. On the geometric centre the first line's box crosses the lid.
+ * A cylinder's rim is drawn inside its own box, so the face a label lives on is
+ * not the box: it starts a whole rim in (`2·cap`, where the seam ends) and runs
+ * to the far bulge, which puts its centre exactly one cap past the box's. On the
+ * geometric centre the text reads as pushed into the rim.
+ *
+ * A database wears its rim on top, so the shift is vertical: the face is a band
+ * exactly `BASE_HEIGHT` tall whatever the lid is, because that is how the height
+ * was built, and one lid down is where two lines land with equal air above and
+ * below. A queue wears its rim on the left, so the same shift is horizontal.
  */
 function labelCenter(kind: Shape["kind"], r: Rect): Point {
   const c = center(r);
-  return { x: c.x, y: kind === "database" ? c.y + capRy(r.height) : c.y };
+  return {
+    x: kind === "queue" ? c.x + capRx(r.width) : c.x,
+    y: kind === "database" ? c.y + capRy(r.height) : c.y,
+  };
 }
 
 /**
@@ -726,19 +732,44 @@ function cornerStack(
 }
 
 /**
+ * The straight run kept clear of rounding at an end of the path, for the
+ * arrowhead to sit on. Rounding into it is what makes a connector look like it
+ * arrives sideways: the head ends up drawn along the bend rather than along the
+ * line.
+ *
+ * The head's own length: `markerWidth="7"` scaled by the stroke — 1.5 by default
+ * — so a shade under 10. It was 14, a guess with a margin, and the margin cost
+ * more than it bought: the segment out of a dock is exactly `DOCK_RUN` = 20, so
+ * `into - HEAD_ROOM` capped every bend beside a box at 6 while a bend in open
+ * space got the full radius. At 10 the two caps meet — `into / 2` is 10 too —
+ * and the corner by the box is the same corner as all the others. A connection
+ * given a much thicker stroke by hand does outgrow this, as it outgrew 14.
+ */
+const HEAD_ROOM = 10;
+
+/**
  * A path through its own corners, rounded by `radius`.
  *
  * Each corner is cut back by the same amount on both sides and replaced with a
  * quadratic through the corner point, so the curve stays inside the turn the
  * router walked. The cut never exceeds half of either adjacent segment: a corner
- * that ate its whole segment would pull the line off the next corner too, and a
- * tight zig-zag would come apart into a wave that goes nowhere near its route.
+ * that ate its whole segment would pull the line off the next corner too.
+ *
+ * Two corners sharing a segment shorter than the whole cut have nothing to share
+ * out, and rounding them separately is what a tight zig-zag came apart into — two
+ * hard kinks a few pixels apart, which read as a wobble in the line rather than
+ * as a route. Those are drawn as **one** transition instead: a cubic whose
+ * controls are the two corners themselves, so it leaves along the first segment,
+ * arrives along the last, and stays inside the step it replaces. The short step
+ * the router had to make is then something the eye follows rather than trips on.
+ *
+ * What comes out of both branches is a path whose every remaining quadratic is
+ * cut by exactly `radius`: a corner that was not folded into a transition has
+ * both its segments at least `2 * radius` long, by that same test.
  *
  * A two-point path has no corners, so this is exactly the old polyline for
  * everything that came before routers with corners existed.
  */
-const HEAD_ROOM = 14;
-
 function polyline(path: readonly Point[], radius: number): string {
   const move = (p: Point): string => `M ${round(p.x)} ${round(p.y)}`;
   const line = (p: Point): string => `L ${round(p.x)} ${round(p.y)}`;
@@ -749,33 +780,51 @@ function polyline(path: readonly Point[], radius: number): string {
     const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     return { x: from.x + ((to.x - from.x) * d) / len, y: from.y + ((to.y - from.y) * d) / len };
   };
-  const out = [move(path[0]!)];
-  for (let i = 1; i + 1 < path.length; i++) {
-    const prev = path[i - 1]!;
-    const cur = path[i]!;
-    const next = path[i + 1]!;
-    const into = Math.hypot(cur.x - prev.x, cur.y - prev.y);
-    const outOf = Math.hypot(next.x - cur.x, next.y - cur.y);
-    // The two segments touching a box keep a straight stretch for the arrowhead
-    // to sit on. Rounding into it is what makes a connector look like it arrives
-    // sideways: the head ends up drawn along the bend rather than along the line.
-    const r = Math.min(
+  const span = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y);
+  const last = path.length - 1;
+  /** How far the cut may reach back along the segment arriving at corner `i`. */
+  const reachIn = (i: number): number =>
+    Math.min(radius, span(path[i - 1]!, path[i]!) / 2, i === 1 ? span(path[0]!, path[1]!) - HEAD_ROOM : Infinity);
+  /** The same, forward along the segment leaving corner `i`. */
+  const reachOut = (i: number): number =>
+    Math.min(
       radius,
-      into / 2,
-      outOf / 2,
-      i === 1 ? into - HEAD_ROOM : Infinity,
-      i === path.length - 2 ? outOf - HEAD_ROOM : Infinity,
+      span(path[i]!, path[i + 1]!) / 2,
+      i === last - 1 ? span(path[last - 1]!, path[last]!) - HEAD_ROOM : Infinity,
     );
-    if (r < 0.5) {
-      out.push(line(cur));
+
+  const out = [move(path[0]!)];
+  for (let i = 1; i < last; ) {
+    const cur = path[i]!;
+    // A step too short to give both its corners a cut: one transition, not two.
+    if (i + 1 < last && span(cur, path[i + 1]!) < 2 * radius) {
+      const nxt = path[i + 1]!;
+      const d = Math.min(reachIn(i), reachOut(i + 1));
+      if (d >= 0.5) {
+        out.push(line(at(cur, path[i - 1]!, d)));
+        const exit = at(nxt, path[i + 2]!, d);
+        out.push(
+          `C ${round(cur.x)} ${round(cur.y)} ${round(nxt.x)} ${round(nxt.y)} ` +
+            `${round(exit.x)} ${round(exit.y)}`,
+        );
+      } else {
+        out.push(line(cur), line(nxt));
+      }
+      i += 2;
       continue;
     }
-    const enter = at(cur, prev, r);
-    const leave = at(cur, next, r);
-    out.push(line(enter));
+    const r = Math.min(reachIn(i), reachOut(i));
+    if (r < 0.5) {
+      out.push(line(cur));
+      i += 1;
+      continue;
+    }
+    const leave = at(cur, path[i + 1]!, r);
+    out.push(line(at(cur, path[i - 1]!, r)));
     out.push(`Q ${round(cur.x)} ${round(cur.y)} ${round(leave.x)} ${round(leave.y)}`);
+    i += 1;
   }
-  out.push(line(path[path.length - 1]!));
+  out.push(line(path[last]!));
   return out.join(" ");
 }
 

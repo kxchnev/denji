@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
 import { layoutArchitecture } from "../src/layout/arch/index.js";
 import { hierarchy } from "../src/layout/arch/graph.js";
-import { BUS_PITCH, DOCK_INSET, DOCK_PITCH, DOCK_RUN } from "../src/layout/arch/route.js";
+import {
+  BUS_PITCH,
+  CORNER_RADIUS,
+  DOCK_INSET,
+  DOCK_PITCH,
+  DOCK_RUN,
+} from "../src/layout/arch/route.js";
 import type { ArchDiagram, Connection } from "../src/model/arch.js";
 import type { Point, Rect } from "../src/model/geometry.js";
 
@@ -495,6 +501,38 @@ describe("routing connectors", () => {
       expect(c.path!.length).toBeGreaterThanOrEqual(2);
       expect(c.curve).toBeUndefined();
       expect(c.radius).toBeGreaterThan(0);
+    }
+  });
+
+  it("asks for no more radius than every corner can be given", () => {
+    // A corner is cut back by the radius on both sides, so it needs half of each
+    // segment touching it — and the shortest segment this router emits is the run
+    // out of a dock, which the test above pins at DOCK_RUN. Ask for more and the
+    // renderer hands back a different radius at every corner, which is what made
+    // one bend wide and the next one square.
+    expect(CORNER_RADIUS).toBe(DOCK_RUN / 2);
+    const d = parse(
+      [
+        "architecture",
+        '  app edge "Edge"',
+        '  app one "One"',
+        '  app two "Two"',
+        '  database store "Store"',
+        "  edge -> one",
+        "  edge -> two",
+        "  one -> store",
+        "  two -> store",
+        "  edge -> store",
+      ].join("\n"),
+    );
+    layoutArchitecture(d, { onWarn: () => {} });
+    for (const c of d.connections) {
+      const path = c.path!;
+      for (const i of [0, path.length - 2]) {
+        const a = path[i]!;
+        const b = path[i + 1]!;
+        expect(Math.hypot(b.x - a.x, b.y - a.y) / 2).toBeGreaterThanOrEqual(c.radius! - 0.01);
+      }
     }
   });
 });

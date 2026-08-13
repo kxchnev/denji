@@ -166,16 +166,25 @@ group <id> ["<label>"] {
 
 ### How a connector is drawn
 
-A connection is a single curve. It leaves one box and enters the other
-perpendicular to a side, near the middle of it; several connections on one side
-fan out, and a side with no room left hands the overflow to a side that also
-points at the other box — where it docks in the middle again, not off in the
-corner nearest whatever it is pointing at.
+A connection leaves one box and enters the other perpendicular to a side, near
+the middle of it; several connections on one side fan out, and a side with no
+room left hands the overflow to a side that also points at the other box — where
+it docks in the middle again, not off in the corner nearest whatever it is
+pointing at.
 
-The curve never bends and never routes *around* anything: a box that sits between
-two connected boxes **will be crossed**. Leave room, or put the pair in the same
-container — that is the price of connectors that always meet a box square on and
-never run along its border.
+It **finds its own way round the boxes**: a box sitting between two connected
+ones is walked around rather than crossed, and a connection that skips a layer
+gets a corridor kept clear for it through the ones it crosses. Where several
+connections travel together they are spread across a bundle at a fixed pitch
+instead of landing on top of each other. You do not have to leave room for any
+of this.
+
+The path is drawn with square turns, rounded. Every bend on every connector gets
+**the same radius** — an even rounding is what makes a turn read as a curve, and
+a radius that fits in one place but not the next reads as a sloppy drawing, so
+the radius is the widest one that fits everywhere. Where a route has to step
+sideways by less than that, the step is drawn as one smooth transition rather
+than as two corners too tight to round.
 
 ---
 
