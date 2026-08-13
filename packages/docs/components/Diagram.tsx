@@ -10,6 +10,7 @@ import {
   nodeAt,
   nodeDepths,
   relationFor,
+  dropEdgeRect,
   snapToGrid,
   DiagramParseError,
   type ArchDiagram,
@@ -205,8 +206,13 @@ export function Diagram({
     /** The pointer, relative to the surface. */
     cursor: Point;
   } | null>(null);
-  /** Where the node in hand is, and which sibling a drop would attach it to. */
-  const [dragGhost, setDragGhost] = useState<{ rect: Rect; anchor: Rect | null } | null>(null);
+  /** Where the node in hand is, which sibling a drop would attach it to, and
+   *  the bar on that sibling's edge naming the side. */
+  const [dragGhost, setDragGhost] = useState<{
+    rect: Rect;
+    anchor: Rect | null;
+    edge: Rect | null;
+  } | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [hoverLink, setHoverLink] = useState<string | null>(null);
   // Whether a fit has ever landed, and the size it landed at. Both are refs: the
@@ -361,7 +367,7 @@ export function Diagram({
         at: hit.local,
         cursor,
       };
-      setDragGhost({ rect: hit.rect, anchor: null });
+      setDragGhost({ rect: hit.rect, anchor: null, edge: null });
       return; // this pointer moves a node, not the viewport
     }
     drag.current = { x: e.clientX - view.x, y: e.clientY - view.y };
@@ -390,6 +396,7 @@ export function Diagram({
           height: nd.fromRect.height,
         },
         anchor,
+        edge: rel && anchor ? dropEdgeRect(anchor, rel.side) : null,
       });
       return;
     }
@@ -571,6 +578,19 @@ export function Diagram({
                   width: dragGhost.anchor.width,
                   height: dragGhost.anchor.height,
                   outlineWidth: 2 / view.scale,
+                }}
+              />
+            )}
+            {/* The bar in the slot the node is about to take — the outline above
+                says who it attaches to, this says on which side. */}
+            {dragGhost?.edge && (
+              <div
+                className="absolute rounded-full bg-primary"
+                style={{
+                  left: dragGhost.edge.x,
+                  top: dragGhost.edge.y,
+                  width: dragGhost.edge.width,
+                  height: dragGhost.edge.height,
                 }}
               />
             )}

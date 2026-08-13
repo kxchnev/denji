@@ -15,6 +15,7 @@
  */
 import {
   DiagramParseError,
+  dropEdgeRect,
   isBoxed,
   layoutArchitecture,
   linkAt,
@@ -119,9 +120,13 @@ ghost.hidden = true;
 const target = document.createElement("div");
 target.className = "drop-target";
 target.hidden = true;
+/** The bar on the anchor's edge naming the side the drop will attach on. */
+const edge = document.createElement("div");
+edge.className = "drop-edge";
+edge.hidden = true;
 const outlineLayer = document.createElement("div");
 outlineLayer.className = "outline-layer";
-outlineLayer.append(outline, target, ghost);
+outlineLayer.append(outline, target, edge, ghost);
 surface.append(stage, outlineLayer);
 
 const errorBox = document.createElement("div");
@@ -307,6 +312,7 @@ function paintDrag(): void {
   const nd = nodeDrag;
   ghost.hidden = nd === null;
   target.hidden = nd?.rel == null;
+  edge.hidden = nd?.rel == null;
   if (!nd) return;
   const shift = shown.diagram?.originShift ?? { x: 0, y: 0 };
   const dx = nd.at.x - nd.base.x;
@@ -320,12 +326,20 @@ function paintDrag(): void {
   if (!nd.rel) return;
   const anchor = shown.diagram?.nodes.find((n) => n.id === nd.rel!.anchor)?.rect;
   target.hidden = !anchor;
+  edge.hidden = !anchor;
   if (!anchor) return;
   target.style.left = `${anchor.x}px`;
   target.style.top = `${anchor.y}px`;
   target.style.width = `${anchor.width}px`;
   target.style.height = `${anchor.height}px`;
   target.style.outlineWidth = `${2 / view.scale}px`;
+  // The slot the node is about to take: the outline says who it attaches to,
+  // this bar says on which side.
+  const slot = dropEdgeRect(anchor, nd.rel.side);
+  edge.style.left = `${slot.x}px`;
+  edge.style.top = `${slot.y}px`;
+  edge.style.width = `${slot.width}px`;
+  edge.style.height = `${slot.height}px`;
 }
 
 function fit(): void {

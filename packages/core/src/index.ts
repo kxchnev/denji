@@ -61,6 +61,8 @@ export { DiagramParseError } from "./dsl/error.js";
 export {
   snapToGrid,
   relationFor,
+  dropEdgeRect,
+  DROP_EDGE,
   type Relation,
   nodeDepths,
   nodeAt,

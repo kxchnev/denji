@@ -92,6 +92,34 @@ export function relationFor(
   return best;
 }
 
+/**
+ * The drop-side indicator: a bar in the gap beside the anchor, marking the slot
+ * the dragged node is about to take. Outlining the anchor alone says *who* the
+ * node attaches to but not *where*, and the side is the half of the answer the
+ * document will actually record. Sized in diagram units, so it scales with the
+ * boxes it sits between.
+ */
+export const DROP_EDGE = { thickness: 6, gap: 6 } as const;
+
+/**
+ * Where that bar sits for a given relation: hugging the anchor's edge on the
+ * side the drop names, spanning that edge exactly. Computed here so both
+ * viewers mark the same edge the written `@rightOf(...)` will mean.
+ */
+export function dropEdgeRect(anchor: Rect, side: Relation["side"]): Rect {
+  const { thickness: t, gap: g } = DROP_EDGE;
+  switch (side) {
+    case "rightOf":
+      return { x: anchor.x + anchor.width + g, y: anchor.y, width: t, height: anchor.height };
+    case "leftOf":
+      return { x: anchor.x - g - t, y: anchor.y, width: t, height: anchor.height };
+    case "below":
+      return { x: anchor.x, y: anchor.y + anchor.height + g, width: anchor.width, height: t };
+    case "above":
+      return { x: anchor.x, y: anchor.y - g - t, width: anchor.width, height: t };
+  }
+}
+
 function parentOf(diagram: ArchDiagram): Map<string, string> {
   const out = new Map<string, string>();
   for (const n of diagram.nodes) {

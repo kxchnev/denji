@@ -3,6 +3,8 @@ import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
 import { findDeclaration, findHeaderLine } from "../src/dsl/arch-edit.js";
 import { DEFAULT_HEADER_H, layoutArchitecture } from "../src/layout/arch/index.js";
 import {
+  DROP_EDGE,
+  dropEdgeRect,
   isBoxed,
   linkAt,
   linkBadgeRect,
@@ -86,6 +88,36 @@ describe("relationFor", () => {
   it("says nothing when there is no sibling to speak of", () => {
     const d = laid('architecture\n  app only "Only"\n');
     expect(relationFor(d, "only", { x: 0, y: 0 })).toBeNull();
+  });
+});
+
+describe("dropEdgeRect", () => {
+  const anchor = { x: 100, y: 200, width: 80, height: 40 };
+
+  it("puts the bar in the gap on the side the relation names", () => {
+    const { thickness, gap } = DROP_EDGE;
+    expect(dropEdgeRect(anchor, "rightOf")).toEqual({
+      x: anchor.x + anchor.width + gap,
+      y: anchor.y,
+      width: thickness,
+      height: anchor.height,
+    });
+    expect(dropEdgeRect(anchor, "leftOf").x + thickness + gap).toBe(anchor.x);
+    expect(dropEdgeRect(anchor, "below").y).toBe(anchor.y + anchor.height + gap);
+    expect(dropEdgeRect(anchor, "above").y + thickness + gap).toBe(anchor.y);
+  });
+
+  it("spans exactly the edge it sits beside", () => {
+    for (const side of ["rightOf", "leftOf"] as const) {
+      const r = dropEdgeRect(anchor, side);
+      expect(r.y).toBe(anchor.y);
+      expect(r.height).toBe(anchor.height);
+    }
+    for (const side of ["below", "above"] as const) {
+      const r = dropEdgeRect(anchor, side);
+      expect(r.x).toBe(anchor.x);
+      expect(r.width).toBe(anchor.width);
+    }
   });
 });
 

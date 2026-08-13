@@ -124,6 +124,14 @@ body {
   outline-color: var(--vscode-charts-blue, var(--vscode-focusBorder));
 }
 
+/* The bar on the drop target's edge, in the slot the dragged node is about to
+   take — the outline says who it attaches to, this says on which side. */
+.drop-edge {
+  position: absolute;
+  border-radius: 3px;
+  background: var(--vscode-charts-blue, var(--vscode-focusBorder));
+}
+
 .error {
   position: absolute;
   left: 8px;
