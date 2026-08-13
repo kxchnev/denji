@@ -16,7 +16,7 @@ import { bracketMatching, indentOnInput, indentUnit, syntaxHighlighting } from "
 import { classHighlighter } from "@lezer/highlight";
 import { pwrLanguage } from "@/lib/pwr-language";
 import { pwrAutocomplete } from "@/lib/pwr-complete";
-import { codeEditorTheme } from "@/lib/editor-theme";
+import { codeEditorTheme, editorFillHeight } from "@/lib/editor-theme";
 
 const extensions = [
   lineNumbers(),
@@ -39,6 +39,7 @@ const extensions = [
   syntaxHighlighting(classHighlighter),
   pwrAutocomplete,
   codeEditorTheme,
+  editorFillHeight,
 ];
 
 export function PwrEditor({

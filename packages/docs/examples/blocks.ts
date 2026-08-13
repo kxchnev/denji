@@ -24,6 +24,14 @@ export const blocks: ExampleData[] = [
     api: `architecture()\n  .app("cdn", "CDN")\n  .app("waf", "WAF", { hint: { rightOf: "cdn" } })\n  .container("edge", "Edge", {\n    kind: "group",\n    children: ["cdn", "waf"],\n    texts: [\n      { text: "only in prod" },\n      { text: "terraform-managed" },\n      { text: "owner: platform", corner: "bottomRight" },\n    ],\n  })\n  .build();`,
   },
   {
+    id: "invisible",
+    title: "Invisible wrapper",
+    description:
+      "A container with an empty label and no icon or link has nothing to put in a title band, so it reserves none. Add a transparent frame and zero padding and the wrapper vanishes entirely — it groups its children for the layout, and gives hints something to anchor to, without leaving a trace in the picture.",
+    dsl: `architecture\n  group pair "" @fill(transparent) @stroke(transparent) @padding(0) {\n    service orders "Orders" {\n      app oapi "API"\n    }\n    service pay "Payments" @leftOf(orders) {\n      app papi "API"\n    }\n  }\n  app worker "Payouts" @below(pair)\n  oapi -> worker\n  papi -> worker`,
+    api: `architecture()\n  .app("oapi", "API")\n  .container("orders", "Orders", { kind: "service", children: ["oapi"] })\n  .app("papi", "API")\n  .container("pay", "Payments", { kind: "service", children: ["papi"], hint: { leftOf: "orders" } })\n  .container("pair", "", {\n    kind: "group",\n    children: ["orders", "pay"],\n    styleProps: { fill: "transparent", stroke: "transparent" },\n    padding: 0,\n  })\n  .app("worker", "Payouts", { hint: { below: "pair" } })\n  .connect("oapi", "worker")\n  .connect("papi", "worker")\n  .build();`,
+  },
+  {
     id: "nested",
     title: "Nested",
     description: "Containers nest freely — a group holding a service holding shapes.",

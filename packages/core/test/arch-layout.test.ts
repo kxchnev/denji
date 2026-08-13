@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { architecture } from "../src/model/arch-builder.js";
-import { layoutArchitecture } from "../src/layout/arch/index.js";
+import { DEFAULT_HEADER_H, layoutArchitecture } from "../src/layout/arch/index.js";
 import {
   CAP_RY,
   labelFitWidth,
@@ -808,6 +808,39 @@ describe("one size for every leaf", () => {
     layoutArchitecture(d);
     expect(rectOf(d, "a").height).toBe(rectOf(d, "b").height);
     expect(rectOf(d, "a").width).toBe(rectOf(d, "b").width);
+  });
+});
+
+describe("headerless containers", () => {
+  const laid = (src: string): ArchDiagram => {
+    const d = parse(src);
+    layoutArchitecture(d, { onWarn: () => {} });
+    return d;
+  };
+  const wrap = (decl: string): string =>
+    `architecture\n  ${decl} {\n    app a "A"\n    app b "B"\n    a -> b\n  }\n`;
+
+  it("reserves no title band when there is nothing to draw in one", () => {
+    // No label, no padding: the wrapper's silhouette is exactly its children.
+    const d = laid(wrap('group g "" @padding(0)'));
+    const g = rectOf(d, "g");
+    const a = rectOf(d, "a");
+    const b = rectOf(d, "b");
+    expect(g.y).toBe(a.y);
+    expect(g.x).toBe(Math.min(a.x, b.x));
+    expect(g.height).toBe(Math.max(a.y + a.height, b.y + b.height) - g.y);
+    expect(g.width).toBe(Math.max(a.x + a.width, b.x + b.width) - g.x);
+  });
+
+  it("keeps the band as soon as the header has anything to say", () => {
+    for (const decl of [
+      'group g "G" @padding(0)',
+      'group g "" @padding(0) @icon(react)',
+      'group g "" @padding(0) @link(https://x.com)',
+    ]) {
+      const d = laid(wrap(decl));
+      expect(rectOf(d, "a").y - rectOf(d, "g").y).toBe(DEFAULT_HEADER_H);
+    }
   });
 });
 

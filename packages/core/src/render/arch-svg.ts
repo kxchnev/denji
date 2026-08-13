@@ -31,7 +31,7 @@ import {
   NOTE_LINE_H,
   wrapLabel,
 } from "../layout/arch/measure.js";
-import { DEFAULT_HEADER_H } from "../layout/arch/index.js";
+import { DEFAULT_HEADER_H, headerBand } from "../layout/arch/index.js";
 import { linkBadgeRect } from "../interact.js";
 import { linkChrome, resolveTheme, type Theme } from "./theme.js";
 
@@ -646,28 +646,39 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
   const resolved = styled.resolved(n.kind, n.styleRefs, n.styleProps);
   const radius = resolved.radius ?? 0;
 
+  // The same band the layout reserved — zero for a container with nothing to
+  // say in it, which then draws no band and no title either.
+  const hh = headerBand(n, headerH);
   const mark = styled.useIcon(n.icon);
   const titleX = r.x + 12 + (mark ? ICON_SIZE + ICON_GAP : 0);
   // Both kinds hang their title on the middle of the same band, so a mark and
   // its text line up the same way whichever one you used.
-  const titleY = r.y + headerH / 2;
+  const titleY = r.y + hh / 2;
   const headerIcon = mark
-    ? iconMarkup(mark, r.x + 12, r.y + (headerH - ICON_SIZE) / 2, ICON_SIZE)
+    ? iconMarkup(mark, r.x + 12, r.y + (hh - ICON_SIZE) / 2, ICON_SIZE)
     : "";
+  const title =
+    hh === 0
+      ? ""
+      : n.kind === "service"
+        ? `<text class="pwr-ht" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}">${esc(n.label)}</text>`
+        : `<text class="pwr-t" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}" text-anchor="start">${esc(n.label)}</text>`;
 
   if (n.kind === "service") {
     // The header band repeats the body's top corners, so its path is built from
     // the same radius rather than a baked-in 10.
     const k = Math.min(radius, r.width / 2);
     const header =
-      `<path class="pwr-h" d="M ${r.x},${r.y + k} q 0,${-k} ${k},${-k} H ${r.x + r.width - k} ` +
-      `q ${k},0 ${k},${k} V ${r.y + headerH} H ${r.x} Z"/>`;
+      hh === 0
+        ? ""
+        : `<path class="pwr-h" d="M ${r.x},${r.y + k} q 0,${-k} ${k},${-k} H ${r.x + r.width - k} ` +
+          `q ${k},0 ${k},${k} V ${r.y + hh} H ${r.x} Z"/>`;
     return (
       `<g class="pwr-n ${cls}">` +
       `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
       header +
       headerIcon +
-      `<text class="pwr-ht" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}">${esc(n.label)}</text>` +
+      title +
       `</g>`
     );
   }
@@ -676,8 +687,8 @@ function renderContainer(n: Container, headerH: number, styled: StyleModel): str
     `<g class="pwr-n ${cls}">` +
     `<rect class="pwr-b" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${radius}" ry="${radius}"/>` +
     headerIcon +
-    `<text class="pwr-t" x="${titleX}" y="${titleY}" dominant-baseline="central" font-size="${FONT_SIZE}" text-anchor="start">${esc(n.label)}</text>` +
-    CORNERS.map((c) => cornerStack(noteLines(n.texts, c), c, r, headerH)).join("") +
+    title +
+    CORNERS.map((c) => cornerStack(noteLines(n.texts, c), c, r, hh)).join("") +
     `</g>`
   );
 }

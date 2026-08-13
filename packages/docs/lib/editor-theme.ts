@@ -5,10 +5,11 @@ import { EditorView } from "@codemirror/view";
  * playground and the read-only example viewers alike. Token colours come from
  * globals.css via `syntaxHighlighting(classHighlighter)`; every value here is
  * a CSS variable, so the editor follows the site's `.dark` class with no JS.
+ * Height is deliberately not part of this theme — the two consumers disagree
+ * (`editorFillHeight` / `editorAutoHeight` below), so each picks its own.
  */
 export const codeEditorTheme = EditorView.theme({
   "&": {
-    height: "100%",
     fontSize: "0.875rem",
     backgroundColor: "hsl(var(--code-bg))",
     color: "hsl(var(--code-fg))",
@@ -21,10 +22,11 @@ export const codeEditorTheme = EditorView.theme({
     // needs its own explicit background: macOS trackpad rubber-band overscroll
     // paints past the content using this element's own background, and an
     // unset (transparent) one falls through to black instead of the theme.
-    // (No `overscroll-behavior` here: in the read-only examples this element
-    // has no scroll room of its own — the wrapping div scrolls instead — and
-    // `contain` on a non-scrolling element blocks the wheel event from
-    // chaining to that wrapper, breaking scroll entirely.)
+    // (No `overscroll-behavior` here: most read-only examples fit under their
+    // height cap, leaving this scroller a scroll container with no scroll room,
+    // and `contain` on a scroll container that cannot scroll still cuts the
+    // scroll chain in Chromium — the page would stop wheel-scrolling whenever
+    // the pointer is over a short example.)
     backgroundColor: "hsl(var(--code-bg))",
     // Handle only, no track. Whenever the system shows classic scrollbars — a
     // mouse plugged in, or "Show scroll bars: always" — the default track paints
@@ -76,4 +78,27 @@ export const codeEditorTheme = EditorView.theme({
     outline: "1px solid hsl(var(--border))",
   },
   ".cm-nonmatchingBracket": { color: "hsl(var(--tok-invalid))" },
+});
+
+/** The examples' height cap — `editorAutoHeight` stops growing here, and
+ *  CodeBlock's SSR min-height floor is clamped to the same value. */
+export const CODE_MAX_HEIGHT = "24rem";
+
+// Height policy lives with each consumer, not in the shared theme: the
+// playground fills its pane, the examples hug their content.
+
+/** Playground: fill the pane. The `min-h-0` chain in app/playground/page.tsx
+ *  ends at this rule. */
+export const editorFillHeight = EditorView.theme({
+  "&": { height: "100%" },
+});
+
+/** Read-only examples: grow with the document, scroll inside past the cap.
+ *  The documented CodeMirror pattern (codemirror.net/examples/styling/) —
+ *  `max-height` on the editor plus `overflow: auto` on the scroller. The base
+ *  theme leaves the editor at auto height and the scroller is a shrinkable
+ *  flex item, so these two rules are the whole story. */
+export const editorAutoHeight = EditorView.theme({
+  "&": { maxHeight: CODE_MAX_HEIGHT },
+  ".cm-scroller": { overflow: "auto" },
 });

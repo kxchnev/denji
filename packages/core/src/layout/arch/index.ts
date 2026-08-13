@@ -55,6 +55,19 @@ const DEFAULT_PADDING = 24;
 export const DEFAULT_HEADER_H = 28;
 const DEFAULT_MARGIN = 24;
 
+/**
+ * The height of `n`'s title band. A container with nothing to put there — no
+ * label, no mark, no link button — reserves no band at all: an empty strip only
+ * reads as a margin nobody asked for, and dropping it is what lets a
+ * transparent label-less group wrap siblings without leaving a trace in the
+ * geometry. The layout and the renderer both size the band through here, so
+ * "no band reserved" and "no band drawn" cannot drift apart.
+ */
+export const headerBand = (
+  n: { label: string; icon?: string; link?: string },
+  headerH: number,
+): number => (n.label === "" && !n.icon && !n.link ? 0 : headerH);
+
 interface Local {
   x: number;
   y: number;
@@ -157,8 +170,9 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
       ceilToGrid(Math.max(contentW + pad * 2, labelW, bands.width)),
       own.width ?? 0,
     );
-    const height = Math.max(contentH + pad * 2 + headerH + bands.top + bands.bottom, own.height ?? 0);
-    innerOffset.set(id, { x: pad, y: headerH + bands.top + pad });
+    const hh = headerBand(n, headerH);
+    const height = Math.max(contentH + pad * 2 + hh + bands.top + bands.bottom, own.height ?? 0);
+    innerOffset.set(id, { x: pad, y: hh + bands.top + pad });
     const size = { width, height };
     sizeMap.set(id, size);
     return size;

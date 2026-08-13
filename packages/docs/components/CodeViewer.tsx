@@ -7,7 +7,7 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { classHighlighter } from "@lezer/highlight";
 import { pwrLanguage } from "@/lib/pwr-language";
 import { tsLanguage } from "@/lib/ts-language";
-import { codeEditorTheme } from "@/lib/editor-theme";
+import { codeEditorTheme, editorAutoHeight } from "@/lib/editor-theme";
 import type { CodeLang } from "@/lib/code-lang";
 
 /**
@@ -16,7 +16,17 @@ import type { CodeLang } from "@/lib/code-lang";
  * `code`/`lang` are fixed for the lifetime of one example, so the editor is
  * built once and never needs a controlled-value sync like PwrEditor's.
  */
-export function CodeViewer({ code, lang, className }: { code: string; lang: CodeLang; className?: string }) {
+export function CodeViewer({
+  code,
+  lang,
+  className,
+  style,
+}: {
+  code: string;
+  lang: CodeLang;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,6 +42,7 @@ export function CodeViewer({ code, lang, className }: { code: string; lang: Code
           EditorState.readOnly.of(true),
           EditorView.editable.of(false),
           codeEditorTheme,
+          editorAutoHeight,
         ],
       }),
     });
@@ -39,5 +50,5 @@ export function CodeViewer({ code, lang, className }: { code: string; lang: Code
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={host} className={className} />;
+  return <div ref={host} className={className} style={style} />;
 }

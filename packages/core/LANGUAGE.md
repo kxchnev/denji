@@ -106,6 +106,19 @@ service|group  <id>  ["<label>"]  <directives…>  {
 - Nesting is unlimited. A container hugs its content: `width`/`height` on it act
   only as a floor.
 - Connections may be written inside a container body, but they are always global.
+- A container with an **empty label** and no `@icon` or `@link` has nothing to
+  put in a title band, so it reserves none. Combined with a transparent frame
+  and zero padding that is the **invisible wrapper** — it groups its children
+  for the layout (and gives hints something to anchor to) without leaving any
+  trace in the picture:
+
+  ```
+  group pair "" @fill(transparent) @stroke(transparent) @padding(0) {
+    service orders "Orders" { … }
+    service pay "Payments" { … }
+  }
+  app worker "Payouts" @below(pair)
+  ```
 
 ### Free text in a group
 
