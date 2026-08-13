@@ -67,7 +67,7 @@ Conventions:
   Exception: a running `npm run docs` keeps its own `tsc --watch` and rebuilds
   core by itself; the extension still needs the manual build.
 - Anything an interactive viewer needs to know about a laid-out diagram —
-  hit-testing, which nodes a drag has to pin, the drag snap — lives in
+  hit-testing, what a drop means, the drag snap — lives in
   `packages/core/src/interact.ts`, because there are two viewers. Do not
   re-derive it in a component.
 

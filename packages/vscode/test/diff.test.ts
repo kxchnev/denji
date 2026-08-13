@@ -2,13 +2,13 @@
  * What a drop turns into, on the host side.
  *
  * The point of the line diff is that a drag must not disturb anything but the
- * coordinates: replacing the whole document would work, and would also move the
- * author's cursor and collapse their folded regions. These tests pin the
- * property that makes the narrow edit safe — `setNodePositions` never changes
- * how many lines a document has.
+ * declaration it rewrote: replacing the whole document would work, and would
+ * also move the author's cursor and collapse their folded regions. These tests
+ * pin the property that makes the narrow edit safe — `setNodeRelation` never
+ * changes how many lines a document has.
  */
 import assert from "node:assert/strict";
-import { setNodePositions } from "power";
+import { setNodeRelation } from "power";
 import { changedLines } from "../src/diff.js";
 
 const tests: Array<[string, () => void]> = [];
@@ -25,27 +25,22 @@ const SOURCE = `architecture
 `;
 
 test("reports only the lines a move rewrote", () => {
-  const after = setNodePositions(SOURCE, [{ id: "client", at: { x: 40, y: 200 } }])!;
+  const after = setNodeRelation(SOURCE, "client", "rightOf", "orders")!;
   const lines = changedLines(SOURCE, after);
   assert.ok(lines);
   assert.equal(lines.length, 1);
   assert.equal(lines[0]![0], 5, "the line `client` is declared on, 0-based");
-  assert.equal(lines[0]![1], '  app client "Client" @at(40, 200)');
+  assert.equal(lines[0]![1], '  app client "Client" @rightOf(orders)');
 });
 
-test("reports one line per node when a drag freezes the whole document", () => {
-  const moves = [
-    { id: "api", at: { x: 0, y: 0 } },
-    { id: "db", at: { x: 0, y: 80 } },
-    { id: "orders", at: { x: 0, y: 0 } },
-    { id: "client", at: { x: 40, y: 200 } },
-  ];
-  const after = setNodePositions(SOURCE, moves)!;
+test("reports one line per edit, and nothing for the lines between", () => {
+  let after = setNodeRelation(SOURCE, "db", "rightOf", "api")!;
+  after = setNodeRelation(after, "client", "rightOf", "orders")!;
   const lines = changedLines(SOURCE, after);
   assert.ok(lines);
   assert.deepEqual(
     lines.map(([i]) => i),
-    [1, 2, 3, 5],
+    [3, 5],
   );
   // The lines the drag did not touch are not in the edit at all — which is what
   // keeps the cursor and the folded regions where the author left them.
@@ -54,12 +49,12 @@ test("reports one line per node when a drag freezes the whole document", () => {
 
 test("hands back a CRLF line without its carriage return", () => {
   const crlf = SOURCE.replace(/\n/g, "\r\n");
-  const after = setNodePositions(crlf, [{ id: "client", at: { x: 8, y: 8 } }])!;
+  const after = setNodeRelation(crlf, "client", "rightOf", "orders")!;
   const lines = changedLines(crlf, after);
   assert.ok(lines);
   assert.equal(lines.length, 1);
   assert.ok(!lines[0]![1].includes("\r"), "a TextLine range stops before the break");
-  assert.equal(lines[0]![1], '  app client "Client" @at(8, 8)');
+  assert.equal(lines[0]![1], '  app client "Client" @rightOf(orders)');
 });
 
 test("gives up — asking for a whole-document replace — if the line count moved", () => {
@@ -67,9 +62,9 @@ test("gives up — asking for a whole-document replace — if the line count mov
 });
 
 test("finds nothing to do when the move changed nothing", () => {
-  const pinned = setNodePositions(SOURCE, [{ id: "client", at: { x: 40, y: 200 } }])!;
-  const again = setNodePositions(pinned, [{ id: "client", at: { x: 40, y: 200 } }])!;
-  assert.deepEqual(changedLines(pinned, again), []);
+  const moved = setNodeRelation(SOURCE, "client", "rightOf", "orders")!;
+  const again = setNodeRelation(moved, "client", "rightOf", "orders")!;
+  assert.deepEqual(changedLines(moved, again), []);
 });
 
 let failures = 0;

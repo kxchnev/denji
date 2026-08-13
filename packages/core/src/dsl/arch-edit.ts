@@ -13,9 +13,7 @@
  * grows across lines, this module needs a real parse with source spans instead.
  */
 
-import type { Point } from "../model/geometry.js";
-
-/** A line that declares a node — everything that can carry `@at`. */
+/** A line that declares a node — everything that can carry a placement hint. */
 const DECLARATION = /^(\s*)(app|database|queue|rect|service|group)(\s+)([A-Za-z0-9_]+)(.*)$/;
 
 /** Where something is declared, 1-based, with `col`..`endCol` over the id itself. */
@@ -41,7 +39,7 @@ const DECLARED = "app|database|queue|rect|service|group|style|icon";
  *
  * Lives here rather than in `check.ts` because it is the same "a declaration is
  * one line, and this is what its head looks like" assumption as {@link
- * setNodePosition}: when one has to change, so does the other. Callers wanting
+ * setNodeRelation}: when one has to change, so does the other. Callers wanting
  * to put a cursor or a squiggle on the id get the columns from here for the
  * same reason — the id's offset is a fact about the declaration's shape.
  */
@@ -84,55 +82,21 @@ const directive = (names: string): RegExp =>
 
 /**
  * The node's *own* placement, which a new one replaces. Other nodes pointing
- * *at* this one are untouched — that is how a moved node keeps taking its
- * followers along.
+ * *at* this one are untouched — that is how a moved node keeps taking whatever
+ * was anchored to it along.
  */
-const PLACEMENT = (): RegExp => directive("at|rightOf|leftOf|above|below");
-/**
- * How the placement is refined. Exact coordinates make both meaningless, so
- * pinning drops them; a relation does not, so re-aiming one keeps them.
- */
-const REFINEMENTS = (): RegExp => directive("align|gap");
+const PLACEMENT = (): RegExp => directive("rightOf|leftOf|above|below");
 
 /**
- * Several nodes at once. `null` when not one of them could be found.
- */
-export function setNodePositions(
-  src: string,
-  entries: ReadonlyArray<{ id: string; at: Point }>,
-): string | null {
-  let out = src;
-  let touched = false;
-  for (const e of entries) {
-    const next = setNodePosition(out, e.id, e.at);
-    if (next !== null) {
-      out = next;
-      touched = true;
-    }
-  }
-  return touched ? out : null;
-}
-
-/**
- * Pin `id` to `at`, returning the new source — or `null` if the document has no
- * such declaration, which is all a caller racing against an edit can do about it.
- *
- * Any coordinates already on the node are replaced, its own relative hints are
- * dropped, and everything else on the line (label, `@style`, `@icon`, inline
- * properties) is kept in place.
- */
-export function setNodePosition(src: string, id: string, at: Point): string | null {
-  return rewrite(src, id, `@at(${Math.round(at.x)}, ${Math.round(at.y)})`, true);
-}
-
-/**
- * Say where `id` sits relative to a sibling — what a drag writes now that the
- * layout arranges everything else.
+ * Say where `id` sits relative to a sibling — what a drag writes.
  *
  * The same directives a person would have typed, so the file stays a file
  * someone can read and keep editing, and the node keeps being arranged rather
- * than being nailed to the spot the pointer happened to leave it. Any
- * coordinates on the node go: it asked to be placed by relation instead.
+ * than being nailed to the spot the pointer happened to leave it. `@gap` on the
+ * line stays: re-aiming a relation does not answer how far away it should sit.
+ *
+ * `null` when the document has no such declaration, which is all a caller racing
+ * against an edit can do about it.
  */
 export function setNodeRelation(
   src: string,
@@ -140,19 +104,19 @@ export function setNodeRelation(
   side: "rightOf" | "leftOf" | "above" | "below",
   anchor: string,
 ): string | null {
-  return rewrite(src, id, `@${side}(${anchor})`, false);
+  return rewrite(src, id, `@${side}(${anchor})`);
 }
 
 /**
  * Replace a node's own placement directives with `placement`, keeping the rest
- * of its declaration — label, `@style`, `@icon`, inline properties, the opening
- * brace — exactly where it was.
+ * of its declaration — label, `@gap`, `@style`, `@icon`, inline properties, the
+ * opening brace — exactly where it was.
  *
  * Never adds or removes a line, which is what lets an editor turn the result
  * into a minimal diff and leave the cursor, the selection and any folded blocks
  * alone.
  */
-function rewrite(src: string, id: string, placement: string, exact: boolean): string | null {
+function rewrite(src: string, id: string, placement: string): string | null {
   // Split on "\n" and keep any "\r" as part of the line, so a CRLF document does
   // not silently come back with every line ending rewritten.
   const lines = src.split("\n");
@@ -173,9 +137,10 @@ function rewrite(src: string, id: string, placement: string, exact: boolean): st
 
     const label = tail.match(LABEL);
     const labelPart = label ? ` ${label[1]}` : "";
-    let rest = (label ? tail.slice(label[0].length) : tail).replace(PLACEMENT(), " ");
-    if (exact) rest = rest.replace(REFINEMENTS(), " ");
-    rest = rest.replace(/\s+/g, " ").trim();
+    const rest = (label ? tail.slice(label[0].length) : tail)
+      .replace(PLACEMENT(), " ")
+      .replace(/\s+/g, " ")
+      .trim();
 
     const directives = rest === "" ? placement : `${placement} ${rest}`;
     lines[i] = `${m[1]}${m[2]}${m[3]}${id}${labelPart} ${directives}${suffix}${eol}`;

@@ -16,9 +16,12 @@ import type { Point, Rect } from "./model/geometry.js";
 import type { ArchDiagram, ArchNode } from "./model/arch.js";
 
 /**
- * A drop lands on the same lattice the layout sizes boxes on, so a dragged node
- * stays aligned with the ones still placed by hints, and the coordinate written
- * into the document stays a round number.
+ * Quantize a drag to the same lattice the layout sizes boxes on.
+ *
+ * Nothing about this reaches the document — a drop is written as a relation. It
+ * is the ghost under the pointer that wants it: a node that slides in whole steps
+ * looks placed rather than adrift, and the sibling the drop would attach to stops
+ * flickering between two answers when the pointer wavers a pixel.
  */
 export const snapToGrid = (v: number): number => Math.round(v / GRID) * GRID;
 
@@ -87,8 +90,7 @@ export function relationFor(
   }
   if (!best) return null;
   // Nothing changed: the node already says exactly this.
-  const h = moving.hint;
-  if (h && !h.at && h[best.side] === best.anchor) return null;
+  if (moving.hint?.[best.side] === best.anchor) return null;
   return best;
 }
 

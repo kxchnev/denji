@@ -26,35 +26,11 @@ export const layout: ExampleData[] = [
     api: `architecture()\n  .app("edge", "Edge")\n  .app("one", "One")\n  .app("two", "Two")\n  .app("three", "Three")\n  .database("store", "Store")\n  .connect("edge", "one")\n  .connect("edge", "two")\n  .connect("edge", "three")\n  .connect("one", "store")\n  .connect("two", "store")\n  .connect("three", "store")\n  .connect("edge", "store")\n  .build();`,
   },
   {
-    id: "align",
-    title: "align",
-    description:
-      "A node placed against a pinned one centers on it by default; `@align(start|end)` moves it to an edge instead. Only pinned anchors have an edge to align to — everywhere else the layout decides the cross axis from the connections.",
-    dsl: `architecture\n  database wide "Wide Data Store Cluster" @at(0, 0)\n  app top "start" @below(wide) @align(start)\n  app bottom "end" @rightOf(wide) @align(end)`,
-    api: `architecture()\n  .database("wide", "Wide Data Store Cluster", { hint: { at: { x: 0, y: 0 } } })\n  .app("top", "start", { hint: { below: "wide", align: "start" } })\n  .app("bottom", "end", { hint: { rightOf: "wide", align: "end" } })\n  .build();`,
-  },
-  {
     id: "scopes",
     title: "every container is its own drawing",
     description:
       "A container is laid out from the connections between its own children, and then placed among its siblings by the connections that cross its border. So a connection between two services' innards is, from the outside, a reason for those services to sit near each other.",
     dsl: `architecture\n  app gw "API Gateway"\n  service orders "Orders" {\n    app oapi "Orders API"\n    database odb "Postgres"\n    oapi -> odb\n  }\n  service pay "Payments" {\n    app papi "Payments API"\n    queue pq "Charges"\n    papi -> pq\n  }\n  queue bus "Event Bus"\n\n  gw -> oapi\n  gw -> papi\n  pq -> bus\n  odb -> bus`,
     api: `architecture()\n  .app("gw", "API Gateway")\n  .app("oapi", "Orders API")\n  .database("odb", "Postgres")\n  .container("orders", "Orders", { kind: "service", children: ["oapi", "odb"] })\n  .app("papi", "Payments API")\n  .queue("pq", "Charges")\n  .container("pay", "Payments", { kind: "service", children: ["papi", "pq"] })\n  .queue("bus", "Event Bus")\n  .connect("oapi", "odb")\n  .connect("papi", "pq")\n  .connect("gw", "oapi")\n  .connect("gw", "papi")\n  .connect("pq", "bus")\n  .connect("odb", "bus")\n  .build();`,
-  },
-  {
-    id: "at",
-    title: "@at",
-    description:
-      "The escape hatch, for a picture whose shape is not in the graph — a rack, a floor plan, a map. `@at(x, y)` sets a node's top-left corner in the coordinate space of its own scope, so moving a container carries its children along untouched, and a scope that has coordinates in it keeps its origin instead of hugging its content. Dragging does not write this: a drop is recorded as a relation, so the node keeps being arranged.",
-    dsl: `architecture\n  app a "A" @at(0, 0)\n  database b "B" @at(0, 120)\n  service edge "Edge" @at(240, 40) {\n    app cdn "CDN" @at(0, 0)\n    app lb "LB" @at(0, 100)\n  }\n  a -> cdn\n  b -> lb`,
-    api: `architecture()\n  .app("a", "A", { hint: { at: { x: 0, y: 0 } } })\n  .database("b", "B", { hint: { at: { x: 0, y: 120 } } })\n  .app("cdn", "CDN", { hint: { at: { x: 0, y: 0 } } })\n  .app("lb", "LB", { hint: { at: { x: 0, y: 100 } } })\n  .container("edge", "Edge", { kind: "service", children: ["cdn", "lb"], hint: { at: { x: 240, y: 40 } } })\n  .connect("a", "cdn")\n  .connect("b", "lb")\n  .build();`,
-  },
-  {
-    id: "at-and-hints",
-    title: "@at with hints",
-    description:
-      "The two mix. Coordinates beat every relation written on the same node, but other nodes may still anchor to it and are placed against it exactly — so one part of a diagram can be drawn by hand while everything else keeps arranging itself around it, stepping clear rather than landing on it.",
-    dsl: `architecture\n  app api "API" @at(0, 0)\n  database db "Postgres" @below(api)\n  queue bus "Events" @rightOf(api)\n  api -> db\n  api -> bus`,
-    api: `architecture()\n  .app("api", "API", { hint: { at: { x: 0, y: 0 } } })\n  .database("db", "Postgres", { hint: { below: "api" } })\n  .queue("bus", "Events", { hint: { rightOf: "api" } })\n  .connect("api", "db")\n  .connect("api", "bus")\n  .build();`,
   },
 ];

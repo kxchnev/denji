@@ -78,12 +78,12 @@ describe("architecture DSL", () => {
       architecture
       app a "A"
       database b "B" @below(a) @gap(20)
-      service s "S" @rightOf(a) @align(center) {
+      service s "S" @rightOf(a) {
         app c "C"
       }
     `);
     expect(shape(d, "b").hint).toMatchObject({ below: "a", gap: 20 });
-    expect(container(d, "s").hint).toMatchObject({ rightOf: "a", align: "center" });
+    expect(container(d, "s").hint).toMatchObject({ rightOf: "a" });
   });
 
   it("reads spacing settings off the architecture header", () => {
@@ -272,7 +272,7 @@ describe("free text inside a group", () => {
   });
 });
 
-describe("exact coordinates", () => {
+describe("no coordinates in the language", () => {
   const reason = (src: string): string => {
     try {
       parseArchitecture(src);
@@ -282,33 +282,12 @@ describe("exact coordinates", () => {
     throw new Error("expected throw");
   };
 
-  it("reads @at on shapes and containers, negatives included", () => {
-    const d = parseArchitecture(
-      'architecture\napp a "A" @at(12, -8)\nservice s "S" @at(0, 40.5) {\napp b "B"\n}',
-    );
-    expect(shape(d, "a").hint?.at).toEqual({ x: 12, y: -8 });
-    expect(container(d, "s").hint?.at).toEqual({ x: 0, y: 40.5 });
-  });
-
-  it("keeps a relation written alongside it — the layout is what picks a winner", () => {
-    expect(shape(parseArchitecture('architecture\napp a "A"\napp b "B" @rightOf(a) @at(1, 2)'), "b").hint)
-      .toEqual({ rightOf: "a", at: { x: 1, y: 2 } });
-  });
-
-  it("insists on exactly two numbers", () => {
-    for (const arg of ["1", "1, 2, 3", "", "a, b", "1, "]) {
-      expect(reason(`architecture\napp a "A" @at(${arg})`)).toContain("@at expects two numbers");
-    }
-  });
-
-  it("is a placement directive, so it is not allowed off a node", () => {
-    expect(reason('architecture @at(0, 0)')).toContain("not allowed on the architecture line");
-    expect(reason('architecture\napp a "A"\napp b "B"\na -> b @at(0, 0)')).toContain(
-      "not allowed on a connection",
-    );
-    expect(reason('architecture\ngroup g "G" {\ntext "x" @at(0, 0)\napp a "A"\n}')).toContain(
-      "not allowed on a text",
-    );
+  it("has no @at, and says so the way it says it about any other typo", () => {
+    // Placement is a constraint the engine satisfies, never a number the author
+    // writes, so `@at` is not a removed feature with a tombstone — it is a word
+    // the language does not have.
+    expect(reason('architecture\napp a "A" @at(12, -8)')).toContain("unknown directive @at");
+    expect(reason('architecture\napp a "A" @align(start)')).toContain("unknown directive @align");
   });
 });
 

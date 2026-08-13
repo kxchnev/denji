@@ -85,8 +85,8 @@ npx tsx src/cli.ts render diagram.pwr -o diagram.svg
 - **Связи:** `<id> <op> <id> [: label]`, где op ∈ `->` (стрелка) · `<-` ·
   `<->` (обе) · `--` (линия) · `-.->` / `-.-` (пунктир).
 - **@-хинты** раскладки (на фигуре или контейнере): `@rightOf(id)` ·
-  `@leftOf(id)` · `@above(id)` · `@below(id)` · `@gap(n)` ·
-  `@align(start|center|end)`.
+  `@leftOf(id)` · `@above(id)` · `@below(id)` · `@gap(n)`. Это ограничения для
+  движка, а не координаты — записать позицию нечем.
 - **@-настройки** расстояний (на `architecture` или контейнере):
   `@spacing(n)` · `@spacingX(n)` · `@spacingY(n)` · `@padding(n)` (только
   контейнер) · `@margin(n)` (только `architecture`).
@@ -350,7 +350,7 @@ power icon <slug> [-n name]
 `power watch <input.pwr>` поднимает живое превью в браузере. В VS Code есть
 расширение — [`packages/vscode`](../vscode/README.md): превью рядом с файлом,
 обновление по мере набора (без сохранения) и драг узлов, который сам вписывает
-`@at` в исходник.
+в исходник, рядом с кем узел оказался.
 
 ## Лицензия
 

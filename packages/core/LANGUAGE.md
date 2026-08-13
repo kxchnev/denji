@@ -16,7 +16,6 @@ it cannot see. Run it before handing a diagram to anyone.
 | `hint-cycle` | warning | hints contradict each other; the relations that close the cycle are dropped |
 | `unconnected-node` | warning | a shape with no connections, in a diagram that otherwise has them |
 | `overlapping-siblings` | warning | two siblings drawn on top of each other |
-| `at-overrides-hint` | warning | a node has `@at` and a relation; the relation does nothing |
 | `extreme-aspect-ratio` | warning | the drawing is a strip more than 4:1 — usually a missing container |
 
 `--json` prints `{ file, errors, warnings, diagnostics }`, where each diagnostic
@@ -217,7 +216,7 @@ Where the graph leaves a choice, say what you want and the layout obeys it:
 
 ```
 app b "B" @rightOf(a)
-app c "C" @below(a) @align(start)
+app c "C" @below(a)
 ```
 
 - `@rightOf` / `@leftOf` mean **the same layer, in that order**.
@@ -226,8 +225,6 @@ app c "C" @below(a) @align(start)
   mean what they say on the page.
 - If you write both `@rightOf` and `@leftOf`, **`rightOf` wins**; with both
   `@below` and `@above`, **`below` wins**.
-- `@align(start|center|end)` only applies to a node placed next to a pinned one
-  (below). Default `center`.
 - Contradicting yourself (`a @rightOf(b)` and `b @rightOf(a)`) does not fail: the
   relations that close the cycle are dropped and `power check` reports
   `hint-cycle`.
@@ -235,35 +232,12 @@ app c "C" @below(a) @align(start)
 A node with no hints is not a problem and never was one to report — it is the
 ordinary case.
 
-### Exact coordinates
-
-```
-app api "API" @at(0, 0)
-service edge "Edge" @at(320, 80) {
-  app cdn "CDN" @at(0, 0)
-}
-```
-
-- `@at(x, y)` puts the node's **top-left corner** at those coordinates, in the
-  coordinate space of **its own scope**: its parent container's inner area, or the
-  diagram itself at the top level. So moving a container moves its children with it
-  and leaves their coordinates alone.
-- A scope that has coordinates in it **keeps its origin**: it is measured from
-  (0, 0) rather than packed against its leftmost node, so moving one node moves
-  nothing else.
-- Coordinates may be negative or fractional. At the top level the drawing simply
-  extends to hold them. Inside a container the box has to contain its children, so
-  content reaching before the container's corner pushes the rest of that scope over.
-- `@at` **beats every relation on the same node** — `@rightOf`, `@align` and
-  `@gap` there do nothing, and `power check` reports `at-overrides-hint`.
-- Other nodes may still point **at** a pinned node, and they are placed against
-  it, exactly and in order. That is what lets one part of a diagram be drawn by
-  hand while the rest keeps arranging itself.
-- Everything the layout arranges steps clear of the pinned part rather than
-  landing on it.
-
-Reach for `@at` when a picture has to match a floor plan, a rack, a map — a shape
-that is not in the graph. For everything else, the graph already knows.
+**There is no way to write a coordinate**, and no escape hatch that takes one.
+A position is only true of the diagram you had when you measured it: add a node,
+rename one, and the arithmetic that fitted is a hole. Everything you can say
+about placement is a constraint the engine has to satisfy, which stays true as
+the picture grows. If a drawing comes out wrong, the fix is a hint, a container,
+or a connection that was never drawn — not a number.
 
 ### Dragging
 
@@ -288,7 +262,6 @@ either way; there is no hidden layout state.
 | `@padding(n)` | — | ✅ | — | border to content |
 | `@margin(n)` | ✅ | — | — | whitespace around the whole drawing |
 | `@gap(n)` | — | ✅ | ✅ | this node's distance to **its own anchor** |
-| `@at(x, y)` | — | ✅ | ✅ | exact position in the node's own scope (§5) |
 
 A container's spacing governs its whole subtree until another container
 overrides it. Defaults: gap 40, padding 24, margin 24.
@@ -433,7 +406,7 @@ architecture
 | Context | Allowed |
 |---|---|
 | `architecture` line | `@spacing` `@spacingX` `@spacingY` `@margin` `@theme` |
-| shape | `@rightOf` `@leftOf` `@above` `@below` `@gap` `@align` `@style` `@icon` `@link` + style properties |
+| shape | `@rightOf` `@leftOf` `@above` `@below` `@gap` `@style` `@icon` `@link` + style properties |
 | container | the shape set, plus `@spacing` `@spacingX` `@spacingY` `@padding` |
 | connection | `@style` + style properties |
 | `text` line | `@corner` |

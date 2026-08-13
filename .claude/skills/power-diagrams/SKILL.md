@@ -7,10 +7,10 @@ description: Write and edit architecture diagrams in the .pwr DSL (power). Use w
 
 `power` draws free-form architecture diagrams — shapes, containers and
 connections. **Declare the boxes, wire them up, and stop.** The layout is
-computed from the connections, so a diagram that is wired up is finished; hints
-exist to overrule it for one pair, and exact coordinates (`@at`) are the escape
-hatch for a picture whose shape is not in the graph at all — a rack, a floor
-plan, a map.
+computed from the connections, so a diagram that is wired up is finished, and
+hints exist to overrule it for one pair. **There is no way to write a
+coordinate** — no escape hatch, by design: a position is only true of the diagram
+you measured it on.
 
 ## The loop
 
@@ -110,26 +110,13 @@ bottomLeft|bottomRight)` writes a free line in that corner.
   container down with `@gap(n)` on it. `check` has no rule for that; you will
   only see it in the rendered image.
 
-## When the file already has `@at` in it
+## A file with `@at` in it
 
-`@at(x, y)` puts a node's top-left corner at exact coordinates, **in its own
-scope** — the parent container's inner area, or the diagram at the top level.
-It is there because someone wanted that picture to match something outside the
-graph, and the layout leaves those nodes exactly where they are.
-
-- **`@at` beats every relation on the same node.** `@rightOf`, `@align` and
-  `@gap` written there do nothing at all, and `check` says `at-overrides-hint`.
-  So when you are asked to move a pinned node, edit its numbers — adding a hint
-  is a no-op that looks like a fix.
-- **Do not add `@at` yourself.** Dragging no longer writes it: a drop is recorded
-  as a relation to the sibling it landed next to, so the node keeps being
-  arranged. Coordinates in a file are a deliberate choice by whoever put them
-  there.
-- **Do not strip the ones that are there** — deleting them hands those nodes back
-  to the layout, which visibly rearranges that part of the picture.
-- Other nodes may point **at** a pinned node, and those are placed against it
-  exactly, so you can extend a hand-placed part with ordinary hints. Everything
-  else steps clear of it.
+`@at(x, y)` used to pin a node's corner to exact coordinates. It is gone from the
+language, along with `@align`, so a file carrying either no longer parses —
+`power check` reports `unknown directive @at` on the line. Delete the directive
+and let the connections place the node; if the picture then comes out wrong, the
+fix is a hint, a container, or a connection nobody drew, never a number.
 
 ## Syntax traps
 

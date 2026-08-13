@@ -57,8 +57,8 @@ power spec                 # print the language reference
 `watch` plus an editor is the portable way to draw: keep the preview open on one
 side and the file on the other. In VS Code, install
 [the extension](./packages/vscode) instead — the preview lives in a tab next to
-the file, follows the unsaved buffer, and lets you drag a node into place, which
-writes its coordinates back into the source.
+the file, follows the unsaved buffer, and lets you drag a node into place —
+which writes down which sibling it belongs next to, and leaves the layout to it.
 
 ## Reference
 

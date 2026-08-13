@@ -1,8 +1,8 @@
 # power for VS Code
 
 Live preview for `.pwr` architecture diagrams, the way the Markdown preview
-works — and draggable: move a node in the picture and the coordinates land in
-your file.
+works — and draggable: move a node in the picture and the file learns where it
+belongs.
 
 ## Using it
 
@@ -18,21 +18,22 @@ as an error rather than as a directive.
 
 What `power check` reports shows up in the Problems panel as you type: parse and
 build errors, plus the layout warnings — a node nothing points at, a shape
-nobody connects to, a relation that `@at` has made dead, a diagram that has
+nobody connects to, hints that contradict each other, a diagram that has
 become a strip. Each one squiggles the id it is about, and a warning naming two
 nodes lets you jump to either.
 
 - **Pan** — drag the canvas. **Zoom** — wheel, or the buttons in the corner.
   **Fit** — the ⤢ button.
 - **Move a node** — drag it. A shape is grabbable anywhere, a container by its
-  title band. On drop the coordinates are written into the source as `@at(x, y)`,
-  in one undo step. `Escape` mid-drag calls the whole thing off.
+  title band. On drop the source gets a relation to the sibling it landed next
+  to — `@rightOf(that_one)` and friends — in one undo step, and the layout keeps
+  arranging everything. `Escape` mid-drag calls the whole thing off.
 - **Find a node in the text** — click it without moving it; the cursor jumps to
   its declaration.
 
-A drag also writes an `@at` onto every other node that did not have one. That is
-deliberate, and it is the only way the diagram can hold still: take one node out
-of a relative scope and everything left in it re-arranges.
+Nothing else in the document is touched: the drop is one relation on one line,
+and the drawing holds still until you let go, so you are aiming at a target that
+is not running away.
 
 ### Settings
 

@@ -436,26 +436,13 @@ const CORNER_NAMES: Record<string, Corner | undefined> = {
 
 /** Which directives each position accepts, for the "not allowed here" message. */
 const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
-  shape: new Set([
-    "at",
-    "rightof",
-    "leftof",
-    "above",
-    "below",
-    "gap",
-    "align",
-    "style",
-    "icon",
-    "link",
-  ]),
+  shape: new Set(["rightof", "leftof", "above", "below", "gap", "style", "icon", "link"]),
   container: new Set([
-    "at",
     "rightof",
     "leftof",
     "above",
     "below",
     "gap",
-    "align",
     "spacing",
     "spacingx",
     "spacingy",
@@ -572,34 +559,13 @@ function parseDirectives(
       );
     }
 
-    if (name === "at") {
-      // Coordinates may be negative — a node can sit left of or above whatever
-      // the scope treats as its origin — so `size()` is the wrong guard here.
-      const parts = arg.split(",").map((p) => p.trim());
-      const nums = parts.map(Number);
-      // The empty check is not redundant: `Number("")` is 0, so `@at(1, )` would
-      // otherwise parse as a coordinate the author never wrote.
-      if (parts.length !== 2 || parts.some((p) => p === "") || nums.some((n) => !Number.isFinite(n))) {
-        throw new DiagramParseError(
-          "@at expects two numbers, e.g. @at(120, 40)",
-          lineNo,
-          indentCol(raw),
-          raw,
-        );
-      }
-      hint().at = { x: nums[0]!, y: nums[1]! };
-    } else if (RELATIONAL[name]) {
+    if (RELATIONAL[name]) {
       if (!/^[A-Za-z0-9_]+$/.test(arg)) {
         throw new DiagramParseError(`@${m[1]} expects a node id`, lineNo, indentCol(raw), raw);
       }
       (hint()[RELATIONAL[name]] as string) = arg;
     } else if (name === "gap") {
       hint().gap = size(m[1]!, arg);
-    } else if (name === "align") {
-      if (arg !== "start" && arg !== "center" && arg !== "end") {
-        throw new DiagramParseError("@align expects start|center|end", lineNo, indentCol(raw), raw);
-      }
-      hint().align = arg;
     } else if (name === "spacing") {
       const n = size(m[1]!, arg);
       spacing().x = n;

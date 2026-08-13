@@ -14,7 +14,7 @@ import {
   NOTE_INSET,
   NOTE_LINE_H,
 } from "./measure.js";
-import { layoutScope, type AxisGaps, type LayoutWarning, type Placeable } from "./scope.js";
+import { autoPlace, type AxisGaps, type LayoutWarning, type Placeable } from "./auto.js";
 import { hierarchy, projectEdges } from "./graph.js";
 import { routeConnections } from "./route.js";
 
@@ -101,8 +101,6 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
   const sizeMap = new Map<string, Size>();
   const childLocal = new Map<string, Map<string, Local>>();
   const innerOffset = new Map<string, Local>();
-  /** Per scope: what normalizing it subtracted, i.e. the space `@at` speaks in. */
-  const scopeOffset = new Map<string, Local>();
   /** Per scope: the corridors it kept clear, in that scope's own coordinates. */
   const scopeLanes = new Map<string, Map<string, Local[]>>();
 
@@ -141,15 +139,13 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     let contentW = 0;
     let contentH = 0;
     if (items.length > 0) {
-      const scope = layoutScope(items, scopeEdges.get(id) ?? [], gaps, onWarn);
+      const scope = autoPlace(items, scopeEdges.get(id) ?? [], gaps, onWarn);
       childLocal.set(id, scope.pos);
-      scopeOffset.set(id, scope.offset);
-      if (scope.lanes) scopeLanes.set(id, scope.lanes);
+      scopeLanes.set(id, scope.lanes);
       contentW = scope.width;
       contentH = scope.height;
     } else {
       childLocal.set(id, new Map());
-      scopeOffset.set(id, { x: 0, y: 0 });
     }
     const iconW = n.icon ? ICON_SIZE + ICON_GAP : 0;
     const labelW = measureLabelWidth(n.label) + iconW + 24;
@@ -182,15 +178,17 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     const s = sizeNode(id, rootGaps);
     return { id, width: s.width, height: s.height, hint: nodes.get(id)!.hint };
   });
-  const topScope = layoutScope(topItems, scopeEdges.get("") ?? [], rootGaps, onWarn);
-  if (topScope.lanes) scopeLanes.set("", topScope.lanes);
+  const topScope = autoPlace(topItems, scopeEdges.get("") ?? [], rootGaps, onWarn);
+  scopeLanes.set("", topScope.lanes);
 
   /** Where each scope's own (0, 0) ended up on the drawing. */
   const scopeOrigin = new Map<string, Local>([["", { x: 0, y: 0 }]]);
 
-  // Top-down absolute placement. `local` travels alongside: it is the same
-  // position expressed in the scope's own space, which `rect` cannot recover
-  // because every scope was normalized to its own origin on the way up.
+  // Top-down absolute placement. `local` travels alongside: the same position in
+  // the scope's own space, which `rect` cannot recover because every scope was
+  // packed against its own origin on the way up and then the whole drawing was
+  // framed. A drag needs it — it decides which sibling a drop landed next to, and
+  // siblings can only be compared in the space they share.
   const place = (id: string, absX: number, absY: number, local: Local): void => {
     const n = nodes.get(id)!;
     const s = sizeMap.get(id)!;
@@ -199,32 +197,23 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     if (n.type === "container") {
       const off = innerOffset.get(id)!;
       const locs = childLocal.get(id)!;
-      const scope = scopeOffset.get(id)!;
       scopeOrigin.set(id, { x: absX + off.x, y: absY + off.y });
       for (const cid of n.children) {
         const lp = locs.get(cid);
-        if (lp) {
-          place(cid, absX + off.x + lp.x, absY + off.y + lp.y, {
-            x: lp.x + scope.x,
-            y: lp.y + scope.y,
-          });
-        }
+        if (lp) place(cid, absX + off.x + lp.x, absY + off.y + lp.y, { x: lp.x, y: lp.y });
       }
     }
   };
   for (const id of topLevel) {
     const p = topScope.pos.get(id)!;
-    place(id, p.x, p.y, { x: p.x + topScope.offset.x, y: p.y + topScope.offset.y });
+    place(id, p.x, p.y, { x: p.x, y: p.y });
   }
 
   const framed = normalizeToOrigin(diagram, margin);
-  // From document coordinates to rects: what the top scope subtracted on the way up,
-  // then what framing the drawing added. A viewer that pans in document coordinates
-  // undoes exactly this.
-  diagram.originShift = {
-    x: framed.x - topScope.offset.x,
-    y: framed.y - topScope.offset.y,
-  };
+  // From document coordinates to rects: what framing the drawing added. A viewer
+  // that pans in document coordinates undoes exactly this, which is what keeps
+  // its canvas still while a drag grows the picture.
+  diagram.originShift = { x: framed.x, y: framed.y };
 
   // Hand the router the corridors, one per connection, in the drawing's own
   // coordinates. Connections that collapsed into a single edge of some scope

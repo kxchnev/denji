@@ -217,18 +217,6 @@ const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: Direct
     in: ["shape", "container"],
   },
   {
-    name: "at",
-    detail: "(x, y)",
-    info: "Exact top-left position in this node's own scope. Beats every relation on the same node; drag in the playground to write it.",
-    in: ["shape", "container"],
-  },
-  {
-    name: "align",
-    detail: "(start|center|end)",
-    info: "Cross-axis alignment against the anchor. Defaults to center.",
-    in: ["shape", "container"],
-  },
-  {
     name: "spacing",
     detail: "(px)",
     info: "Default gap between this scope's children, both axes. Inherited by nested scopes. Defaults to 40.",
@@ -341,13 +329,6 @@ const OPERATORS: Completion[] = (
     { label: "-.-", detail: "dashed line", info: "Dashed line, no arrowheads.", boost: 20 },
   ] as const
 ).map((o) => ({ ...o, type: "operator", apply: `${o.label} ` }));
-
-const ALIGN: Completion[] = ["start", "center", "end"].map((v, i) => ({
-  label: v,
-  type: "enum",
-  detail: "align",
-  boost: 30 - i,
-}));
 
 /** Straight from the core, so the four spellings cannot drift apart. */
 const CORNER_OPTIONS: Completion[] = CORNERS.map((v, i) => ({
@@ -475,7 +456,7 @@ const ICON_SNIPPET = snippetCompletion("icon ${name} {\n\tpath: ${}\n\tcolor: #0
   label: "icon",
   type: "keyword",
   detail: "custom icon",
-  info: "Declares a brand mark from SVG path data. `power icon <slug>` prints one from Simple Icons.",
+  info: "Declares a brand mark from SVG path data — for a brand Simple Icons does not carry.",
   section: DECLARE,
   boost: 56,
 });
@@ -616,7 +597,6 @@ export const pwrCompletions: CompletionSource = (ctx) => {
   if (args) {
     const name = args[1]!.toLowerCase(); // the parser lowercases too — @RightOf is legal
     const arg = args[2]!;
-    if (name === "align") return result(ALIGN, wordFrom);
     if (name === "corner") return result(CORNER_OPTIONS, wordFrom);
     const px = PX[name];
     if (px) {

@@ -1,8 +1,8 @@
+import type { PlaceHint } from "../../model/arch.js";
 import type { Point } from "../../model/geometry.js";
 import { snapHalf } from "./grid.js";
 import type { ScopeEdge } from "./graph.js";
 import { BUS_PITCH } from "./route.js";
-import type { AxisGaps, LayoutWarning, Placeable } from "./scope.js";
 
 /**
  * Automatic placement for one scope: a layered drawing of the scope's own graph,
@@ -22,6 +22,28 @@ import type { AxisGaps, LayoutWarning, Placeable } from "./scope.js";
  */
 
 export type Flow = "down" | "right";
+
+/** One node as the layout sees it: a size, and whatever the author asked for. */
+export interface Placeable {
+  id: string;
+  width: number;
+  height: number;
+  hint?: PlaceHint;
+}
+
+/** Resolved spacing for one scope: horizontal and vertical gaps between siblings. */
+export interface AxisGaps {
+  x: number;
+  y: number;
+}
+
+/** Something the layout could not honour literally, reported rather than thrown. */
+export interface LayoutWarning {
+  code: "hint-cycle";
+  message: string;
+  /** The nodes the cycle left unordered. */
+  nodes: string[];
+}
 
 /** Width a stand-in node claims, i.e. how wide a reserved corridor is. */
 const LANE_WIDTH = 24;
@@ -218,7 +240,7 @@ function hintConstraints(
   const after: Array<[string, string]> = [];
   for (const it of items) {
     const h = it.hint;
-    if (!h || h.at) continue;
+    if (!h) continue;
     const across = down ? ([h.rightOf, h.leftOf] as const) : ([h.below, h.above] as const);
     const along = down ? ([h.below, h.above] as const) : ([h.rightOf, h.leftOf] as const);
     if (across[0] && across[0] !== it.id && known.has(across[0])) same.push([across[0], it.id]);
@@ -376,13 +398,9 @@ function layered(
       rank: 0,
       order: 0,
       pos: 0,
-      gap: h?.at ? undefined : h?.gap,
-      anchorAcross: h?.at
-        ? undefined
-        : sibling(down ? (h?.rightOf ?? h?.leftOf) : (h?.below ?? h?.above), it.id),
-      anchorAlong: h?.at
-        ? undefined
-        : sibling(down ? (h?.below ?? h?.above) : (h?.rightOf ?? h?.leftOf), it.id),
+      gap: h?.gap,
+      anchorAcross: sibling(down ? (h?.rightOf ?? h?.leftOf) : (h?.below ?? h?.above), it.id),
+      anchorAlong: sibling(down ? (h?.below ?? h?.above) : (h?.rightOf ?? h?.leftOf), it.id),
     });
   });
 

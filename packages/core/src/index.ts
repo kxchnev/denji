@@ -14,7 +14,7 @@ export {
   DEFAULT_HEADER_H,
   type ArchLayoutOptions,
 } from "./layout/arch/index.js";
-export { resolvedAnchors, type LayoutWarning } from "./layout/arch/scope.js";
+export { type LayoutWarning } from "./layout/arch/auto.js";
 export { GRID, HALF_GRID, ceilToGrid, snapHalf } from "./layout/arch/grid.js";
 export {
   checkDiagram,
@@ -50,8 +50,6 @@ export {
   ICON_PROP_NAMES,
 } from "./dsl/arch-parse.js";
 export {
-  setNodePosition,
-  setNodePositions,
   setNodeRelation,
   findDeclaration,
   findHeaderLine,

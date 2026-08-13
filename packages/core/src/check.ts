@@ -14,7 +14,7 @@ import { findDeclaration, findHeaderLine } from "./dsl/arch-edit.js";
 import { parseArchitecture } from "./dsl/arch-parse.js";
 import { DiagramParseError } from "./dsl/error.js";
 import { layoutArchitecture } from "./layout/arch/index.js";
-import type { LayoutWarning } from "./layout/arch/scope.js";
+import type { LayoutWarning } from "./layout/arch/auto.js";
 import type { ArchDiagram, ArchNode } from "./model/arch.js";
 import { intersects } from "./model/geometry.js";
 
@@ -26,8 +26,7 @@ export type DiagnosticCode =
   | "overlapping-siblings"
   | "hint-cycle"
   | "unconnected-node"
-  | "extreme-aspect-ratio"
-  | "at-overrides-hint";
+  | "extreme-aspect-ratio";
 
 export interface Diagnostic {
   severity: DiagnosticSeverity;
@@ -86,7 +85,6 @@ export function checkDiagram(source: string): CheckResult {
     );
   }
   diagnostics.push(...overlapDiagnostics(diagram, source));
-  diagnostics.push(...pinnedHintDiagnostics(diagram, source));
   diagnostics.push(...unconnectedDiagnostics(diagram, source));
   diagnostics.push(...aspectDiagnostics(diagram, source));
 
@@ -195,28 +193,6 @@ function overlapDiagnostics(diagram: ArchDiagram, source: string): Diagnostic[] 
         }
       }
     }
-  }
-  return out;
-}
-
-/**
- * A node carrying both exact coordinates and a relation to a sibling. The
- * coordinates win and the relation does nothing — never what someone writing both
- * meant. The playground's drag strips the relations it replaces, so this only
- * catches source written by hand.
- */
-function pinnedHintDiagnostics(diagram: ArchDiagram, source: string): Diagnostic[] {
-  const out: Diagnostic[] = [];
-  for (const n of diagram.nodes) {
-    const h = n.hint;
-    if (!h?.at) continue;
-    const dead = (["rightOf", "leftOf", "above", "below"] as const).filter((k) => h[k]);
-    if (dead.length === 0) continue;
-    out.push(
-      warn(source, "at-overrides-hint", `"${n.id}" has @at, so @${dead[0]} on it is ignored`, [
-        n.id,
-      ]),
-    );
   }
   return out;
 }

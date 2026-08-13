@@ -8,7 +8,7 @@
  * The lines that differ, as `[0-based line, new text]` — or null when the two
  * documents cannot be matched up line by line.
  *
- * `setNodePosition` rewrites declaration lines where they stand and never adds
+ * `setNodeRelation` rewrites declaration lines where they stand and never adds
  * or removes one, so matching by index is exact — and replacing three lines
  * instead of the whole file leaves the cursor, the selection and the folded
  * regions where the author left them. Should that ever stop being true, the line

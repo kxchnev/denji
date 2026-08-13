@@ -153,27 +153,6 @@ describe("checkDiagram — layout warnings", () => {
   });
 });
 
-describe("checkDiagram — exact coordinates", () => {
-  it("leaves a diagram placed by coordinates alone", () => {
-    expect(codes('architecture\n  app a "A" @at(0, 0)\n  app b "B" @at(0, 200)\n  a -> b\n')).toEqual(
-      [],
-    );
-  });
-
-  it("flags a relation that coordinates have made dead", () => {
-    const { diagnostics } = checkDiagram(
-      'architecture\n  app a "A"\n  app b "B" @rightOf(a) @at(0, 200)\n',
-    );
-    const dead = diagnostics.find((d) => d.code === "at-overrides-hint")!;
-    expect(dead).toMatchObject({ severity: "warning", nodes: ["b"] });
-    expect(dead.message).toContain("@rightOf");
-    // Pointing *at* a pinned node is fine, and stays unflagged.
-    expect(codes('architecture\n  app a "A" @at(0, 0)\n  app b "B" @rightOf(a)\n')).not.toContain(
-      "at-overrides-hint",
-    );
-  });
-});
-
 /**
  * A finding with nowhere to go is barely a finding: a reader cannot jump to it,
  * an editor cannot underline it, and `power check` can only name the file. Every
@@ -191,19 +170,6 @@ describe("checkDiagram — every finding says where", () => {
     return d;
   };
 
-  it("points a dead relation at its own declaration, under the id", () => {
-    const src = [
-      "architecture",
-      '  app a "A"',
-      '  app b "B" @rightOf(a)',
-      '  app stray "Stray" @rightOf(a) @at(0, 300)',
-    ].join("\n");
-    const d = find(src, "at-overrides-hint");
-    expect(d.line).toBe(4);
-    expect(spanOf(d)).toBe("stray");
-    expect(d.srcLine).toContain("Stray");
-  });
-
   it("points an unconnected shape at its declaration", () => {
     const src = [
       "architecture",
@@ -215,13 +181,6 @@ describe("checkDiagram — every finding says where", () => {
     const d = find(src, "unconnected-node");
     expect(d.line).toBe(4);
     expect(spanOf(d)).toBe("lonely");
-  });
-
-  it("points a dead relation at the node carrying it", () => {
-    const src = 'architecture\n  app a "A"\n  app b "B" @rightOf(a) @at(0, 200)\n';
-    const d = find(src, "at-overrides-hint");
-    expect(d.line).toBe(3);
-    expect(spanOf(d)).toBe("b");
   });
 
   it("points a hint cycle at the first node it names", () => {
@@ -277,10 +236,10 @@ describe("checkDiagram — every finding says where", () => {
       "  # app stray is only mentioned here",
       '  app a "A"',
       '  app b "B" @rightOf(a)',
-      '  app stray "Stray" @below(a) @at(0, 300)',
-      "  a -> stray",
+      '  app stray "Stray" @below(a)',
+      "  a -> b",
     ].join("\n");
-    const d = find(src, "at-overrides-hint");
+    const d = find(src, "unconnected-node");
     expect(d.line).toBe(5);
     expect(d.srcLine).toContain('"Stray"');
   });

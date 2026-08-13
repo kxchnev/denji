@@ -88,31 +88,19 @@ export interface Styled {
 }
 
 /**
- * Where a node goes. Normally relative: positioned against a sibling, with one
- * horizontal relation (rightOf/leftOf) setting X, one vertical relation
- * (above/below) setting Y, and the single given relation also deciding
- * cross-axis alignment to the anchor (`align`, default "center").
- *
- * `at` opts out of all that for this one node — see its own comment. Siblings may
- * still anchor *to* a node placed by `at`, which is what lets a diagram be part
- * dragged-into-place and part relative.
+ * Where a node goes, said as a constraint rather than as a position. There is no
+ * way to write a coordinate: `rightOf`/`leftOf` mean "the same layer, in that
+ * order", `above`/`below` mean "an earlier / later layer", and the engine picks
+ * the actual numbers from the connections. So adding a node rearranges the
+ * drawing instead of leaving a hole where someone's arithmetic used to fit.
  */
 export interface PlaceHint {
-  /**
-   * Exact position, in the coordinate space of the node's own scope: the parent
-   * container's inner area, or the diagram's content box at the top level. Beats
-   * every relation on the same node, and the node drops out of the sibling flow
-   * entirely — the flow then treats it as an obstacle to route around.
-   */
-  at?: Point;
   rightOf?: string;
   leftOf?: string;
   above?: string;
   below?: string;
   /** Distance (px) to the anchor, replacing the scope's spacing on that axis. */
   gap?: number;
-  /** Cross-axis alignment to the anchor when only one axis is constrained. */
-  align?: "start" | "center" | "end";
 }
 
 /**
@@ -189,14 +177,14 @@ export interface Container extends Styled {
   padding?: number;
   rect?: Rect;
   /**
-   * Filled in by the layout engine: this node's position in the coordinate space
-   * its own `hint.at` is written in. For a node that has one it *is* that
-   * position; for a node the flow placed it is the `at` that would pin it exactly
-   * where it already sits.
+   * Filled in by the layout engine: this node's position in its own scope's
+   * space — measured from the container's inner corner, or from the drawing's
+   * own origin at the top level.
    *
-   * `rect` cannot answer that question — it is absolute, and every scope is
-   * normalized to its own origin — so an editor that turns a drag into source
-   * text needs this to have anything to add its delta to.
+   * `rect` cannot answer that question: it is absolute, and every scope was
+   * packed against its own origin before the whole drawing was framed. A drag
+   * needs the answer, because deciding which sibling a drop landed next to
+   * means comparing them in a space they share.
    */
   local?: Point;
 }
@@ -251,11 +239,11 @@ export interface ArchDiagram {
    * Filled in by the layout engine: what it added to every `rect` to get the
    * drawing into the top-left corner of its own box, margin included.
    *
-   * Subtract it from a `rect` and you are back in the coordinates the document
-   * speaks (`hint.at`, {@link Shape.local}). An interactive viewer needs that: it
-   * pans in document coordinates, so that growing the drawing — dragging a node
-   * past what used to be its left edge — moves that node instead of sliding
-   * everything else out from under the reader.
+   * Subtract it from a top-level node's `rect` and you have its
+   * {@link Shape.local}. An interactive viewer needs that: it pans in those
+   * coordinates, so that growing the drawing — dragging a node past what used
+   * to be its left edge — moves that node instead of sliding everything else
+   * out from under the reader.
    */
   originShift?: Point;
 }

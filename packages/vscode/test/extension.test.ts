@@ -217,12 +217,12 @@ function pwrDoc(uri: string, text: string): unknown {
   };
 }
 
-/** A diagram whose `stray` is unconnected and whose relation is dead — two on one line. */
+/** A diagram whose `stray` is declared, hinted at, and connected to nothing. */
 const STRAY = [
   "architecture",
   '  app a "A"',
   '  app b "B" @rightOf(a)',
-  '  app stray "S" @below(a) @at(0, 300)',
+  '  app stray "S" @below(a)',
   "  a -> b",
 ].join("\n");
 
@@ -318,13 +318,13 @@ test("activates on the language, or the lens is never there to be clicked", () =
 
 test("puts check's findings in the Problems panel, on the right line", () => {
   const found = publish("file:///stray.pwr", STRAY);
-  const dead = found.find((d) => d.code === "at-overrides-hint");
-  assert.ok(dead, "the dead relation is reported");
-  assert.equal(dead.severity, 1, "as a warning");
-  assert.equal(dead.source, "power", "attributed, so the panel can group it");
+  const lonely = found.find((d) => d.code === "unconnected-node");
+  assert.ok(lonely, "the unconnected shape is reported");
+  assert.equal(lonely.severity, 1, "as a warning");
+  assert.equal(lonely.source, "power", "attributed, so the panel can group it");
   // The `stray` declaration is line 4 (0-based 3), and `stray` starts at column 6.
   assert.deepEqual(
-    { line: dead.range.line, start: dead.range.start, end: dead.range.end },
+    { line: lonely.range.line, start: lonely.range.start, end: lonely.range.end },
     { line: 3, start: 6, end: 11 },
     "squiggled under the id, not the whole line",
   );

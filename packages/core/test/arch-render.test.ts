@@ -521,24 +521,29 @@ describe("rounded corners", () => {
   });
 
   it("draws a step too short to round as one transition, not two kinks", () => {
-    // Two boxes a few pixels out of line — pinned, so the step is the test's and
-    // not the layout's to change. The router has to move sideways by 6px, and
-    // neither corner of that step has room for a radius.
-    const stepped = (off: number): ReturnType<typeof corners> =>
-      corners(
-        connectors(svg(`architecture\n  app a "A" @at(0, 0)\n  app b "B" @at(${off}, 140)\n  a -> b\n`))[0]!,
-      );
-    const tight = stepped(6);
-    expect(tight.blends).toBe(1);
-    expect(tight.radii).toEqual([]);
-    // Wide enough to round both corners properly, and then it is two corners
-    // again — at the same radius as everywhere else, not at half the step.
-    const roomy = stepped(2 * CORNER_RADIUS + 4);
-    expect(roomy.blends).toBe(0);
-    expect(roomy.radii.map((r) => Math.round(r * 100) / 100)).toEqual([
-      CORNER_RADIUS,
-      CORNER_RADIUS,
-    ]);
+    // An app and a narrower database in one service: their docks end up a few
+    // pixels out of line, so the router steps sideways by 7 — less than the cut
+    // a corner needs, and once upon a time two hard kinks that close together.
+    const src = [
+      "architecture",
+      '  service orders "Orders" {',
+      '    app api "Orders API"',
+      '    database db "Postgres"',
+      "    api -> db",
+      "  }",
+      '  service pay "Payments" {',
+      '    app papi "Payments API"',
+      '    database pdb "Postgres"',
+      "    papi -> pdb",
+      "  }",
+      "  api -> papi",
+    ].join("\n");
+    const drawn = connectors(svg(src)).map(corners);
+    expect(drawn.reduce((n, c) => n + c.blends, 0)).toBeGreaterThan(0);
+    // And the step never leaves a corner tighter than the radius behind it.
+    for (const c of drawn) {
+      for (const r of c.radii) expect(r).toBeCloseTo(CORNER_RADIUS, 5);
+    }
   });
 
   it("keeps a straight run at each end for the arrowhead to sit on", () => {

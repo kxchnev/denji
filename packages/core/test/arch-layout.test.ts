@@ -9,7 +9,6 @@ import {
 } from "../src/layout/arch/measure.js";
 import { renderArchitecture } from "../src/render/arch-svg.js";
 import { parseArchitecture as parse } from "../src/dsl/arch-parse.js";
-import { setNodePosition } from "../src/dsl/arch-edit.js";
 import type { ArchDiagram, ArchNode } from "../src/model/arch.js";
 import type { Rect } from "../src/model/geometry.js";
 
@@ -498,18 +497,11 @@ describe("spacing control", () => {
   });
 });
 
-/** What `@at` would have to say to keep `id` exactly where the layout put it. */
+/** Where the layout put `id` in its own scope's space — what a drag reads. */
 function localOf(d: ArchDiagram, id: string): Point {
   const p = node(d, id).local;
   if (!p) throw new Error(`node ${id} not laid out`);
   return p;
-}
-/** Vector between two nodes — unlike a rect, it survives the margin and the
- *  scope normalization, so it is what "did this move?" should be asked about. */
-function delta(d: ArchDiagram, from: string, to: string): Point {
-  const a = rectOf(d, from);
-  const b = rectOf(d, to);
-  return { x: b.x - a.x, y: b.y - a.y };
 }
 const laid = (src: string): ArchDiagram => layoutArchitecture(parse(src));
 
@@ -559,108 +551,44 @@ describe("the grid", () => {
     expect(rectOf(d, "b").x - a.x).toBe(150 + 40);
   });
 
-  it("leaves fractional coordinates fractional", () => {
-    const d = laid(`architecture\napp a "A" @at(10.5, 3.25)\napp b "B" @below(a)`);
-    expect(localOf(d, "a")).toEqual({ x: 10.5, y: 3.25 });
-    // The centring offset is snapped, not the result, so the follower keeps the
-    // author's fraction instead of being quietly pulled onto the lattice.
-    expect(localOf(d, "b").x % 1).toBeCloseTo(0.5, 5);
-  });
 });
 
-describe("exact coordinates", () => {
-  it("places a pinned node exactly where its coordinates say", () => {
-    const d = laid('architecture\napp a "A" @at(0, 0)\napp b "B" @at(200, 80)');
-    expect(localOf(d, "a")).toEqual({ x: 0, y: 0 });
-    expect(localOf(d, "b")).toEqual({ x: 200, y: 80 });
-    expect(delta(d, "a", "b")).toEqual({ x: 200, y: 80 });
+describe("a scope's own space", () => {
+  it("reports a local position for every node, and the origin for a top-level one", () => {
+    // `local` is what a drag compares siblings in: `rect` cannot answer, because
+    // each scope was packed against its own origin and the drawing was then
+    // framed. Nothing writes it into the document — there is nowhere to write it.
+    const d = laid(
+      'architecture\napp a "A"\nservice s "S" @below(a) {\napp b "B"\napp c "C" @rightOf(b)\n}\na -> b\n',
+    );
+    for (const n of d.nodes) expect(n.local).toBeDefined();
+    // Top level: local is the rect with the framing undone, which is exactly
+    // what `originShift` says.
+    const shift = d.originShift!;
+    for (const id of ["a", "s"]) {
+      expect(localOf(d, id)).toEqual({
+        x: rectOf(d, id).x - shift.x,
+        y: rectOf(d, id).y - shift.y,
+      });
+    }
   });
 
-  it("ignores a relation written on the pinned node itself", () => {
-    const d = laid('architecture\napp a "A"\napp b "B" @rightOf(a) @at(0, 300)');
-    expect(localOf(d, "b")).toEqual({ x: 0, y: 300 });
+  it("measures a container's children from the container, not from the drawing", () => {
+    const d = laid(
+      'architecture\napp far "Far"\nservice s "S" @below(far) {\napp b "B"\napp c "C" @rightOf(b)\n}\nfar -> b\n',
+    );
+    // Siblings inside one scope keep their distances in `local`, whatever the
+    // container's own position on the drawing is.
+    const gap = localOf(d, "c").x - localOf(d, "b").x;
+    expect(gap).toBe(rectOf(d, "c").x - rectOf(d, "b").x);
+    // And a child's local is smaller than its rect: the container sits somewhere
+    // out on the drawing, its children start again from its inner corner.
+    expect(localOf(d, "b").x).toBeLessThan(rectOf(d, "b").x);
   });
 
-  it("keeps the flow clear of pinned nodes", () => {
-    const d = laid('architecture\napp a "A"\napp b "B" @at(0, 200)\napp c "C"');
-    expect(overlappingSiblings(d)).toEqual([]);
-  });
-
-  it("still resolves a relation pointing at a pinned node, so followers follow", () => {
-    const src = 'architecture\napp a "A" @at(0, 0)\napp b "B" @rightOf(a)\n';
-    const before = laid(src);
-    const after = laid(setNodePosition(src, "a", { x: 300, y: 120 })!);
-    expect(localOf(after, "a")).toEqual({ x: 300, y: 120 });
-    expect(delta(after, "a", "b")).toEqual(delta(before, "a", "b"));
-  });
-
-  it("reports a local position for flowed nodes, and pinning it moves nothing", () => {
-    const src = 'architecture\napp a "A"\napp b "B" @below(a)\napp c "C" @rightOf(a)\n';
-    const before = laid(src);
-    const pinned = laid(setNodePosition(src, "b", localOf(before, "b"))!);
-    for (const id of ["a", "b", "c"]) expect(rectOf(pinned, id)).toEqual(rectOf(before, id));
-  });
-
-  it("round-trips a drag: local + delta lands exactly delta away", () => {
-    const src = 'architecture\napp a "A"\napp b "B" @rightOf(a)\napp c "C" @below(a)\n';
-    const before = laid(src);
-    const by = { x: 64, y: -32 };
-    const l = localOf(before, "c");
-    const after = laid(setNodePosition(src, "c", { x: l.x + by.x, y: l.y + by.y })!);
-    const was = delta(before, "a", "c");
-    expect(delta(after, "a", "c")).toEqual({ x: was.x + by.x, y: was.y + by.y });
-    // Everything else stayed put.
-    expect(delta(after, "a", "b")).toEqual(delta(before, "a", "b"));
-  });
-
-  it("keeps a child's coordinates local to its container", () => {
-    const src =
-      'architecture\nservice s "S" {\napp a "A"\napp b "B" @at(0, 120)\n}\napp out "Out" @rightOf(s)\n';
-    const d = laid(src);
-    expect(localOf(d, "b")).toEqual({ x: 0, y: 120 });
-    expect(contains(rectOf(d, "s"), rectOf(d, "b"))).toBe(true);
-    // Moving the container carries the child along without touching its line.
-    const moved = laid(setNodePosition(src, "s", { x: 400, y: 0 })!);
-    expect(localOf(moved, "s")).toEqual({ x: 400, y: 0 });
-    expect(localOf(moved, "b")).toEqual({ x: 0, y: 120 });
-    expect(delta(moved, "s", "b")).toEqual(delta(d, "s", "b"));
-    expect(delta(moved, "s", "out")).toEqual(delta(d, "s", "out"));
-  });
-});
-
-describe("coordinates hold their ground", () => {
-  it("keeps a scope's origin when its leftmost node moves — nothing else slides", () => {
-    const src = 'architecture\napp a "A" @at(0, 0)\napp b "B" @at(200, 0)\n';
-    const before = laid(src);
-    const after = laid(setNodePosition(src, "a", { x: 80, y: 40 })!);
-    expect(rectOf(after, "b")).toEqual(rectOf(before, "b"));
-    expect(rectOf(after, "a").x - rectOf(before, "a").x).toBe(80);
-    expect(rectOf(after, "a").y - rectOf(before, "a").y).toBe(40);
-  });
-
-  it("moves a child inside a container without disturbing anything around it", () => {
-    const src =
-      'architecture\nservice s "S" @at(0, 0) {\napp a "A" @at(0, 0)\napp b "B" @at(0, 100)\n}\napp out "Out" @at(400, 0)\n';
-    const before = laid(src);
-    const after = laid(setNodePosition(src, "b", { x: 200, y: 100 })!);
-    expect(rectOf(after, "a")).toEqual(rectOf(before, "a"));
-    expect(rectOf(after, "out")).toEqual(rectOf(before, "out"));
-    // The container keeps its corner and grows to hold the child's new spot.
-    expect(rectOf(after, "s").x).toBe(rectOf(before, "s").x);
-    expect(rectOf(after, "s").y).toBe(rectOf(before, "s").y);
-    expect(rectOf(after, "s").width).toBeGreaterThan(rectOf(before, "s").width);
-    expect(delta(after, "s", "b").x - delta(before, "s", "b").x).toBe(200);
-  });
-
-  it("still keeps a negative coordinate inside the box that holds it", () => {
-    const d = laid('architecture\nservice s "S" {\napp a "A" @at(0, 0)\napp b "B" @at(-100, 0)\n}');
-    expect(contains(rectOf(d, "s"), rectOf(d, "b"))).toBe(true);
-    expect(contains(rectOf(d, "s"), rectOf(d, "a"))).toBe(true);
-  });
-
-  it("leaves relative-only diagrams packed against the origin as before", () => {
+  it("leaves relative-only diagrams packed against the origin", () => {
     const d = laid('architecture\napp a "A"\napp b "B" @rightOf(a)');
-    // Margin 24 on every side, exactly as it was before coordinates existed.
+    // Margin 24 on every side.
     expect(rectOf(d, "a").x).toBe(24);
     expect(rectOf(d, "a").y).toBe(24);
   });

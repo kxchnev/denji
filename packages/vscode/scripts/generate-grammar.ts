@@ -73,9 +73,6 @@ const CONSTANTS = altI(
   longestFirst([
     ...CORNERS.flatMap((c) => [c.toLowerCase(), dashed(c)]),
     ...Object.keys(themes),
-    "start",
-    "center",
-    "end",
   ]),
 );
 
