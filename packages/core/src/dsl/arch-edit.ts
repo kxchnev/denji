@@ -92,7 +92,7 @@ const PLACEMENT = (): RegExp => directive("at|rightOf|leftOf|above|below");
  * How the placement is refined. Exact coordinates make both meaningless, so
  * pinning drops them; a relation does not, so re-aiming one keeps them.
  */
-const REFINEMENTS = (): RegExp => directive("align|gap|nudge");
+const REFINEMENTS = (): RegExp => directive("align|gap");
 
 /**
  * Several nodes at once. `null` when not one of them could be found.

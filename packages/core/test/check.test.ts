@@ -172,15 +172,6 @@ describe("checkDiagram — exact coordinates", () => {
       "at-overrides-hint",
     );
   });
-
-  it("flags a nudge that coordinates have made dead", () => {
-    const { diagnostics } = checkDiagram(
-      'architecture\n  app a "A" @nudge(-40, 0) @at(0, 0)\n  app b "B" @at(0, 200)\n',
-    );
-    const dead = diagnostics.find((d) => d.code === "at-overrides-hint")!;
-    expect(dead).toMatchObject({ severity: "warning", nodes: ["a"] });
-    expect(dead.message).toContain("@nudge");
-  });
 });
 
 /**

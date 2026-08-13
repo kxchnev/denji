@@ -340,14 +340,6 @@ interface Vertex {
   /** Who the node's hints point at, per axis, so `@gap` knows whose gap it is. */
   anchorAcross?: string;
   anchorAlong?: string;
-  /**
-   * The author's `@nudge`, split onto the flow axes. Across the flow it biases
-   * the node's *target* in {@link assignAcross}, so the isotonic solve still
-   * owns the final word; along the flow it shifts the node inside its layer's
-   * band in `at()`. Neither component can break order, gaps or ranks.
-   */
-  biasAcross: number;
-  biasAlong: number;
 }
 
 interface Arc {
@@ -391,8 +383,6 @@ function layered(
       anchorAlong: h?.at
         ? undefined
         : sibling(down ? (h?.below ?? h?.above) : (h?.rightOf ?? h?.leftOf), it.id),
-      biasAcross: h?.at ? 0 : down ? (h?.nudge?.x ?? 0) : (h?.nudge?.y ?? 0),
-      biasAlong: h?.at ? 0 : down ? (h?.nudge?.y ?? 0) : (h?.nudge?.x ?? 0),
     });
   });
 
@@ -425,8 +415,6 @@ function layered(
         rank: r,
         order: 0,
         pos: 0,
-        biasAcross: 0,
-        biasAlong: 0,
       });
       chain.push(id);
       layerArcs.push({ from: prev, to: id, weight: a.weight, key: a.key, reversed: a.reversed });
@@ -469,12 +457,7 @@ function layered(
     // while the rest of this arithmetic is whole numbers all the way down and
     // rounding it would only make a gap the author asked for come out wrong.
     const slack = thickness[v.rank]! - v.along;
-    // A nudge along the flow moves the node within its layer's band only — the
-    // rank is a constraint, not a preference — so the offset clamps to the
-    // slack instead of leaking into the corridors between ranks. Lane midpoints
-    // (whole=false) stay on the band's middle: a corridor has no author.
-    const off = Math.min(slack, Math.max(0, slack / 2 + v.biasAlong));
-    const a = start[v.rank]! + (whole ? snapHalf(off) : slack / 2);
+    const a = start[v.rank]! + (whole ? snapHalf(slack / 2) : slack / 2);
     return down ? { x: v.pos, y: a } : { x: a, y: v.pos };
   };
 
@@ -909,17 +892,6 @@ function assignAcross(
     return v.pos + v.across / 2;
   };
 
-  // A nudge acts where the sweeps act — in the targets — but a lone layer never
-  // sweeps (both ranges below exclude it), and a scope of unconnected children
-  // is exactly that. One settle per nudged layer gives the bias its first word;
-  // where sweeps do run they simply take over.
-  for (const layer of layers) {
-    if (!layer.some((id) => V.get(id)!.biasAcross !== 0)) continue;
-    const want = layer.map((id) => centre(id) + V.get(id)!.biasAcross);
-    const weight = layer.map((id) => (V.get(id)!.biasAcross !== 0 ? 1 : IDLE_WEIGHT));
-    settleLayer(layer, V, want, weight, gap);
-  }
-
   for (let pass = 0; pass < COORD_PASSES; pass++) {
     // Early sweeps look one way, so layers get a chance to line up under each
     // other; the last few look both, so the answer does not depend on which
@@ -945,11 +917,7 @@ function assignAcross(
         }
         const ms = ns.map(centre).sort((a, b) => a - b);
         const m = ms.length >> 1;
-        const median = ms.length % 2 === 1 ? ms[m]! : (ms[m - 1]! + ms[m]!) / 2;
-        // The bias lands on the median, never on the idle branch above: there
-        // the target is the node's own centre, and a bias on top of that would
-        // compound by another step every sweep.
-        want.push(median + v.biasAcross);
+        want.push(ms.length % 2 === 1 ? ms[m]! : (ms[m - 1]! + ms[m]!) / 2);
         weight.push(v.stand ? LANE_WEIGHT : Math.max(1, ns.length));
       }
       settleLayer(layer, V, want, weight, gap);

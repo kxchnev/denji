@@ -243,9 +243,8 @@ function argument(stream: StringStream, state: PwrState): string | null {
     // The core rejects negatives too, so flag them rather than paint them valid.
     return Number.isFinite(n) && n >= 0 ? "number" : "invalid";
   }
-  // `@at(120, -40)` / `@nudge(-40, 0)`: a pair, and unlike the distances above
-  // a negative is fine.
-  if (state.directive === "at" || state.directive === "nudge") {
+  // `@at(120, -40)`: a pair, and unlike the distances above a negative is fine.
+  if (state.directive === "at") {
     const parts = arg[0].split(",").map((p) => p.trim());
     const ok = parts.length === 2 && parts.every((p) => p !== "" && Number.isFinite(Number(p)));
     return ok ? "number" : "invalid";

@@ -223,12 +223,6 @@ const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: Direct
     in: ["shape", "container"],
   },
   {
-    name: "nudge",
-    detail: "(dx, dy)",
-    info: "Soft offset in px from where the layout puts this node. Order and gaps still win; dy moves it only within its layer.",
-    in: ["shape", "container"],
-  },
-  {
     name: "align",
     detail: "(start|center|end)",
     info: "Cross-axis alignment against the anchor. Defaults to center.",

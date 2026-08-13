@@ -113,14 +113,6 @@ export interface PlaceHint {
   gap?: number;
   /** Cross-axis alignment to the anchor when only one axis is constrained. */
   align?: "start" | "center" | "end";
-  /**
-   * Soft offset (px, document axes) from wherever the layout puts the node. A
-   * preference, not a promise: sibling order, minimum gaps and the node's own
-   * layer always win, so a nudge can never create an overlap — unlike `at`, it
-   * keeps the node in the automatic arrangement. Dead under `at`, like every
-   * other hint.
-   */
-  nudge?: Point;
 }
 
 /**
