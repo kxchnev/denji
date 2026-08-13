@@ -52,7 +52,7 @@ the built `dist`.
 npm run build              # core → packages/core/dist, then the extension bundles
 npm test                   # core tests (vitest) + extension tests
 npm run typecheck          # core and extension types
-npm run docs               # docs dev server on :3000
+npm run docs               # docs dev server on :3000, plus core tsc --watch
 npm run docs:build         # static export → packages/docs/out
 npm run -w docs validate   # render every documented example through the core
 npm run vscode             # rebuild the extension on change; F5 launches it
@@ -64,6 +64,8 @@ Conventions:
 - `strict` plus `noUncheckedIndexedAccess`. Layout is deterministic — keep it so.
 - The docs site and the extension consume the **built** `dist`, so run
   `npm run build` after touching core or they will show stale behaviour.
+  Exception: a running `npm run docs` keeps its own `tsc --watch` and rebuilds
+  core by itself; the extension still needs the manual build.
 - Anything an interactive viewer needs to know about a laid-out diagram —
   hit-testing, which nodes a drag has to pin, the drag snap — lives in
   `packages/core/src/interact.ts`, because there are two viewers. Do not

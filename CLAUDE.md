@@ -268,7 +268,8 @@ round-trip внутри 60fps-цикла заметен. Расширение с
 
 - `npm run build` — собрать ядро (`packages/core/dist`) и расширение
 - `npm test` / `npm run typecheck` — тесты/типы ядра и расширения
-- `npm run docs` — dev-сервер доки; `npm run docs:build` — статический экспорт
+- `npm run docs` — dev-сервер доки **плюс** `tsc --watch` ядра (правки core
+  подхватываются без рестарта); `npm run docs:build` — статический экспорт
 - `npm run -w docs validate` — прогнать все примеры доки через ядро
 - `npm run vscode` — пересборка расширения по изменениям; F5 (`.vscode/launch.json`)
   открывает Extension Development Host на `packages/vscode/examples/sample.pwr`
@@ -279,5 +280,7 @@ round-trip внутри 60fps-цикла заметен. Расширение с
 - ESM, `NodeNext` в ядре. Импорты локальных модулей ядра — с расширением `.js`.
 - `strict` + `noUncheckedIndexedAccess` в ядре. Раскладка детерминирована.
 - Дока и расширение цепляются к **собранному** `power` → после правок ядра
-  `npm run build`. Тесты расширения гоняют реальный `dist/webview.js` в jsdom,
+  `npm run build`. Исключение — работающий `npm run docs`: он держит свой
+  `tsc --watch` и пересобирает ядро сам; расширению сборка нужна по-прежнему.
+  Тесты расширения гоняют реальный `dist/webview.js` в jsdom,
   так что сборка входит в `npm run -w power-vscode test`.

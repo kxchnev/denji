@@ -19,6 +19,8 @@
   "scripts": {
     "prebuild": "npm run icons",
     "build": "tsc",
+    "prewatch": "npm run icons",
+    "watch": "tsc --watch --preserveWatchOutput",
     "dev": "tsx",
     "pretest": "npm run icons",
     "test": "vitest run",

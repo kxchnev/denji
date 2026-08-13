@@ -9,10 +9,13 @@
     "test": "npm run -w power test && npm run -w power-vscode test",
     "typecheck": "npm run -w power typecheck && npm run -w power-vscode typecheck",
     "build": "npm run -w power build && npm run -w power-vscode build",
-    "docs": "npm run -w docs dev",
+    "docs": "concurrently -n core,docs -c cyan,magenta --kill-others \"npm run -w power watch\" \"npm run -w docs dev\"",
     "docs:build": "npm run -w docs build",
     "vscode": "npm run -w power-vscode watch",
     "vscode:package": "npm run -w power-vscode package",
     "icons:update": "npm i -D simple-icons@latest -w power && npm run build && npm run vscode:package"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4"
   }
 }
