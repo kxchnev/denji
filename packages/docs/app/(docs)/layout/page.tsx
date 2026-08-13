@@ -1,6 +1,11 @@
 import { DocSection } from "@/components/DocSection";
 import { layout } from "@/examples/layout";
 
+export const metadata = {
+  title: "Layout",
+  description: "How the connections decide where everything goes, and what a hint constrains.",
+};
+
 export default function LayoutPage() {
   return (
     <DocSection

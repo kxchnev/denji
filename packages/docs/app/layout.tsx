@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "power — architecture diagrams",
+  title: "Architecture diagrams that lay themselves out",
   description: "Free-form architecture diagrams that lay themselves out.",
 };
 

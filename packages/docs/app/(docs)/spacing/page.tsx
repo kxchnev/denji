@@ -1,6 +1,11 @@
 import { DocSection } from "@/components/DocSection";
 import { spacing } from "@/examples/spacing";
 
+export const metadata = {
+  title: "Spacing",
+  description: "Distance between siblings, padding inside a container, margin around the drawing.",
+};
+
 export default function SpacingPage() {
   return (
     <DocSection

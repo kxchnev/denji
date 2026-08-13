@@ -76,7 +76,7 @@ interface BlockFrame {
  * settings belong to the scope a node opens, so the two lists only overlap on
  * containers — which are both at once.
  */
-type DirectiveCtx = "shape" | "container" | "diagram" | "connection" | "text";
+export type DirectiveCtx = "shape" | "container" | "diagram" | "connection" | "text";
 
 interface Directives {
   hint?: PlaceHint;
@@ -434,30 +434,122 @@ const CORNER_NAMES: Record<string, Corner | undefined> = {
   bottomright: "bottomRight",
 };
 
+/** One directive, described once for everything that has to talk about it. */
+export interface DirectiveSpec {
+  /** Canonical spelling, as a person would write it. Matching is case-insensitive. */
+  name: string;
+  /** The argument's shape, for a signature line: `(id)`, `(px)`, `(light|dark)`. */
+  arg: string;
+  /** One sentence: what it does. */
+  info: string;
+  /** The lines it may be written on. */
+  in: readonly DirectiveCtx[];
+}
+
+/**
+ * Every directive in the language, in the order a person meets them.
+ *
+ * The parser's allow-list is built from this, so "what exists", "where it is
+ * legal", "what the editor offers" and "what the reference page prints" are one
+ * table rather than four that have to be kept in step. Inline style properties
+ * are *not* here — they are `STYLE_PROPS`, and {@link STYLABLE} says where they
+ * go; a reference that wants both prints both.
+ */
+export const DIRECTIVES: readonly DirectiveSpec[] = [
+  {
+    name: "rightOf",
+    arg: "(id)",
+    info: "Put this node on the same layer as a sibling, after it.",
+    in: ["shape", "container"],
+  },
+  {
+    name: "leftOf",
+    arg: "(id)",
+    info: "Put this node on the same layer as a sibling, before it.",
+    in: ["shape", "container"],
+  },
+  { name: "below", arg: "(id)", info: "Put this node on a later layer than a sibling.", in: ["shape", "container"] },
+  { name: "above", arg: "(id)", info: "Put this node on an earlier layer than a sibling.", in: ["shape", "container"] },
+  {
+    name: "gap",
+    arg: "(px)",
+    info: "Distance from this node to its own anchor, replacing the scope's spacing on that axis.",
+    in: ["shape", "container"],
+  },
+  {
+    name: "spacing",
+    arg: "(px)",
+    info: "Default gap between this scope's children, both axes. Inherited by nested scopes. Defaults to 40.",
+    in: ["container", "diagram"],
+  },
+  {
+    name: "spacingX",
+    arg: "(px)",
+    info: "Horizontal gap between this scope's children. Refines @spacing.",
+    in: ["container", "diagram"],
+  },
+  {
+    name: "spacingY",
+    arg: "(px)",
+    info: "Vertical gap between this scope's children. Refines @spacing.",
+    in: ["container", "diagram"],
+  },
+  {
+    name: "padding",
+    arg: "(px)",
+    info: "Space between this container's border and its children. Defaults to 24.",
+    in: ["container"],
+  },
+  { name: "margin", arg: "(px)", info: "Whitespace around the whole drawing. Defaults to 24.", in: ["diagram"] },
+  {
+    name: "theme",
+    arg: "(light|dark)",
+    info: "Pin the diagram to one palette. Without it, the diagram follows the page.",
+    in: ["diagram"],
+  },
+  {
+    name: "icon",
+    arg: "(name)",
+    info: "Draw a brand mark before the label. Leave the label empty for the mark on its own.",
+    in: ["shape", "container"],
+  },
+  {
+    name: "link",
+    arg: "(url)",
+    info:
+      "Put a link button in this element's top-right corner. `http`, `https` or `mailto` only, " +
+      "and the URL is unquoted — it ends at the first `)`.",
+    in: ["shape", "container"],
+  },
+  {
+    name: "style",
+    arg: "(name)",
+    info: "Attach a style declared by a `style` block. Repeat it to stack several.",
+    in: ["shape", "container", "connection"],
+  },
+  {
+    name: "corner",
+    arg: "(topLeft|topRight|bottomLeft|bottomRight)",
+    info: "Which corner of the group this text is pinned to. Defaults to topLeft.",
+    in: ["text"],
+  },
+];
+
 /** Which directives each position accepts, for the "not allowed here" message. */
-const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = {
-  shape: new Set(["rightof", "leftof", "above", "below", "gap", "style", "icon", "link"]),
-  container: new Set([
-    "rightof",
-    "leftof",
-    "above",
-    "below",
-    "gap",
-    "spacing",
-    "spacingx",
-    "spacingy",
-    "padding",
-    "style",
-    "icon",
-    "link",
-  ]),
-  diagram: new Set(["spacing", "spacingx", "spacingy", "margin", "theme"]),
-  connection: new Set(["style"]),
-  text: new Set(["corner"]),
-};
+const ALLOWED: Record<DirectiveCtx, ReadonlySet<string>> = (() => {
+  const out: Record<DirectiveCtx, Set<string>> = {
+    shape: new Set(),
+    container: new Set(),
+    diagram: new Set(),
+    connection: new Set(),
+    text: new Set(),
+  };
+  for (const d of DIRECTIVES) for (const ctx of d.in) out[ctx].add(d.name.toLowerCase());
+  return out;
+})();
 
 /** Positions where an inline style property such as `@fill(#fff)` is accepted. */
-const STYLABLE: ReadonlySet<DirectiveCtx> = new Set(["shape", "container", "connection"]);
+export const STYLABLE: ReadonlySet<DirectiveCtx> = new Set(["shape", "container", "connection"]);
 
 // ⚠️ Must include every context. Leaving `shape` out worked only while its set
 // was a subset of `container`'s; a shape-only directive would have fallen

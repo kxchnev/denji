@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { PanelLeft } from "lucide-react";
+import { ChevronLeft, PanelLeft } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -81,11 +81,9 @@ export function PlaygroundToolbar({
       >
         <PanelLeft className="h-4 w-4" />
       </Button>
-      <Link href="/" className="flex items-center gap-2 px-2 font-semibold" title="Back to the docs">
-        <span className="grid size-6 place-items-center rounded bg-primary text-xs text-primary-foreground">
-          P
-        </span>
-        <span className="hidden sm:inline">power</span>
+      <Link href="/" className="px-2 font-semibold" title="Back to the docs">
+        <span className="hidden sm:inline">Documentation</span>
+        <ChevronLeft className="h-4 w-4 sm:hidden" />
       </Link>
       <span className="mx-1 h-5 w-px shrink-0 bg-border" />
       <NameInput value={name} onCommit={onNameChange} />

@@ -1,7 +1,7 @@
 {
   "name": "power-vscode",
   "displayName": "power diagrams",
-  "description": "Live preview for .pwr architecture diagrams — drag a node, the source gets the coordinates",
+  "description": "Live preview for .pwr architecture diagrams — drag a node, the source learns where it belongs",
   "version": "0.0.1",
   "private": true,
   "license": "MIT",

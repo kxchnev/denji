@@ -13,7 +13,7 @@ export const layout: ExampleData[] = [
     id: "relative",
     title: "rightOf / below",
     description:
-      "Hints are constraints on that arrangement, not coordinates. `@rightOf` means the same layer, in that order; `@below` means a later one. Use them where the graph leaves a choice you care about.",
+      "Hints are constraints on that arrangement, not coordinates. `@rightOf` means the same layer, in that order; `@below` means a later one. Use them where the graph leaves a choice you care about. Across the layer the connections still decide, and where they say nothing a node centres on the anchor it was placed against.",
     dsl: `architecture\n  app gw "Gateway"\n  app b "B"\n  app a "A" @leftOf(b)\n  database db "Store" @below(a)\n  gw -> a\n  gw -> b\n  a -> db\n  b -> db`,
     api: `architecture()\n  .app("gw", "Gateway")\n  .app("b", "B")\n  .app("a", "A", { hint: { leftOf: "b" } })\n  .database("db", "Store", { hint: { below: "a" } })\n  .connect("gw", "a")\n  .connect("gw", "b")\n  .connect("a", "db")\n  .connect("b", "db")\n  .build();`,
   },

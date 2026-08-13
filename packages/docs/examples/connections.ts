@@ -3,7 +3,7 @@ import type { ExampleData } from "./types";
 const pair = (op: string, label = "") =>
   `architecture\n  app a "Service A"\n  app b "Service B" @rightOf(a)\n  a ${op} b${label}`;
 
-export const arrows: ExampleData[] = [
+export const connections: ExampleData[] = [
   {
     id: "directed",
     title: "Directed",

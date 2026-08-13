@@ -9,11 +9,8 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
     <>
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
-            <span className="grid size-6 place-items-center rounded bg-primary text-xs text-primary-foreground">
-              P
-            </span>
-            power
+          <Link href="/" className="font-semibold">
+            Documentation
           </Link>
           <ThemeToggle />
         </div>

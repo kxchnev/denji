@@ -1,7 +1,7 @@
 {
   "name": "power",
   "version": "0.0.1",
-  "description": "Diagrams with controllable layout \u2014 a mermaid alternative where you can actually place things",
+  "description": "Architecture diagrams as text — the connections decide the layout, and the connectors go around the boxes",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -30,10 +30,10 @@
     "icons": "tsx scripts/generate-icons.ts"
   },
   "keywords": [
+    "architecture-diagram",
+    "diagram-as-code",
     "diagram",
-    "flowchart",
-    "sequence-diagram",
-    "mermaid",
+    "dsl",
     "svg",
     "layout"
   ],

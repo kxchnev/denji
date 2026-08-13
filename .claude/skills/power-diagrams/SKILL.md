@@ -35,11 +35,11 @@ it writes a relation like `@rightOf(other)` into the declaration. So the source
 may have changed under you since you last read it: **re-read the file before
 every edit**, and never keep editing from a copy you made earlier.
 
-The seven things `check` reports: `parse-error` and `build-error` (errors —
+The six things `check` reports: `parse-error` and `build-error` (errors —
 nothing renders, or ids/icons/styles do not hold together), then the layout
-warnings `hint-cycle`, `overlapping-siblings`, `unconnected-node`,
-`at-overrides-hint` and `extreme-aspect-ratio`. They are explained in
-`power spec`.
+warnings `hint-cycle`, `overlapping-siblings`, `unconnected-node` and
+`extreme-aspect-ratio`. Each one, with what to do about it, is on the docs
+site under Diagnostics; `power spec` prints the grammar.
 
 **Run `power spec` and read it before writing anything non-trivial** — it prints
 the complete grammar. `power icons <text>` searches the bundled marks; run it

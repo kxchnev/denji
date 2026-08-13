@@ -1,7 +1,8 @@
 # power (monorepo)
 
-Free-form architecture diagrams (not C4) with controllable, **relative** layout —
-a mermaid alternative where you actually decide where things go. Shapes
+Architecture diagrams as text, laid out by their own connections. You declare the
+boxes and wire them up; the engine decides where everything goes and routes the
+connectors **around** the boxes rather than through them. Shapes
 (app / database / queue / rect), nestable container blocks (service / group),
 and connections. Authored via a `.pwr` DSL or a programmatic builder; rendered to
 SVG.

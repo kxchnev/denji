@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ARCH_OPERATORS,
+  DIRECTIVES,
   CONTAINER_KIND_NAMES,
   DIRECTIVE_NAMES,
   ICON_PROP_NAMES,
@@ -85,6 +86,43 @@ describe("exported grammar tables", () => {
     expect(() => parseArchitecture('architecture\napp a "A" @nonsense(0)')).toThrow(
       /unknown directive/,
     );
+  });
+
+  it("describes every directive it names, and names every one it describes", () => {
+    // `DIRECTIVES` is what the reference page prints and what the editor offers,
+    // and the parser's allow-list is built from it — so a row missing a context
+    // is a directive the parser rejects while the docs promise it.
+    expect(DIRECTIVES.map((d) => d.name.toLowerCase()).sort()).toEqual([...DIRECTIVE_NAMES]);
+    for (const d of DIRECTIVES) {
+      expect(d.in.length, `${d.name} is allowed nowhere`).toBeGreaterThan(0);
+      expect(d.arg.startsWith("("), `${d.name} arg`).toBe(true);
+      expect(d.info.trim().endsWith("."), `${d.name} info reads as a sentence`).toBe(true);
+    }
+  });
+
+  it("says where each directive goes, and the parser agrees", () => {
+    const where = (name: string): string[] =>
+      DIRECTIVES.find((d) => d.name.toLowerCase() === name)!.in.map(String);
+    const line: Record<string, (d: string) => string> = {
+      shape: (d) => `architecture\napp a "A" ${d}`,
+      container: (d) => `architecture\nservice s "S" ${d} {\napp a "A"\n}`,
+      diagram: (d) => `architecture ${d}\napp a "A"`,
+      connection: (d) => `architecture\napp a "A"\napp b "B"\na -> b ${d}`,
+      text: (d) => `architecture\ngroup g "G" {\ntext "n" ${d}\napp a "A"\n}`,
+    };
+    for (const name of DIRECTIVE_NAMES) {
+      const allowed = new Set(where(name));
+      for (const [ctx, build] of Object.entries(line)) {
+        let message = "";
+        try {
+          parseArchitecture(build(`@${name}(0)`));
+        } catch (e) {
+          message = (e as Error).message;
+        }
+        const rejected = message.includes("not allowed");
+        expect(rejected, `@${name} on a ${ctx}`).toBe(!allowed.has(ctx));
+      }
+    }
   });
 
   it("leaves the style properties to STYLE_PROPS, which are directives too", () => {

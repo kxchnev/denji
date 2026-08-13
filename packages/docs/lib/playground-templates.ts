@@ -1,4 +1,4 @@
-import { intro, blocks, layout, type ExampleData } from "@/examples";
+import { intro, shapes, layout, type ExampleData } from "@/examples";
 
 /**
  * Starting points offered when a new diagram is still empty.
@@ -40,13 +40,13 @@ export const templates: Template[] = [
     id: "service",
     label: "Service",
     description: "One service box grouping the parts that belong together.",
-    dsl: byId(blocks, "service").dsl,
+    dsl: byId(shapes, "service").dsl,
   },
   {
     id: "nested",
     label: "Nested",
     description: "A group holding services, nested as deep as you like.",
-    dsl: byId(blocks, "nested").dsl,
+    dsl: byId(shapes, "nested").dsl,
   },
   {
     id: "layout",

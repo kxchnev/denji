@@ -1,6 +1,11 @@
 import { DocSection } from "@/components/DocSection";
 import { links } from "@/examples/links";
 
+export const metadata = {
+  title: "Links",
+  description: "Turn an element into a link to the runbook, dashboard or repo behind it.",
+};
+
 export default function LinksPage() {
   return (
     <DocSection

@@ -13,12 +13,14 @@ import { EditorView, keymap } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import {
   CORNERS,
+  DIRECTIVES as CORE_DIRECTIVES,
   ICONS,
   ICON_NAMES,
   POPULAR_ICONS,
   STYLE_PROPS,
   lightTheme,
   normalizePropName,
+  type DirectiveCtx as CoreDirectiveCtx,
   type StylePropSpec,
 } from "power";
 import { scanPwr, uniqueIds, type PwrKind, type PwrScan, type PwrSymbol } from "./pwr-symbols";
@@ -67,12 +69,8 @@ const KIND_COMPLETIONS: Completion[] = [
   kindCompletion("rect", 60),
 ];
 
-/**
- * Where each directive is legal, mirroring ALLOWED in
- * packages/core/src/dsl/arch-parse.ts. Placement hints belong to a node;
- * spacing settings belong to the scope a line opens — containers are both.
- */
-type DirectiveCtx = "shape" | "container" | "diagram" | "connection" | "text";
+/** Where a directive is legal — the core's own answer, not a copy of it. */
+type DirectiveCtx = CoreDirectiveCtx;
 
 /** `strokeWidth` → `stroke-width`: how a property reads inside a style block. */
 function displayProp(spec: StylePropSpec): string {
@@ -185,101 +183,23 @@ const LINK_SCHEME_OPTIONS: Completion[] = ["https://", "http://", "mailto:"].map
   boost: 30 - i,
 }));
 
+/**
+ * Every directive the core knows, plus one row per inline style property.
+ *
+ * The directive rows come from the core so the editor cannot offer a word the
+ * parser rejects, or miss one it accepts — the same reason the VS Code grammar
+ * is generated. Style properties stay here because their rows are derived from
+ * `STYLE_PROPS`, which the core already exports.
+ */
 const DIRECTIVES: Array<{ name: string; detail: string; info: string; in: DirectiveCtx[] }> = [
-  {
-    name: "rightOf",
-    detail: "(id)",
-    info: "Place this node to the right of a sibling — a node in the same container.",
-    in: ["shape", "container"],
-  },
-  {
-    name: "leftOf",
-    detail: "(id)",
-    info: "Place this node to the left of a sibling.",
-    in: ["shape", "container"],
-  },
-  {
-    name: "below",
-    detail: "(id)",
-    info: "Place this node under a sibling.",
-    in: ["shape", "container"],
-  },
-  {
-    name: "above",
-    detail: "(id)",
-    info: "Place this node over a sibling.",
-    in: ["shape", "container"],
-  },
-  {
-    name: "gap",
-    detail: "(px)",
-    info: "Distance to this node's own anchor, replacing the scope's spacing on that axis.",
-    in: ["shape", "container"],
-  },
-  {
-    name: "spacing",
-    detail: "(px)",
-    info: "Default gap between this scope's children, both axes. Inherited by nested scopes. Defaults to 40.",
-    in: ["container", "diagram"],
-  },
-  {
-    name: "spacingX",
-    detail: "(px)",
-    info: "Horizontal gap between this scope's children. Refines @spacing.",
-    in: ["container", "diagram"],
-  },
-  {
-    name: "spacingY",
-    detail: "(px)",
-    info: "Vertical gap between this scope's children. Refines @spacing.",
-    in: ["container", "diagram"],
-  },
-  {
-    name: "padding",
-    detail: "(px)",
-    info: "Space between this container's border and its children. Defaults to 24.",
-    in: ["container"],
-  },
-  {
-    name: "margin",
-    detail: "(px)",
-    info: "Whitespace around the whole drawing. Defaults to 24.",
-    in: ["diagram"],
-  },
-  {
-    name: "theme",
-    detail: "(light|dark)",
-    info: "Pin the diagram to one palette. Without it, the diagram follows the page.",
-    in: ["diagram"],
-  },
-  {
-    name: "icon",
-    detail: "(name)",
-    info: "Draw a brand mark before the label. Leave the label empty for the mark on its own.",
-    in: ["shape", "container"],
-  },
-  {
-    name: "link",
-    detail: "(url)",
-    info:
-      "Put a link button in this element's top-right corner. `http`, `https` or " +
-      "`mailto` only, and the URL is unquoted — it ends at the first `)`.",
-    in: ["shape", "container"],
-  },
-  {
-    name: "style",
-    detail: "(name)",
-    info: "Attach a style declared by a `style` block. Repeat it to stack several.",
-    in: ["shape", "container", "connection"],
-  },
-  {
-    name: "corner",
-    detail: "(topLeft|topRight|bottomLeft|bottomRight)",
-    info: "Which corner of the group this text is pinned to. Defaults to topLeft; repeat `text` to stack lines in one corner.",
-    in: ["text"],
-  },
-  // One directive per style property, offered only where the core will accept
-  // it — `@radius` is meaningless on a connection, `@header-fill` on a shape.
+  ...CORE_DIRECTIVES.map((d) => ({
+    name: d.name,
+    detail: d.arg,
+    info: d.info,
+    in: [...d.in] as DirectiveCtx[],
+  })),
+  // Offered only where the core will accept it — `@radius` is meaningless on a
+  // connection, `@header-fill` on a shape.
   ...Object.values(STYLE_PROPS).map((spec) => {
     const applies = (slots: string[]) => slots.some((s) => (spec.slots as readonly string[]).includes(s));
     const where: DirectiveCtx[] = [];

@@ -1,6 +1,12 @@
+import Link from "next/link";
 import { DocSection } from "@/components/DocSection";
 import { IconGallery } from "@/components/IconGallery";
 import { icons } from "@/examples/icons";
+
+export const metadata = {
+  title: "Icons",
+  description: "Brand marks from Simple Icons, and declaring your own.",
+};
 
 export default function IconsPage() {
   return (
@@ -14,8 +20,8 @@ export default function IconsPage() {
         Marks come from <a className="underline" href="https://simpleicons.org">Simple Icons</a> (CC0);
         the logos remain trademarks of their owners. AWS, Azure and the Oracle Java logo are absent
         from that set at those companies&apos; request — <code>openjdk</code> stands in for Java.
-        Anything not bundled here can be declared with an <code>icon</code> block; running{" "}
-        <code>power icon &lt;slug&gt;</code> prints one ready to paste.
+        Anything not bundled here can be declared with an <code>icon</code> block; to find the ones
+        that are, search from the <Link className="underline" href="/cli">command line</Link>.
       </p>
     </DocSection>
   );

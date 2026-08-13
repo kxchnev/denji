@@ -1,6 +1,11 @@
 import { DocSection } from "@/components/DocSection";
 import { styling } from "@/examples/styling";
 
+export const metadata = {
+  title: "Styling",
+  description: "Themes, style blocks, named styles and inline properties — and how they cascade.",
+};
+
 export default function StylingPage() {
   return (
     <DocSection

@@ -1,6 +1,6 @@
 # power
 
-Монорепо: библиотека для **архитектурных диаграмм в свободном стиле** (не C4) +
+Монорепо: библиотека для **архитектурных диаграмм в свободном стиле** +
 сайт-документация. Фигуры (app/database/queue/rect), контейнеры (service/group),
 связи. **Раскладка автоматическая: её задают связи.** Хинты (`@rightOf`,
 `@below`) — ограничения для движка; координат в языке нет вовсе. Стек:
@@ -129,8 +129,8 @@ package.json     workspace-root (скрипты-прокси)
   повторять эти правила по месту нельзя.
 - `src/check.ts` — статические проверки: ошибки парса/build плюс предупреждения
   о раскладке (`hint-cycle`, `overlapping-siblings`, `unconnected-node`,
-  `extreme-aspect-ratio`, `at-overrides-hint`). `loose-node` больше нет: узел без
-  хинтов — обычный случай, его ставит граф. Проверку пересечений
+  `extreme-aspect-ratio`). `loose-node` больше нет: узел без хинтов — обычный
+  случай, его ставит граф. Проверку пересечений
   переиспользует `docs/scripts/validate-examples.ts` — не дублировать.
   ⚠️ **Каждая находка обязана знать, где она.** `nodes[]` был там всегда, а
   позиция — нет, и из-за этого предупреждения не могли попасть ни в Problems, ни
@@ -142,7 +142,7 @@ package.json     workspace-root (скрипты-прокси)
 - `src/watch.ts` — живое превью: `node:http` + SSE, следит за **директорией**
   (atomic rename при сохранении убивает file-watcher), держит последний удачный
   рендер и показывает ошибку оверлеем.
-- `src/cli.ts` — CLI: `render`, `check`, `watch`, `spec`, `icons`, `icon`.
+- `src/cli.ts` — CLI: `render`, `watch`, `check`, `icons`, `spec`.
 
 **Грамматика для моделей.** `packages/core/LANGUAGE.md` — единственный источник
 правды по языку (английский), печатается через `power spec`. `AGENTS.md` в корне
@@ -270,7 +270,14 @@ round-trip внутри 60fps-цикла заметен. Расширение с
 - `npm run build` — собрать ядро (`packages/core/dist`) и расширение
 - `npm test` / `npm run typecheck` — тесты/типы ядра и расширения
 - `npm run docs` — dev-сервер доки **плюс** `tsc --watch` ядра (правки core
-  подхватываются без рестарта); `npm run docs:build` — статический экспорт
+  подхватываются без рестарта); `npm run docs:build` — статический экспорт.
+  ⚠️ Dev-сервер работает в **своей** директории `.next-dev`, а сборка — в `.next`
+  (`next.config.ts`, по фазе). Иначе `next build` при живом `next dev` затирает
+  его чанки, и сервер падает на `Cannot find module './NNN.js'` до перезапуска.
+  Двигать пришлось именно dev: при `output: "export"` кастомный `distDir` уносит
+  не рабочие файлы сборки, а выгруженный сайт — `server/` всё равно ложится в
+  `.next` (проверено тремя способами). Второй dev-сервер поднимать со своим
+  `NEXT_DIST_DIR`.
 - `npm run -w docs validate` — прогнать все примеры доки через ядро
 - `npm run vscode` — пересборка расширения по изменениям; F5 (`.vscode/launch.json`)
   открывает Extension Development Host на `packages/vscode/examples/sample.pwr`

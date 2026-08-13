@@ -8,25 +8,45 @@ export interface NavSection {
   items: NavItem[];
 }
 
+/**
+ * Three groups, in the order someone meets them: get it running, learn the
+ * language by example, then look things up.
+ *
+ * "Guide" rather than "Reference" for the middle group — those pages teach with
+ * pictures and read top to bottom. The reference is the thing you arrive at
+ * from a search box knowing what you want, which is why it is one page of
+ * tables rather than eight pages of examples.
+ */
 export const nav: NavSection[] = [
   {
-    title: "Getting Started",
+    title: "Getting started",
     items: [
       { title: "Introduction", href: "/" },
+      { title: "Installation", href: "/installation" },
       { title: "Playground", href: "/playground" },
     ],
   },
   {
-    title: "Reference",
+    title: "Guide",
     items: [
-      { title: "Elements", href: "/elements" },
-      { title: "Arrows", href: "/arrows" },
-      { title: "Blocks", href: "/blocks" },
+      { title: "Shapes and containers", href: "/shapes" },
+      { title: "Connections", href: "/connections" },
       { title: "Layout", href: "/layout" },
       { title: "Spacing", href: "/spacing" },
       { title: "Styling", href: "/styling" },
       { title: "Icons", href: "/icons" },
       { title: "Links", href: "/links" },
+      { title: "How it works", href: "/how-it-works" },
+    ],
+  },
+  {
+    title: "Reference",
+    items: [
+      { title: "Language", href: "/reference" },
+      { title: "Diagnostics", href: "/diagnostics" },
+      { title: "Library API", href: "/api" },
+      { title: "CLI", href: "/cli" },
+      { title: "VS Code", href: "/editor" },
     ],
   },
 ];

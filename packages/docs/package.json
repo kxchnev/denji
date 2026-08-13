@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "clean": "rm -rf .next .next-dev out",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "validate": "tsx scripts/validate-examples.ts"

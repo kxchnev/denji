@@ -47,7 +47,11 @@ export {
   CONTAINER_KIND_NAMES,
   ARCH_OPERATORS,
   DIRECTIVE_NAMES,
+  DIRECTIVES,
+  STYLABLE,
   ICON_PROP_NAMES,
+  type DirectiveCtx,
+  type DirectiveSpec,
 } from "./dsl/arch-parse.js";
 export {
   setNodeRelation,
