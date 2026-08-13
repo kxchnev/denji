@@ -11,7 +11,12 @@ packages/core/src/model/icon.names.ts
 # генератор контрольного листа. Прототипное качество и одноразовая задача —
 # выбрать движок; то, что выберут, переезжает в src уже с тестами.
 packages/core/lab/
-.next/
+# Copied from LANGUAGE.md and the skill by packages/docs/scripts/copy-agent-files.ts,
+# so the site can never serve an older grammar than the parser speaks.
+packages/docs/public/
+# `.next*` rather than `.next`: the dev server works in its own `.next-dev` so a
+# build cannot pull the rug from under it (packages/docs/next.config.ts).
+.next*/
 out/
 *.tsbuildinfo
 *.vsix

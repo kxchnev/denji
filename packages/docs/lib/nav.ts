@@ -37,6 +37,7 @@ export const nav: NavSection[] = [
       { title: "Icons", href: "/icons" },
       { title: "Links", href: "/links" },
       { title: "How it works", href: "/how-it-works" },
+      { title: "Writing with an agent", href: "/agents" },
     ],
   },
   {

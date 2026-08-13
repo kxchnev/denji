@@ -8,7 +8,10 @@
     "clean": "rm -rf .next .next-dev out",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "validate": "tsx scripts/validate-examples.ts"
+    "validate": "tsx scripts/validate-examples.ts",
+    "agent-files": "tsx scripts/copy-agent-files.ts",
+    "predev": "npm run agent-files",
+    "prebuild": "npm run agent-files"
   },
   "dependencies": {
     "power": "*",

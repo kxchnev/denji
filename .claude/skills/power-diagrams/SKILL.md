@@ -45,9 +45,10 @@ site under Diagnostics; `power spec` prints the grammar.
 the complete grammar. `power icons <text>` searches the bundled marks; run it
 rather than guessing at a slug.
 
-If `power` is not on the PATH, the CLI is `node <repo>/packages/core/dist/cli.js`
-after `npm run build`. Resolve it to an absolute path once and reuse it — the
-working directory does not persist between commands.
+If `power` is not on the PATH, run it as `npx power …`. Working inside the
+library's own repository it is `node <repo>/packages/core/dist/cli.js` after
+`npm run build`. Either way, resolve it to an absolute path once and reuse it —
+the working directory does not persist between commands.
 
 ## Shape of a diagram
 
@@ -95,6 +96,9 @@ bottomLeft|bottomRight)` writes a free line in that corner.
   against the group.** Hints only resolve against siblings in the same scope, so
   there is no way to say "below both of these" — but a shared event bus under two
   services is exactly what you usually want, and the wrapper is how you get it.
+  Make the wrapper invisible unless you meant to draw a box: an empty label
+  reserves no title band, and transparent paint with no padding leaves nothing
+  behind — `group pair "" @fill(transparent) @stroke(transparent) @padding(0) {`.
 - **Reach for `@icon(...)` when the technology is the point** (`postgres`,
   `kafka`, `k8s`, `redis`); skip it when the role matters more than the vendor.
   **The whole of Simple Icons is bundled**, so nearly any product you can name is
@@ -106,17 +110,22 @@ bottomLeft|bottomRight)` writes a free line in that corner.
   device, browser or person mark, so a "mobile app" box goes without one. For a
   logo the set does not carry, declare it once at the top of the file:
   `icon acme { path: … }`.
+- **Colour is a `style` block, not a per-box decoration.** A block named after a
+  kind (`app`, `database`, `queue`, `rect`, `service`, `group`, `edge`) restyles
+  every one of them and nothing has to opt in; any other name is a reusable style
+  attached with `@style(name)`; a bare `@fill(#fff)` on one element beats both.
+  Properties: `fill`, `stroke`, `stroke-width`, `text`, `radius`, `dash`,
+  `opacity`, `font-weight`, `icon-color`, plus `header-fill` / `header-text` on a
+  `service`. Reach for it to mark one thing out — a deprecated service, the
+  system boundary — not to decorate. `@theme(light|dark)` pins the palette;
+  without it the drawing follows whatever page it lands on, which is usually
+  what you want.
+- **`@gap` is one node's distance to its own anchor; `@spacing` is the default
+  between all of a scope's children.** Set spacing on the `architecture` line or
+  on a container, not gap on twenty nodes.
 - If an incoming edge's label collides with a container's frame, push the
   container down with `@gap(n)` on it. `check` has no rule for that; you will
   only see it in the rendered image.
-
-## A file with `@at` in it
-
-`@at(x, y)` used to pin a node's corner to exact coordinates. It is gone from the
-language, along with `@align`, so a file carrying either no longer parses —
-`power check` reports `unknown directive @at` on the line. Delete the directive
-and let the connections place the node; if the picture then comes out wrong, the
-fix is a hint, a container, or a connection nobody drew, never a number.
 
 ## Syntax traps
 
