@@ -201,18 +201,18 @@ Next.js App Router + Tailwind + shadcn-компоненты. Ядро подкл
 идут через внутренний `all()`, а не через `getSnapshot()` — иначе удалённые
 затрутся.
 
-Подсветка синтаксиса и автокомплит — на CodeMirror 6: `lib/pwr-language.ts`
+Подсветка синтаксиса и автокомплит — на CodeMirror 6: `lib/denji-language.ts`
 (токенайзер `.denji`, `StreamLanguage`), `lib/ts-language.ts` (обёртка над
-`@lezer/javascript` для API-таба), `lib/pwr-symbols.ts` + `lib/pwr-complete.ts`
+`@lezer/javascript` для API-таба), `lib/denji-symbols.ts` + `lib/denji-complete.ts`
 (скан документа и контекстный автокомплит в плейграунде), `lib/editor-theme.ts`
 (общая тема редактора). `components/CodeViewer.tsx` — read-only редактор для
-статичных примеров (`CodeBlock.tsx`), `components/PwrEditor.tsx` — редактируемый
+статичных примеров (`CodeBlock.tsx`), `components/DenjiEditor.tsx` — редактируемый
 для `app/playground/page.tsx`. Палитра токенов — CSS-переменные `--tok-*` /
 `--code-*` в `globals.css`, **вне `@layer base`** (Tailwind иначе вычищает эти
 классы, т.к. они не встречаются как литералы в файлах из `content`).
 ⚠️ Токенайзер `.denji` дублирует грамматику ядра — при правках
-`core/src/dsl/arch-parse.ts` синхронно обновляй `lib/pwr-language.ts`,
-`lib/pwr-symbols.ts` и `lib/pwr-complete.ts` (там же таблица директив с
+`core/src/dsl/arch-parse.ts` синхронно обновляй `lib/denji-language.ts`,
+`lib/denji-symbols.ts` и `lib/denji-complete.ts` (там же таблица директив с
 разрешёнными контекстами и списки значений аргументов — самый большой кусок).
 
 ### packages/vscode (расширение)

@@ -105,7 +105,7 @@ export default function DiagnosticsPage() {
         severity="warning"
         means="Placement hints contradict each other. Nothing fails: the relations that close the cycle are dropped and the rest are honoured, so the drawing you get is missing exactly the constraints that could not all be true at once."
       >
-        <CodeBlock code={CYCLE} lang="pwr" />
+        <CodeBlock code={CYCLE} lang="denji" />
         <p className="mt-4 leading-7">
           Decide which of the two you actually meant and delete the other. A cycle in the{" "}
           <em>connections</em> is a different thing entirely — an ordinary service graph — and is
@@ -140,7 +140,7 @@ export default function DiagnosticsPage() {
         severity="warning"
         means="The drawing came out a strip more than four times longer than it is tall, or the other way round — reported only once there are at least four nodes, since a small diagram is allowed an odd shape."
       >
-        <CodeBlock code={STRIP} lang="pwr" />
+        <CodeBlock code={STRIP} lang="denji" />
         <p className="mt-4 leading-7">
           A strip is almost always a missing container: group the things that belong together and
           the row becomes a block. Turning part of the flow with{" "}

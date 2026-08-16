@@ -34,7 +34,7 @@ export function Example({ id, title, description, dsl, api }: ExampleData) {
             </TabsList>
           </div>
           <TabsContent value="dsl" className="m-0">
-            <CodeBlock code={dsl} lang="pwr" />
+            <CodeBlock code={dsl} lang="denji" />
           </TabsContent>
           <TabsContent value="api" className="m-0">
             <CodeBlock code={api} lang="ts" />

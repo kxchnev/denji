@@ -72,11 +72,11 @@ export function IconGallery() {
                   // switch with the page, which a plain `fill` attribute cannot.
                   style={
                     {
-                      "--pwr-swatch": icon.color,
-                      "--pwr-swatch-dark": icon.darkColor ?? icon.color,
+                      "--denji-swatch": icon.color,
+                      "--denji-swatch-dark": icon.darkColor ?? icon.color,
                     } as CSSProperties
                   }
-                  className="pwr-swatch h-5 w-5 shrink-0"
+                  className="denji-swatch h-5 w-5 shrink-0"
                   aria-hidden
                 >
                   <path d={icon.path} />

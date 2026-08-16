@@ -14,8 +14,8 @@ import {
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { bracketMatching, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { classHighlighter } from "@lezer/highlight";
-import { pwrLanguage } from "@/lib/pwr-language";
-import { pwrAutocomplete } from "@/lib/pwr-complete";
+import { denjiLanguage } from "@/lib/denji-language";
+import { denjiAutocomplete } from "@/lib/denji-complete";
 import { codeEditorTheme, editorFillHeight } from "@/lib/editor-theme";
 
 const extensions = [
@@ -35,14 +35,14 @@ const extensions = [
   // every pixel of that drag is unreadable. The text keeps its own width and
   // `.cm-scroller` scrolls sideways instead.
   keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-  pwrLanguage,
+  denjiLanguage,
   syntaxHighlighting(classHighlighter),
-  pwrAutocomplete,
+  denjiAutocomplete,
   codeEditorTheme,
   editorFillHeight,
 ];
 
-export function PwrEditor({
+export function DenjiEditor({
   value,
   onChange,
   className,

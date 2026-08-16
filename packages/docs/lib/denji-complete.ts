@@ -23,7 +23,7 @@ import {
   type DirectiveCtx as CoreDirectiveCtx,
   type StylePropSpec,
 } from "@kxchnev/denji";
-import { scanPwr, uniqueIds, type PwrKind, type PwrScan, type PwrSymbol } from "./pwr-symbols";
+import { scanDenji, uniqueIds, type DenjiKind, type DenjiScan, type DenjiSymbol } from "./denji-symbols";
 
 /* ------------------------------------------------------------------ sections */
 
@@ -35,7 +35,7 @@ const OUT_OF_SCOPE: CompletionSection = { name: "other scopes — hint is ignore
 
 /* ------------------------------------------------------------ static options */
 
-const KIND_INFO: Record<PwrKind, string> = {
+const KIND_INFO: Record<DenjiKind, string> = {
   app: "Application box. `app id \"Label\"`",
   database: "Datastore, drawn as a cylinder.",
   queue: "Message queue or topic.",
@@ -44,7 +44,7 @@ const KIND_INFO: Record<PwrKind, string> = {
   group: "Container drawn as a plain group. `{` must end the line.",
 };
 
-function kindCompletion(kind: PwrKind, boost: number): Completion {
+function kindCompletion(kind: DenjiKind, boost: number): Completion {
   const container = kind === "service" || kind === "group";
   return snippetCompletion(
     container ? `${kind} \${id} "\${Label}" {\n\t\${}\n}` : `${kind} \${id} "\${Label}"`,
@@ -329,7 +329,7 @@ const HEADER: Completion = {
 
 /* --------------------------------------------------------------- id options */
 
-function idCompletion(s: PwrSymbol, boost: number, suffix = ""): Completion {
+function idCompletion(s: DenjiSymbol, boost: number, suffix = ""): Completion {
   return {
     label: s.id,
     // `class` (○) for containers, `variable` (𝑥) for shapes — distinguishable icons.
@@ -340,7 +340,7 @@ function idCompletion(s: PwrSymbol, boost: number, suffix = ""): Completion {
 }
 
 /** Connections are validated globally by the builder: any node may be an endpoint. */
-function endpointOptions(scan: PwrScan, exclude: string): Completion[] {
+function endpointOptions(scan: DenjiScan, exclude: string): Completion[] {
   return uniqueIds(scan.symbols)
     .filter((s) => s.id !== exclude)
     .map((s) => idCompletion(s, 50));
@@ -353,7 +353,7 @@ function endpointOptions(scan: PwrScan, exclude: string): Completion[] {
  * heavily de-boosted, because a half-written document can throw the brace scan
  * off and silently hiding the id the user wants would be worse.
  */
-function anchorOptions(scan: PwrScan): Completion[] {
+function anchorOptions(scan: DenjiScan): Completion[] {
   return uniqueIds(scan.symbols)
     .filter((s) => s.id !== scan.selfId)
     .map((s) =>
@@ -381,7 +381,7 @@ const ICON_SNIPPET = snippetCompletion("icon ${name} {\n\tpath: ${}\n\tcolor: #0
   boost: 56,
 });
 
-function lineStartOptions(scan: PwrScan, lineNo: number): Completion[] {
+function lineStartOptions(scan: DenjiScan, lineNo: number): Completion[] {
   const out: Completion[] = [...KIND_COMPLETIONS, STYLE_SNIPPET, ICON_SNIPPET];
   if (!scan.hasHeader && (scan.firstContentLine === 0 || lineNo <= scan.firstContentLine)) {
     out.push(HEADER);
@@ -474,7 +474,7 @@ function directiveCtx(masked: string): DirectiveCtx | null {
   return null;
 }
 
-export const pwrCompletions: CompletionSource = (ctx) => {
+export const denjiCompletions: CompletionSource = (ctx) => {
   const line = ctx.state.doc.lineAt(ctx.pos);
   const before = line.text.slice(0, ctx.pos - line.from);
 
@@ -484,7 +484,7 @@ export const pwrCompletions: CompletionSource = (ctx) => {
   const { masked, inString } = maskStrings(before);
   if (inString) return null; // inside a "label"
 
-  const scan = scanPwr(ctx.state.doc, line.number);
+  const scan = scanDenji(ctx.state.doc, line.number);
 
   // 0. Inside a `style { … }` block: property names, then values. Checked first
   // because every line here is `name: value`, which the connection-label guard
@@ -650,7 +650,7 @@ export const pwrCompletions: CompletionSource = (ctx) => {
  * specificity — a global `globals.css` rule would lose to the base theme's
  * generated, more specific selectors.
  */
-export const pwrCompletionTheme = EditorView.theme({
+export const denjiCompletionTheme = EditorView.theme({
   ".cm-tooltip.cm-tooltip-autocomplete": {
     background: "hsl(var(--popover))",
     color: "hsl(var(--popover-foreground))",
@@ -738,7 +738,7 @@ export const pwrCompletionTheme = EditorView.theme({
 
 /* ----------------------------------------------------------------- extension */
 
-export const pwrAutocomplete: Extension = [
+export const denjiAutocomplete: Extension = [
   autocompletion({
     // Picking a directive or an operator immediately re-opens the popup for the
     // argument or the endpoint. `namespace` and `operator` are only used by
@@ -751,5 +751,5 @@ export const pwrAutocomplete: Extension = [
   // Tab accepts a selected completion and otherwise returns false, so Tab still
   // moves focus out of the editor (and still walks snippet fields).
   keymap.of([{ key: "Tab", run: acceptCompletion }]),
-  pwrCompletionTheme,
+  denjiCompletionTheme,
 ];

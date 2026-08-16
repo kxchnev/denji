@@ -5,7 +5,7 @@ import { CODE_MAX_HEIGHT } from "@/lib/editor-theme";
 
 /** The outer Card already frames the example — no border/rounding here, just
  *  the code surface, so the tabs don't read as a frame within a frame. */
-export function CodeBlock({ code, lang = "pwr" }: { code: string; lang?: CodeLang }) {
+export function CodeBlock({ code, lang = "denji" }: { code: string; lang?: CodeLang }) {
   const source = code.trim();
   // CodeMirror mounts client-side into an empty div, so server HTML has no
   // height of its own — without a floor every block renders at 0px and jumps

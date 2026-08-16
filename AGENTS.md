@@ -79,9 +79,9 @@ category also needs a page under `packages/docs/app/(docs)/` and an entry in
 
 ⚠️ The `.denji` grammar exists in more than one place: the parser
 (`packages/core/src/dsl/arch-parse.ts`), the editor tokenizer
-(`packages/docs/lib/pwr-language.ts`), the document scan
-(`packages/docs/lib/pwr-symbols.ts`), the autocomplete
-(`packages/docs/lib/pwr-complete.ts` — in practice the largest surface: the
+(`packages/docs/lib/denji-language.ts`), the document scan
+(`packages/docs/lib/denji-symbols.ts`), the autocomplete
+(`packages/docs/lib/denji-complete.ts` — in practice the largest surface: the
 directive table, its per-context allow-list and the argument value lists) and
 the reference (`packages/core/LANGUAGE.md`). Change the parser and you must
 update the other four in the same commit.

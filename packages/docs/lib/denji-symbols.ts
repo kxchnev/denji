@@ -1,10 +1,10 @@
 import type { Text } from "@codemirror/state";
 
-export type PwrKind = "app" | "database" | "queue" | "rect" | "service" | "group";
+export type DenjiKind = "app" | "database" | "queue" | "rect" | "service" | "group";
 
-export interface PwrSymbol {
+export interface DenjiSymbol {
   id: string;
-  kind: PwrKind;
+  kind: DenjiKind;
   /** The quoted label, when the declaration has one. */
   label?: string;
   /** Id of the enclosing container, or "" for the top level. */
@@ -16,9 +16,9 @@ export interface PwrSymbol {
   idTo: number;
 }
 
-export interface PwrScan {
+export interface DenjiScan {
   /** Every declaration in the document, in source order, duplicates included. */
-  symbols: PwrSymbol[];
+  symbols: DenjiSymbol[];
   /** Enclosing container id at the cursor line, "" at the top level. */
   scope: string;
   /** Unclosed `{` count at the cursor line — `}` is only offered when > 0. */
@@ -57,8 +57,8 @@ const DECL = /^(app|database|queue|rect|service|group)\s+([A-Za-z0-9_]+)\s*(?:"(
  * globally (connections and hints may both reference nodes declared later),
  * while `scope`/`depth` are snapshotted at `cursorLine`.
  */
-export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
-  const symbols: PwrSymbol[] = [];
+export function scanDenji(doc: Text, cursorLine = 0): DenjiScan {
+  const symbols: DenjiSymbol[] = [];
   const open: string[] = [];
   let scope = "";
   let depth = 0;
@@ -118,7 +118,7 @@ export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
 
     const m = DECL.exec(trimmed);
     if (!m) continue; // a connection, or a line too broken to read
-    const kind = m[1] as PwrKind;
+    const kind = m[1] as DenjiKind;
     const id = m[2]!;
     const idFrom = l.from + text.indexOf(id, text.indexOf(kind) + kind.length);
     symbols.push({
@@ -151,9 +151,9 @@ export function scanPwr(doc: Text, cursorLine = 0): PwrScan {
 }
 
 /** First declaration wins, so a duplicated id shows up once in the popup. */
-export function uniqueIds(symbols: readonly PwrSymbol[]): PwrSymbol[] {
+export function uniqueIds(symbols: readonly DenjiSymbol[]): DenjiSymbol[] {
   const seen = new Set<string>();
-  const out: PwrSymbol[] = [];
+  const out: DenjiSymbol[] = [];
   for (const s of symbols) {
     if (seen.has(s.id)) continue;
     seen.add(s.id);

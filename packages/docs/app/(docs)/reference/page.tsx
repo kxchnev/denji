@@ -109,7 +109,7 @@ export default function ReferencePage() {
         start with <InlineCode>#</InlineCode> or <InlineCode>%%</InlineCode>; there is no trailing
         comment. Sizes are unitless.
       </p>
-      <CodeBlock code={GRAMMAR} lang="pwr" />
+      <CodeBlock code={GRAMMAR} lang="denji" />
       <p className="mt-4 leading-7">
         An <strong>id</strong> is <InlineCode>[A-Za-z0-9_]+</InlineCode> — no hyphens, no dots — and
         may not be one of the keywords below, which are dispatched on the first word of the line.

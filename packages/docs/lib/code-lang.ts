@@ -1,1 +1,1 @@
-export type CodeLang = "pwr" | "ts";
+export type CodeLang = "denji" | "ts";

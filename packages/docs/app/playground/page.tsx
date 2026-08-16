@@ -4,7 +4,7 @@ import { useCallback, useDeferredValue, useRef, useState } from "react";
 import { setNodeRelation, type Relation } from "@kxchnev/denji";
 import { CopyButton } from "@/components/CopyButton";
 import { Diagram } from "@/components/Diagram";
-import { PwrEditor } from "@/components/PwrEditor";
+import { DenjiEditor } from "@/components/DenjiEditor";
 import { DiagramList } from "@/components/playground/DiagramList";
 import { PaneDivider } from "@/components/playground/PaneDivider";
 import { PlaygroundToolbar, type Pane } from "@/components/playground/PlaygroundToolbar";
@@ -140,7 +140,7 @@ export default function Playground() {
               pane === "code" ? "block" : "hidden",
             )}
           >
-            <PwrEditor
+            <DenjiEditor
               key={`editor-${session.id}`}
               value={session.dsl}
               onChange={setDsl}

@@ -26,7 +26,7 @@
     --popover-foreground: 240 10% 3.9%;
 
     /* Code surface + syntax palette. Shared by static code blocks and the
-       playground editor; roles, not languages. See lib/pwr-language.ts. */
+       playground editor; roles, not languages. See lib/denji-language.ts. */
     --code-bg: 240 5% 96%;
     --code-fg: 240 4% 16%;
     --tok-keyword: 263 83% 58%;
@@ -123,11 +123,11 @@
 }
 /* An icon swatch in the gallery. Two custom properties per card, set inline, so
    the dark variant switches with the page without a stylesheet per keystroke. */
-.pwr-swatch {
-  fill: var(--pwr-swatch);
+.denji-swatch {
+  fill: var(--denji-swatch);
 }
-.dark .pwr-swatch {
-  fill: var(--pwr-swatch-dark);
+.dark .denji-swatch {
+  fill: var(--denji-swatch-dark);
 }
 /* A URL is a literal, so it borrows the string colour rather than claiming one
    of its own; the underline is what tells it apart from an ordinary label. */

@@ -80,7 +80,7 @@ export default function InstallationPage() {
         Put this in <InlineCode>diagram.denji</InlineCode>. Nothing in it says where a box goes: the
         connections decide, and the hints only constrain the order.
       </p>
-      <CodeBlock code={FIRST_DIAGRAM} lang="pwr" />
+      <CodeBlock code={FIRST_DIAGRAM} lang="denji" />
       <p className="mt-4 leading-7">Render it to a file:</p>
       <ShellBlock code={`npx ${PRODUCT.cli} render diagram.denji -o diagram.svg`} />
       <p className="mt-4 leading-7">

@@ -108,7 +108,7 @@ curl -o .claude/skills/denji-diagrams/SKILL.md https://<docs>/skill.md`}
         This is the file, verbatim — copy it out of here if you would rather not{" "}
         <InlineCode>curl</InlineCode> it.
       </p>
-      <CodeBlock code={SKILL} lang="pwr" />
+      <CodeBlock code={SKILL} lang="denji" />
     </article>
   );
 }

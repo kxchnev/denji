@@ -5,7 +5,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, lineNumbers } from "@codemirror/view";
 import { syntaxHighlighting } from "@codemirror/language";
 import { classHighlighter } from "@lezer/highlight";
-import { pwrLanguage } from "@/lib/pwr-language";
+import { denjiLanguage } from "@/lib/denji-language";
 import { tsLanguage } from "@/lib/ts-language";
 import { codeEditorTheme, editorAutoHeight } from "@/lib/editor-theme";
 import type { CodeLang } from "@/lib/code-lang";
@@ -14,7 +14,7 @@ import type { CodeLang } from "@/lib/code-lang";
  * Read-only CodeMirror instance for the static DSL/API examples — same
  * tokenizer, theme and gutter as the playground editor, just non-editable.
  * `code`/`lang` are fixed for the lifetime of one example, so the editor is
- * built once and never needs a controlled-value sync like PwrEditor's.
+ * built once and never needs a controlled-value sync like DenjiEditor's.
  */
 export function CodeViewer({
   code,
@@ -37,7 +37,7 @@ export function CodeViewer({
         extensions: [
           lineNumbers(),
           EditorView.lineWrapping,
-          lang === "ts" ? tsLanguage : pwrLanguage,
+          lang === "ts" ? tsLanguage : denjiLanguage,
           syntaxHighlighting(classHighlighter),
           EditorState.readOnly.of(true),
           EditorView.editable.of(false),

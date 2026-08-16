@@ -105,7 +105,7 @@ function render(source: string, config: PreviewConfig): Rendered {
 const root = document.createElement("div");
 root.className = "root";
 
-const grid = new DiagramGrid("pwr");
+const grid = new DiagramGrid("denji");
 const surface = document.createElement("div");
 surface.className = "surface";
 const stage = document.createElement("div");

@@ -1,6 +1,6 @@
 import { StreamLanguage, type StreamParser, type StringStream } from "@codemirror/language";
 import { LINK_SCHEMES, STYLE_PROPS, normalizePropName, type StylePropSpec } from "@kxchnev/denji";
-import { pwrCompletions } from "./pwr-complete";
+import { denjiCompletions } from "./denji-complete";
 
 /** Mirrors SHAPE_KINDS / CONTAINER_KINDS in packages/core/src/dsl/arch-parse.ts — case-sensitive. */
 const KINDS = new Set(["app", "database", "queue", "rect", "service", "group"]);
@@ -36,7 +36,7 @@ type Mode =
   | "prop"
   | "propValue";
 
-interface PwrState {
+interface DenjiState {
   /** Position inside the current line — reset on every line. */
   mode: Mode;
   /** Lower-cased name of the `@directive` whose argument comes next. */
@@ -83,7 +83,7 @@ function hasOp(rest: string): boolean {
   return false;
 }
 
-function startOfLine(stream: StringStream, state: PwrState): string | null {
+function startOfLine(stream: StringStream, state: DenjiState): string | null {
   // Comments are whole-line only — there is no trailing-comment syntax.
   if (stream.match("%%") || stream.match("#")) {
     stream.skipToEnd();
@@ -139,7 +139,7 @@ function startOfLine(stream: StringStream, state: PwrState): string | null {
   return null;
 }
 
-function connection(stream: StringStream, state: PwrState): string | null {
+function connection(stream: StringStream, state: DenjiState): string | null {
   for (const op of OPS) if (stream.match(op)) return "operator";
   if (stream.match(":")) {
     state.mode = "label";
@@ -151,7 +151,7 @@ function connection(stream: StringStream, state: PwrState): string | null {
 }
 
 /** `style <name> {` — the name, then the brace that decides one line or many. */
-function styleHead(stream: StringStream, state: PwrState): string | null {
+function styleHead(stream: StringStream, state: DenjiState): string | null {
   if (stream.match("{")) {
     stream.eatSpace();
     // Nothing after the brace means the block continues on the next line.
@@ -173,7 +173,7 @@ function styleHead(stream: StringStream, state: PwrState): string | null {
 }
 
 /** A `name: value` declaration inside a style block. */
-function property(stream: StringStream, state: PwrState): string | null {
+function property(stream: StringStream, state: DenjiState): string | null {
   if (stream.match("}")) {
     if (state.inStyle) state.depth = Math.max(0, state.depth - 1);
     state.inStyle = false;
@@ -198,7 +198,7 @@ function property(stream: StringStream, state: PwrState): string | null {
   return null;
 }
 
-function propertyValue(stream: StringStream, state: PwrState): string | null {
+function propertyValue(stream: StringStream, state: DenjiState): string | null {
   state.mode = "prop";
   const v = stream.match(PROP_VALUE) as RegExpMatchArray | null;
   if (!v) return null;
@@ -212,7 +212,7 @@ function propertyValue(stream: StringStream, state: PwrState): string | null {
   return valueRole(STYLE_PROPS[normalizePropName(state.prop)], v[0]);
 }
 
-function declaration(stream: StringStream, state: PwrState): string | null {
+function declaration(stream: StringStream, state: DenjiState): string | null {
   if (stream.match(QUOTED)) return "string";
   const d = stream.match(DIRECTIVE) as RegExpMatchArray | null;
   if (d) {
@@ -234,7 +234,7 @@ function declaration(stream: StringStream, state: PwrState): string | null {
 }
 
 /** The argument of `@name(...)`, tokenized by what the directive expects. */
-function argument(stream: StringStream, state: PwrState): string | null {
+function argument(stream: StringStream, state: DenjiState): string | null {
   state.mode = "decl";
   const arg = stream.match(ARG) as RegExpMatchArray | null;
   if (!arg) return null; // `@gap()` — let `decl` consume the `)` on the next call
@@ -261,12 +261,12 @@ function argument(stream: StringStream, state: PwrState): string | null {
   return null; // unknown directive — the core will error, don't guess a colour
 }
 
-export const pwrStreamParser: StreamParser<PwrState> = {
-  name: "pwr",
+export const denjiStreamParser: StreamParser<DenjiState> = {
+  name: "denji",
   languageData: {
     commentTokens: { line: "#" }, // powers Mod-/ (toggleComment) in the editor
     indentOnInput: /^\s*\}$/,
-    autocomplete: pwrCompletions,
+    autocomplete: denjiCompletions,
     // Never auto-close `(` (the directive snippets already insert it) or `{`
     // (the parser requires `{` to end the line, so `{}` is always wrong).
     closeBrackets: { brackets: ['"'] },
@@ -323,4 +323,4 @@ export const pwrStreamParser: StreamParser<PwrState> = {
   },
 };
 
-export const pwrLanguage = StreamLanguage.define(pwrStreamParser);
+export const denjiLanguage = StreamLanguage.define(denjiStreamParser);
