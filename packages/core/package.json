@@ -1,6 +1,6 @@
 {
   "name": "@kxchnev/denji",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Architecture diagrams as text — the connections decide the layout, and the connectors go around the boxes",
   "type": "module",
   "sideEffects": false,

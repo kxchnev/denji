@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The release runs this same file rather than restating its steps: there is
+  # one list of what "green" means, and a release cannot pass a weaker one.
+  workflow_call:
 
 jobs:
   check:

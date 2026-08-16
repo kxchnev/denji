@@ -64,3 +64,33 @@ npm run -w packages/vscode typecheck
 
 Press F5, or run **Run the extension** from the debug panel — it opens a second
 window on `packages/vscode/examples/sample.denji`.
+
+## Releasing
+
+The version in `packages/core/package.json` is what publishes. Land a change to
+it on `main` and CI does the rest: publish to npm, tag the commit
+`@kxchnev/denji@<version>`, open a GitHub Release. There is no manual
+`npm publish`, and no tag to push by hand.
+
+```bash
+npm run release:core 1.0.1   # or minor / patch / major
+git commit -am "Release 1.0.1"
+git push
+```
+
+Go through the script rather than editing the manifest: `package-lock.json`
+records the workspace's version too, and a lockfile that disagrees with the
+manifest fails `npm ci` before it fails anything interesting.
+
+A push that leaves the version alone costs one cheap job that looks the version
+up in the registry and stops. That check, not the diff, is what decides — so a
+rerun or a revert cannot double-publish.
+
+There is no changelog file. **The release notes are the commit subjects**, taken
+from the commits that touched `packages/core` since the previous release of the
+package — so a subject has to read on its own, in a list, to someone who is not
+looking at the diff. Work that never reaches the published tarball (the docs
+site, the extension, CI) is filtered out by that same path.
+
+The extension is released separately and by hand — `npm run vscode:package`,
+then upload. Its tags have room to be `denji@<version>`.

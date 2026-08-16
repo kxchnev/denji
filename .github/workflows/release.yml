@@ -1,0 +1,135 @@
+# Publishing is driven by the version in packages/core/package.json, not by a
+# tag someone pushes: the manifest is the one place a version is written down,
+# so a release cannot disagree with what was published. The tag is a
+# consequence, and it carries the package name because this is a monorepo.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs on every push and is deliberately cheap — a checkout and one registry
+  # lookup, no install. Everything expensive hangs off its verdict.
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.check.outputs.publish }}
+      name: ${{ steps.check.outputs.name }}
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        run: |
+          name=$(node -p "require('./packages/core/package.json').name")
+          version=$(node -p "require('./packages/core/package.json').version")
+          {
+            echo "name=$name"
+            echo "version=$version"
+            echo "tag=$name@$version"
+          } >> "$GITHUB_OUTPUT"
+
+          # The registry is the source of truth, not the diff. A rerun, a merge
+          # that left the version alone and a re-pushed commit then all decide
+          # the same way, where "did this file change" would answer differently
+          # for each.
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already published — nothing to do"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$name@$version is not in the registry — releasing"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  checks:
+    needs: decide
+    if: needs.decide.outputs.publish == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: [decide, checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the tag, create the release
+    steps:
+      # Full history: the notes are a commit range, and a shallow clone has
+      # neither the earlier tag nor the commits between.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - run: npm ci
+
+      # No build step: the core's own prepublishOnly is clean + build + test,
+      # so what ships is built from scratch by the same command that ships it.
+      - name: Publish to npm
+        run: npm publish -w packages/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # After the publish, never before: a tag written first would outlive a
+      # failed publish and point at a release that does not exist.
+      - name: Tag the release
+        env:
+          TAG: ${{ needs.decide.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+      - name: Release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ needs.decide.outputs.name }}
+          VERSION: ${{ needs.decide.outputs.version }}
+          TAG: ${{ needs.decide.outputs.tag }}
+        run: |
+          # The previous release of *this* package. `describe` walks the commit
+          # graph rather than sorting tag strings, and the match keeps the
+          # extension's own tags out of it. From HEAD^, so the tag just created
+          # is not its own predecessor.
+          prev=$(git describe --tags --abbrev=0 --match "$NAME@*" HEAD^ 2>/dev/null || true)
+          if [ -n "$prev" ]; then range="$prev..HEAD"; else range=HEAD; fi
+
+          # Filtered by path, because a monorepo commits to several packages in
+          # the same week. The published tarball is built entirely out of
+          # packages/core, so this filter is exactly the package boundary —
+          # changes to the docs site, the extension or CI stay out of notes that
+          # claim to describe what is inside this version.
+          log=$(git log --no-merges --pretty='- %s (%h)' "$range" -- packages/core)
+
+          {
+            if [ -n "$log" ]; then
+              echo "$log"
+            else
+              echo "Maintenance release — no changes to the package itself."
+            fi
+            if [ -n "$prev" ]; then
+              echo
+              echo "**Full Changelog**: ${{ github.server_url }}/${{ github.repository }}/compare/$prev...$TAG"
+            fi
+          } > notes.md
+
+          # A 0.x placeholder must not take "Latest release" away from the real one.
+          case "$VERSION" in
+            0.*) prerelease=--prerelease ;;
+            *) prerelease= ;;
+          esac
+
+          gh release create "$TAG" --title "$TAG" --notes-file notes.md $prerelease
