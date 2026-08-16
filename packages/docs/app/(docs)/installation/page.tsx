@@ -28,7 +28,7 @@ export default function InstallationPage() {
 
       <h2 className="mt-10 text-xl font-semibold tracking-tight">Requirements</h2>
       <p className="mt-2 leading-7">
-        Node 18.17 or newer. The package is ESM only — reach for it with{" "}
+        Node 22 or newer. The package is ESM only — reach for it with{" "}
         <InlineCode>import</InlineCode>, not <InlineCode>require</InlineCode> — and it ships its own
         TypeScript types, so there is no <InlineCode>@types</InlineCode> package to add. Rendering to
         PNG or JPEG pulls in a native image dependency; SVG has none.

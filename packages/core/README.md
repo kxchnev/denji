@@ -14,7 +14,7 @@ covers the package.
 npm install @kxchnev/denji
 ```
 
-Node 18.17 or newer. ESM only: reach for it with `import`, not `require`. Types
+Node 22 or newer. ESM only: reach for it with `import`, not `require`. Types
 ship with the package. Rendering to PNG or JPEG uses `sharp`, which is an
 **optional** dependency loaded on demand — SVG needs nothing extra.
 

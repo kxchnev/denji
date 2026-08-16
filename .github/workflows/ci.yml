@@ -9,19 +9,18 @@ on:
   workflow_call:
 
 jobs:
+  # One Node, and it is the one the package asks for. The Node 20 leg that used
+  # to be here was red: jsdom 30, which drives the extension's tests, calls
+  # undici APIs that Node 20 does not have. Rather than test a floor nothing
+  # here can stand on, the core now says `engines: >=22` and is tested on 22.
   check:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ["20", "22"]
-
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: "22"
           cache: npm
 
       # A plain install, not --omit=dev: the icon set is generated from
