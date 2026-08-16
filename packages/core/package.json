@@ -1,0 +1,80 @@
+{
+  "name": "@kxchnev/denji",
+  "version": "1.0.0",
+  "description": "Architecture diagrams as text — the connections decide the layout, and the connectors go around the boxes",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "denji": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "LANGUAGE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kxchnev/denji.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/kxchnev/denji#readme",
+  "bugs": {
+    "url": "https://github.com/kxchnev/denji/issues"
+  },
+  "author": "Dmitrii Kochnev",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "prebuild": "npm run icons",
+    "build": "tsc",
+    "prewatch": "npm run icons",
+    "watch": "tsc --watch --preserveWatchOutput",
+    "dev": "tsx",
+    "pretest": "npm run icons",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pretypecheck": "npm run icons",
+    "typecheck": "tsc --noEmit",
+    "icons": "tsx scripts/generate-icons.ts",
+    "prepublishOnly": "npm run clean && npm run build && npm test"
+  },
+  "keywords": [
+    "architecture-diagram",
+    "diagram-as-code",
+    "diagram",
+    "dsl",
+    "svg",
+    "layout"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "simple-icons": "^16.27.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

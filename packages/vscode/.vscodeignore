@@ -1,0 +1,10 @@
+# The bundles in dist/ and the generated grammar in syntaxes/ are the extension;
+# the sources they were built from are not shipped.
+src/**
+webview/**
+test/**
+scripts/**
+esbuild.mjs
+tsconfig.json
+**/*.map
+examples/**

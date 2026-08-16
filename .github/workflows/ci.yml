@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  # Pushes to main arrive through release.yml, which calls this file rather than
+  # restating its steps: there is one list of what "green" means, and a release
+  # cannot pass a weaker one. Listening for those pushes here as well would run
+  # every check twice on the same commit.
+  workflow_call:
+
+jobs:
+  # One Node, and it is the one the package asks for. The Node 20 leg that used
+  # to be here was red: jsdom 30, which drives the extension's tests, calls
+  # undici APIs that Node 20 does not have. Rather than test a floor nothing
+  # here can stand on, the core now says `engines: >=22` and is tested on 22.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      # A plain install, not --omit=dev: the icon set is generated from
+      # `simple-icons`, which is a devDependency, and every build, test and
+      # typecheck run regenerates it first.
+      - run: npm ci
+
+      # The docs site and the extension consume the core's built `dist`, so the
+      # build has to come before anything that reads it.
+      - run: npm run build
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run -w packages/docs validate
+      - run: npm run -w packages/docs typecheck
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # The static export is its own failure mode — it catches what only shows
+      # up when Next renders every page ahead of time.
+      - run: npm run docs:build

@@ -1,0 +1,42 @@
+# A file to open while working on the extension.
+# Open the preview to the side (Cmd+K V), then drag a node onto another one —
+# the drop writes a relation, not a coordinate, and everything keeps arranging
+# itself around it.
+#
+# Nothing below says where anything goes. The connections do.
+
+architecture
+  group edge "Edge" @above(core) {
+    text "public"
+    app cdn "CDN"
+    app waf "WAF"
+    cdn -> waf
+  }
+
+  # An invisible wrapper: no label, transparent frame, no padding. It groups
+  # the two services for the layout without leaving any trace of itself.
+  group core "" @fill(transparent) @stroke(transparent) {
+    service orders "Orders" {
+      app api "Orders API" @icon(nodedotjs)
+      database db "Postgres" @leftOf(bus) @icon(postgresql)
+      queue bus "Events"
+      api -> db
+      api -> bus
+    }
+
+    service pay "Payments" @leftOf(orders) {
+      app papi "Payments API"
+      database pdb "Postgres"
+      papi -> pdb
+    }
+  }
+
+  app worker "Payouts" @below(core) @icon(go)
+  database ledger "Ledger" @below(worker)
+
+  waf -> api : https
+  api -> papi : charge
+  bus -> worker
+  papi -> worker
+  worker -> ledger
+  worker -> db
