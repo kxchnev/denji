@@ -14,6 +14,7 @@
     "vscode": "npm run -w packages/vscode watch",
     "vscode:package": "npm run -w packages/vscode package",
     "release:core": "npm version -w packages/core --no-git-tag-version",
+    "release:vscode": "npm version -w packages/vscode --no-git-tag-version",
     "icons:update": "npm i -D simple-icons@latest -w packages/core && npm run build && npm run vscode:package"
   },
   "devDependencies": {

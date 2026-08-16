@@ -1,7 +1,8 @@
-# Publishing is driven by the version in packages/core/package.json, not by a
-# tag someone pushes: the manifest is the one place a version is written down,
-# so a release cannot disagree with what was published. The tag is a
-# consequence, and it carries the package name because this is a monorepo.
+# Releasing is driven by the version in a package's manifest, not by a tag
+# someone pushes: the manifest is the one place a version is written down, so a
+# release cannot disagree with what was published. The tag is a consequence, and
+# it is namespaced by the workspace it belongs to — `core@1.2.3`, `vscode@1.2.3`
+# — because this repository ships two things on their own schedules.
 name: Release
 
 on:
@@ -16,15 +17,18 @@ permissions:
   contents: read
 
 jobs:
-  # Runs on every push and is deliberately cheap — a checkout and one registry
-  # lookup, no install. Everything expensive hangs off its verdict.
-  decide:
+  # Pushes to main are checked here and only here, so this runs for every
+  # commit, not just the ones that publish.
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  # The two `decide` jobs run on every push and are deliberately cheap — a
+  # checkout and one query, no install. Everything expensive hangs off them.
+  decide-core:
     runs-on: ubuntu-latest
     outputs:
       publish: ${{ steps.check.outputs.publish }}
-      name: ${{ steps.check.outputs.name }}
       version: ${{ steps.check.outputs.version }}
-      tag: ${{ steps.check.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
 
@@ -32,11 +36,7 @@ jobs:
         run: |
           name=$(node -p "require('./packages/core/package.json').name")
           version=$(node -p "require('./packages/core/package.json').version")
-          {
-            echo "name=$name"
-            echo "version=$version"
-            echo "tag=$name@$version"
-          } >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
           # The registry is the source of truth, not the diff. A rerun, a merge
           # that left the version alone and a re-pushed commit then all decide
@@ -50,18 +50,66 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # Unconditional: this is the only thing checking main now, so every commit
-  # gets it, not just the ones that publish.
-  checks:
-    uses: ./.github/workflows/ci.yml
+  decide-vscode:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.check.outputs.publish }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
 
-  # The gate belongs here, on the job it guards. It used to sit on `checks`,
-  # which worked only as long as `checks` was conditional too — making that one
-  # unconditional silently left this one with nothing stopping it, and it went
-  # off to republish a version the registry already had.
-  publish:
-    needs: [decide, checks]
-    if: needs.decide.outputs.publish == 'true'
+      - id: check
+        run: |
+          publisher=$(node -p "require('./packages/vscode/package.json').publisher")
+          name=$(node -p "require('./packages/vscode/package.json').name")
+          version=$(node -p "require('./packages/vscode/package.json').version")
+          id="$publisher.$name"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # The marketplace's own gallery API, asked directly. `vsce show` looks
+          # like the tool for this and is not: for an extension that does not
+          # exist it prints `undefined` and exits 0, so its exit code says
+          # nothing — and installing it drags in azure-devops-node-api, cheerio
+          # and secretlint for a job that runs on every push.
+          resp=$(curl -sfS -X POST \
+            https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json;api-version=3.0-preview.1' \
+            -d "{\"filters\":[{\"criteria\":[{\"filterType\":7,\"value\":\"$id\"}]}],\"flags\":1}"
+          ) || { echo "could not reach the marketplace"; exit 1; }
+
+          # A query that fails is an error, not a verdict — see the exit above.
+          # Only a well-formed answer decides anything.
+          #
+          # The answer arrives on stdin rather than as an argument: it carries
+          # every published version, so it grows with the extension, and Linux
+          # caps a single argument at 128 KB. Measured at 386 KB for a
+          # long-lived extension — this would have started failing years in.
+          if printf '%s' "$resp" | node -e '
+              const want = process.argv[1]
+              let raw = ""
+              process.stdin.on("data", (d) => (raw += d)).on("end", () => {
+                let hit = false
+                try {
+                  const found = JSON.parse(raw).results[0].extensions
+                  hit = found.length > 0 && found[0].versions.some((v) => v.version === want)
+                } catch {}
+                process.exit(hit ? 0 : 1)
+              })
+            ' "$version"; then
+            echo "$id@$version is already on the marketplace — nothing to do"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$id@$version is not on the marketplace — releasing"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Each gate sits on the job it guards. It used to sit on a shared `checks`
+  # job, which worked only as long as that one was conditional too — making it
+  # unconditional silently left publishing with nothing stopping it.
+  publish-core:
+    needs: [decide-core, checks]
+    if: needs.decide-core.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write # push the tag, create the release
@@ -95,54 +143,56 @@ jobs:
       - name: Publish to npm
         run: npm publish -w packages/core
 
-      # After the publish, never before: a tag written first would outlive a
-      # failed publish and point at a release that does not exist.
-      - name: Tag the release
+      - uses: ./.github/actions/tag-and-release
+        with:
+          prefix: core
+          version: ${{ needs.decide-core.outputs.version }}
+          paths: packages/core
+          token: ${{ github.token }}
+
+  publish-vscode:
+    needs: [decide-vscode, checks]
+    if: needs.decide-vscode.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # The whole build, not just the extension's: esbuild bundles
+      # `@kxchnev/denji` through the workspace symlink, and packages/core/dist
+      # does not exist yet after a clean install.
+      - run: npm run build
+
+      - run: npm run vscode:package
+
+      # `--packagePath`, not a second build: the file on the release and the
+      # file on the marketplace are then the same file, not two that look alike.
+      #
+      # VSCE_PAT is the one secret this repository has — npm publishes over OIDC
+      # and needs none. It must be organization-scoped: Azure DevOps blocked new
+      # global PATs in March 2026 and retires the rest on 1 December, so an
+      # expiring token here is not a maintenance chore but a deadline.
+      - name: Publish to the marketplace
+        run: npx vsce publish --packagePath packages/vscode/denji.vsix
         env:
-          TAG: ${{ needs.decide.outputs.tag }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "$TAG"
-          git push origin "$TAG"
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      - name: Release notes
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NAME: ${{ needs.decide.outputs.name }}
-          VERSION: ${{ needs.decide.outputs.version }}
-          TAG: ${{ needs.decide.outputs.tag }}
-        run: |
-          # The previous release of *this* package. `describe` walks the commit
-          # graph rather than sorting tag strings, and the match keeps the
-          # extension's own tags out of it. From HEAD^, so the tag just created
-          # is not its own predecessor.
-          prev=$(git describe --tags --abbrev=0 --match "$NAME@*" HEAD^ 2>/dev/null || true)
-          if [ -n "$prev" ]; then range="$prev..HEAD"; else range=HEAD; fi
-
-          # Filtered by path, because a monorepo commits to several packages in
-          # the same week. The published tarball is built entirely out of
-          # packages/core, so this filter is exactly the package boundary —
-          # changes to the docs site, the extension or CI stay out of notes that
-          # claim to describe what is inside this version.
-          log=$(git log --no-merges --pretty='- %s (%h)' "$range" -- packages/core)
-
-          {
-            if [ -n "$log" ]; then
-              echo "$log"
-            else
-              echo "Maintenance release — no changes to the package itself."
-            fi
-            if [ -n "$prev" ]; then
-              echo
-              echo "**Full Changelog**: ${{ github.server_url }}/${{ github.repository }}/compare/$prev...$TAG"
-            fi
-          } > notes.md
-
-          # A 0.x placeholder must not take "Latest release" away from the real one.
-          case "$VERSION" in
-            0.*) prerelease=--prerelease ;;
-            *) prerelease= ;;
-          esac
-
-          gh release create "$TAG" --title "$TAG" --notes-file notes.md $prerelease
+      - uses: ./.github/actions/tag-and-release
+        with:
+          prefix: vscode
+          version: ${{ needs.decide-vscode.outputs.version }}
+          # The .vsix carries the whole engine in dist/webview.js, so a change
+          # to the layout changes this artifact and belongs in its notes.
+          paths: packages/vscode packages/core
+          asset: packages/vscode/denji.vsix
+          token: ${{ github.token }}

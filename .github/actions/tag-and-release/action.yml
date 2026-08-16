@@ -1,0 +1,84 @@
+# Both packages finish a release the same way, differing only in what the tag is
+# called and which paths reached the artifact. The logic in between is fiddly
+# enough — find this package's own previous tag, filter by path, decide about
+# prerelease — that a second copy would be a second thing to keep correct.
+name: Tag and release
+description: Tag the published commit and open a release, with notes taken from the commits inside the artifact.
+
+inputs:
+  prefix:
+    description: Workspace the tag is namespaced by, e.g. `core`.
+    required: true
+  version:
+    description: The version that was just published.
+    required: true
+  paths:
+    description: >
+      Space-separated paths whose commits belong in the notes. This is the
+      boundary of the artifact, not of the directory that names it: the
+      extension bundles the core, so its notes cover both.
+    required: true
+  asset:
+    description: Optional file to attach to the release.
+    default: ""
+  token:
+    description: Token used to create the release.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # After the publish, never before: a tag written first would outlive a
+    # failed publish and point at a release that does not exist.
+    - name: Tag the release
+      shell: bash
+      env:
+        TAG: ${{ inputs.prefix }}@${{ inputs.version }}
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git tag -a "$TAG" -m "$TAG"
+        git push origin "$TAG"
+
+    - name: Release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        TAG: ${{ inputs.prefix }}@${{ inputs.version }}
+        PREFIX: ${{ inputs.prefix }}
+        VERSION: ${{ inputs.version }}
+        PATHS: ${{ inputs.paths }}
+        ASSET: ${{ inputs.asset }}
+      run: |
+        # This package's own previous release. `describe` walks the commit graph
+        # rather than sorting tag strings, and the match keeps the other
+        # package's tags out of it. From HEAD^, so the tag just created is not
+        # its own predecessor — and `|| true` because a root commit has no
+        # parent, which is not an error here.
+        prev=$(git describe --tags --abbrev=0 --match "$PREFIX@*" HEAD^ 2>/dev/null || true)
+        if [ -n "$prev" ]; then range="$prev..HEAD"; else range=HEAD; fi
+
+        # Unquoted on purpose: PATHS is a list.
+        # shellcheck disable=SC2086
+        log=$(git log --no-merges --pretty='- %s (%h)' "$range" -- $PATHS)
+
+        {
+          if [ -n "$log" ]; then
+            echo "$log"
+          else
+            echo "Maintenance release — no changes to the package itself."
+          fi
+          if [ -n "$prev" ]; then
+            echo
+            echo "**Full Changelog**: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$prev...$TAG"
+          fi
+        } > notes.md
+
+        # A 0.x version must not take "Latest release" away from a real one.
+        case "$VERSION" in
+          0.*) prerelease=--prerelease ;;
+          *) prerelease= ;;
+        esac
+
+        # shellcheck disable=SC2086
+        gh release create "$TAG" --title "$TAG" --notes-file notes.md $prerelease ${ASSET:+"$ASSET"}
