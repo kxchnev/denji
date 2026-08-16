@@ -1,4 +1,4 @@
-# power
+# denji
 
 Монорепо: библиотека для **архитектурных диаграмм в свободном стиле** +
 сайт-документация. Фигуры (app/database/queue/rect), контейнеры (service/group),
@@ -17,8 +17,8 @@ TypeScript, SVG.
 ## Структура (npm workspaces)
 
 ```
-packages/core/   пакет power — библиотека + CLI
-packages/docs/   Next.js + shadcn дока с живым playground (зависит от power)
+packages/core/   пакет @kxchnev/denji — библиотека + CLI
+packages/docs/   Next.js + shadcn дока с живым playground (зависит от @kxchnev/denji)
 packages/vscode/ расширение VS Code: живое превью .denji с драгом
 package.json     workspace-root (скрипты-прокси)
 ```
@@ -145,7 +145,7 @@ package.json     workspace-root (скрипты-прокси)
 - `src/cli.ts` — CLI: `render`, `watch`, `check`, `icons`, `spec`.
 
 **Грамматика для моделей.** `packages/core/LANGUAGE.md` — единственный источник
-правды по языку (английский), печатается через `power spec`. `AGENTS.md` в корне
+правды по языку (английский), печатается через `denji spec`. `AGENTS.md` в корне
 и `.claude/skills/denji-diagrams/SKILL.md` ссылаются на него и несут правила
 авторства. При правке `arch-parse.ts` синхронно обновляй `LANGUAGE.md`.
 
@@ -177,7 +177,7 @@ package.json     workspace-root (скрипты-прокси)
 ### packages/docs (дока)
 
 Next.js App Router + Tailwind + shadcn-компоненты. Ядро подключено как пакет
-`power` (собранный `dist`) и рендерит диаграммы в браузере. Ключевое:
+`@kxchnev/denji` (собранный `dist`) и рендерит диаграммы в браузере. Ключевое:
 `components/Diagram.tsx` (parse→layout→render→SVG, pan/zoom; при ошибке парса
 держит последний удачный рендер и показывает ошибку оверлеем), `Example.tsx`
 (превью + табы DSL/API), `examples/*` (датасет), `app/**/page.tsx` (страницы).
@@ -186,7 +186,7 @@ Next.js App Router + Tailwind + shadcn-компоненты. Ядро подкл
 справочника, `app/playground/` — полноэкранный редактор без них. В корневом
 `app/layout.tsx` остаётся только `<html>`, тема и `globals.css`. Плейграунд:
 `lib/playground-store.ts` (диаграммы в `localStorage` под одним ключом
-`power.playground.diagrams.v1`, наружу — external store для
+`denji.playground.diagrams.v1`, наружу — external store для
 `useSyncExternalStore`), `lib/use-playground.ts` (сессия, дебаунс-автосейв,
 дип-линк `#<id>`), `lib/playground-templates.ts` (стартовые шаблоны — берут DSL
 из `examples/*` **по id**), `components/playground/*` (тулбар, список, пикер
@@ -221,26 +221,26 @@ Next.js App Router + Tailwind + shadcn-компоненты. Ядро подкл
 Две сборки (esbuild, `esbuild.mjs`):
 
 - `dist/extension.js` (CJS, host) — `src/extension.ts` (команды
-  `power.showPreview` / `...ToSide`), `src/preview.ts` (`PreviewManager` — одно
+  `denji.showPreview` / `...ToSide`), `src/preview.ts` (`PreviewManager` — одно
   превью на документ, HTML с CSP, дебаунс 60 мс как в `watch.ts`, сериализатор
   для переживания reload), `src/lens.ts` (CodeLens «Open preview to the side»
   над первой строкой), `src/diagnostics.ts` (`checkDiagram` → Problems, дебаунс
   300 мс — не 60 как у превью: мигающая волнистая линия под недопечатанной
   строкой хуже опоздавшей, и тут полный parse+layout; `nodes[1..]` становятся
-  `relatedInformation` через `findDeclaration`; настройка `power.diagnostics` —
+  `relatedInformation` через `findDeclaration`; настройка `denji.diagnostics` —
   `all`/`errors`/`off`, потому что предупреждения раскладки эвристичны и спорить
   с ними должно быть можно выключателем), `src/edit.ts` + `src/diff.ts` (запись
   дропа), `src/protocol.ts` (типы сообщений — общие с вебвью).
-- `syntaxes/pwr.tmLanguage.json` — подсветка. **Генерируется** скриптом
+- `syntaxes/denji.tmLanguage.json` — подсветка. **Генерируется** скриптом
   `scripts/generate-grammar.ts` из экспортов ядра, в гите её нет.
-- `dist/webview.js` (IIFE, browser) — `webview/main.ts` целиком тащит `power` и
+- `dist/webview.js` (IIFE, browser) — `webview/main.ts` целиком тащит `@kxchnev/denji` и
   делает всё: parse→layout→render, pan/zoom/fit, сетка (`webview/grid.ts` — порт
   `docs/components/DiagramGrid.tsx`), хит-тест, драг, оверлей ошибки.
 
 ⚠️ Ядро исполняется **в вебвью**, а не в host: драг перекладывает документ на
 каждом кадре (иначе контейнеры не растут и связи не перецеливаются), а IPC
 round-trip внутри 60fps-цикла заметен. Расширение самодостаточно всё равно —
-`power` забандлен, у пользователя ничего ставить не нужно.
+`@kxchnev/denji` забандлен, у пользователя ничего ставить не нужно.
 
 ⚠️ Дроп пишется **построчным диффом** (`src/diff.ts` → `WorkspaceEdit`), а не
 заменой всего документа: `setNodeRelation` переписывает объявление на месте и
@@ -287,8 +287,8 @@ round-trip внутри 60fps-цикла заметен. Расширение с
 
 - ESM, `NodeNext` в ядре. Импорты локальных модулей ядра — с расширением `.js`.
 - `strict` + `noUncheckedIndexedAccess` в ядре. Раскладка детерминирована.
-- Дока и расширение цепляются к **собранному** `power` → после правок ядра
+- Дока и расширение цепляются к **собранному** `@kxchnev/denji` → после правок ядра
   `npm run build`. Исключение — работающий `npm run docs`: он держит свой
   `tsc --watch` и пересобирает ядро сам; расширению сборка нужна по-прежнему.
   Тесты расширения гоняют реальный `dist/webview.js` в jsdom,
-  так что сборка входит в `npm run -w power-vscode test`.
+  так что сборка входит в `npm run -w packages/vscode test`.
