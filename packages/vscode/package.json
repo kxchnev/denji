@@ -2,7 +2,7 @@
   "name": "denji",
   "displayName": "Denji — architecture diagrams",
   "description": "Live preview for .denji architecture diagrams — drag a node, the source learns where it belongs",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "publisher": "kxchnev",
   "icon": "icon.png",
