@@ -747,6 +747,68 @@ function layered(
     }
   }
 
+  // A leaf with one neighbour stands next to that neighbour.
+  //
+  // A rank says what comes before what, not how far: `VS Code` points at one box
+  // inside `company`, so it takes the rank above the whole group — and when the
+  // group hangs low in its own rank, the leaf is left stranded a third of a screen
+  // away with one line crossing the gap. Nothing is up there with it, so it can
+  // simply come down to meet the thing it talks to; the rank order is untouched,
+  // because moving towards its only neighbour cannot take it past anything else it
+  // is ordered against.
+  //
+  // Only for a leaf whose links all lead to the same box: with two neighbours
+  // there is no "next to" to move to, and the rank is the honest answer.
+  for (const it of items) {
+    const v = V.get(it.id)!;
+    if (v.afloat) continue;
+    const ls = [...sides.up.get(it.id)!, ...sides.dn.get(it.id)!];
+    if (ls.length === 0) continue;
+    const only = ls[0]!.id;
+    if (!ls.every((l) => l.id === only)) continue;
+    const other = V.get(only);
+    const otherItem = items.find((i) => i.id === only);
+    if (!other || !otherItem || other.afloat || other.door) continue;
+    const mine = pos.get(it.id);
+    const theirs = pos.get(only);
+    if (!mine || !theirs) continue;
+
+    const alongOf = (p: Point): number => (down ? p.y : p.x);
+    const sizeAlong = (i: Placeable): number => (down ? i.height : i.width);
+    const before = other.rank > v.rank;
+    if (other.rank === v.rank) continue;
+    const want = before
+      ? alongOf(theirs) - gapAlong - sizeAlong(it)
+      : alongOf(theirs) + sizeAlong(otherItem) + gapAlong;
+    const from = alongOf(mine);
+    if ((before && want <= from) || (!before && want >= from)) continue;
+
+    // As far as the free space allows: whatever it would land on stops it, at the
+    // gap, and a box it is not allowed to pass keeps the room it had.
+    let to = want;
+    for (const q of items) {
+      if (q.id === it.id) continue;
+      const at = pos.get(q.id);
+      if (!at) continue;
+      const acrossLo = down ? at.x : at.y;
+      const acrossHi = acrossLo + (down ? q.width : q.height);
+      const myLo = down ? mine.x : mine.y;
+      const myHi = myLo + (down ? it.width : it.height);
+      if (Math.min(acrossHi, myHi) - Math.max(acrossLo, myLo) <= 0) continue;
+      const qLo = alongOf(at);
+      const qHi = qLo + sizeAlong(q);
+      if (before) {
+        if (qHi <= from + sizeAlong(it)) continue;
+        to = Math.min(to, qLo - gapAlong - sizeAlong(it));
+      } else {
+        if (qLo >= from) continue;
+        to = Math.max(to, qHi + gapAlong);
+      }
+    }
+    if (before ? to <= from : to >= from) continue;
+    pos.set(it.id, down ? { x: mine.x, y: snapHalf(to) } : { x: snapHalf(to), y: mine.y });
+  }
+
   const lanes = new Map<string, Point[]>();
   for (const [key, chain] of corridors) {
     lanes.set(
