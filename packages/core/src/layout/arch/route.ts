@@ -198,6 +198,10 @@ export function routeConnections(diagram: ArchDiagram, opts: RouteOptions): void
     layOut(wires, boxes, opts),
   ));
 
+  // Then absorb the last few-pixel step into the dock it arrives at, wherever
+  // that costs nobody else anything.
+  straightenApproach(wires, paths, blockersOf);
+
   bundle(paths, blockersOf);
 
   wires.forEach((w, i) => {
@@ -818,6 +822,163 @@ interface Segment {
   /** Where it may sit and still not be drawn over one. The last word. */
   hardLo: number;
   hardHi: number;
+}
+
+/**
+ * Absorb the last small sideways step into the dock it arrives at.
+ *
+ * A connector that travels a long way and then steps eight pixels aside in its
+ * final twenty is read as a line that wobbles at the arrowhead — the one place a
+ * reader is still working out where it lands. The step is there because the dock
+ * is not on the line the route arrived along: the box's side is shared, its docks
+ * parted by a pitch, and this one ended up a few pixels off the corridor.
+ *
+ * Deciding the docks differently up front fixes such a line and moves twenty
+ * others, which is a bad trade when nineteen were fine. So it is done here, after
+ * the fact and one dock at a time: slide the **arriving** dock onto the line the
+ * route came in on, and the last two segments become one straight run into the
+ * arrowhead.
+ *
+ * Only when the slide is free — it stays on its own side, keeps its distance from
+ * the docks beside it (which do not move), the longer straight run it makes is
+ * clear of every box, and the drawing gains no crossing and no doubled line.
+ * Nothing else can change, because nothing else is touched.
+ */
+function straightenApproach(
+  wires: readonly Wire[],
+  paths: Point[][],
+  blockersOf: readonly Rect[][],
+): void {
+  /** Every dock on one side of one box, so a slide can keep its distance. */
+  const onSide = new Map<string, Array<{ i: number; end: "a" | "b" }>>();
+  wires.forEach((w, i) => {
+    for (const [end, node, side] of [
+      ["a", w.c.from, w.from],
+      ["b", w.c.to, w.to],
+    ] as const) {
+      const k = `${node}|${side}`;
+      const g = onSide.get(k);
+      if (g) g.push({ i, end });
+      else onSide.set(k, [{ i, end }]);
+    }
+  });
+  const atOf = (i: number, end: "a" | "b"): number =>
+    end === "a" ? wires[i]!.atFrom : wires[i]!.atTo;
+
+  wires.forEach((w, i) => {
+    const path = paths[i]!;
+    if (path.length < 4) return;
+    const along = horizontal(w.to);
+    const lateral = (p: Point): number => (along ? p.y : p.x);
+    // ... M -> P -> Q -> R: R is the dock, Q -> R its straight approach, P -> Q the
+    // step, and M -> P the run the route actually arrived along.
+    const m = path[path.length - 4]!;
+    const p = path[path.length - 3]!;
+    const q = path[path.length - 2]!;
+    const r = path[path.length - 1]!;
+    const step = lateral(q) - lateral(p);
+    if (step === 0 || Math.abs(step) > DOCK_PITCH) return;
+    // The step has to be the only thing between the arrival run and the dock.
+    if (Math.abs(lateral(m) - lateral(p)) > 0.01) return;
+
+    const want = w.atTo - step;
+    const { min, max } = sideSpan(w.b, w.to);
+    const inset = Math.min(DOCK_INSET, (max - min) / 2);
+    if (want < min + inset || want > max - inset) return;
+    const room = (onSide.get(`${w.c.to}|${w.to}`) ?? []).every(
+      (o) => (o.i === i && o.end === "b") || Math.abs(atOf(o.i, o.end) - want) >= MIN_DOCK_PITCH,
+    );
+    if (!room) return;
+
+    const kept = w.atTo;
+    w.atTo = want;
+    const dock = dockPoint(w.b, w.to, w.atTo);
+    // The two segments and the step become one run from where the route arrived.
+    // Simplified, because the step is gone: the arrival run and the approach are
+    // now one straight line, and two collinear segments left in the path would be
+    // handed to the bus as two — which is how one of them gets nudged sideways and
+    // the straight run comes out as a diagonal.
+    const merged = simplify([...path.slice(0, path.length - 3), { x: p.x, y: p.y }, dock]);
+    const tail = [merged[merged.length - 2]!, dock];
+
+    const before = crossingsAround(paths, i) + doubledAround(paths, i);
+    const keptPath = paths[i]!;
+    paths[i] = merged;
+    const after = crossingsAround(paths, i) + doubledAround(paths, i);
+    if (straightIsClear(tail, blockersOf[i] ?? []) && after <= before) return;
+    paths[i] = keptPath;
+    w.atTo = kept;
+  });
+}
+
+/** Whether a straight stretch of a connector would be drawn over a box. */
+function straightIsClear(seg: readonly Point[], blockers: readonly Rect[]): boolean {
+  const a = seg[0]!;
+  const b = seg[1]!;
+  const lo = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
+  const hi = { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) };
+  for (const r of blockers) {
+    // The boxes at the ends are in this list too, shrunk; the line touches their
+    // borders by construction, and a box holding a dock is not in its own way.
+    const holds = (t: Point): boolean =>
+      t.x >= r.x - CLEARANCE - 0.5 &&
+      t.x <= r.x + r.width + CLEARANCE + 0.5 &&
+      t.y >= r.y - CLEARANCE - 0.5 &&
+      t.y <= r.y + r.height + CLEARANCE + 0.5;
+    if (holds(a) || holds(b)) continue;
+    if (
+      hi.x > r.x - CLEARANCE &&
+      lo.x < r.x + r.width + CLEARANCE &&
+      hi.y > r.y - CLEARANCE &&
+      lo.y < r.y + r.height + CLEARANCE
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Crossings between route `i` and every other, which a slide may not add. */
+function crossingsAround(paths: readonly Point[][], i: number): number {
+  let n = 0;
+  for (let j = 0; j < paths.length; j++) if (j !== i) n += crossCount(paths[i]!, paths[j]!);
+  return n;
+}
+
+/** How much of route `i` is drawn on top of another one, in pixels. */
+function doubledAround(paths: readonly Point[][], i: number): number {
+  const seg = (t: readonly Point[]): Array<[Point, Point]> => {
+    const out: Array<[Point, Point]> = [];
+    for (let k = 0; k + 1 < t.length; k++) out.push([t[k]!, t[k + 1]!]);
+    return out;
+  };
+  let sum = 0;
+  for (const [a1, a2] of seg(paths[i]!)) {
+    const av = Math.abs(a1.x - a2.x) < 0.01;
+    for (let j = 0; j < paths.length; j++) {
+      if (j === i) continue;
+      for (const [b1, b2] of seg(paths[j]!)) {
+        const bv = Math.abs(b1.x - b2.x) < 0.01;
+        if (av !== bv) continue;
+        if (av) {
+          if (Math.abs(a1.x - b1.x) > 1.5) continue;
+          sum += Math.max(
+            0,
+            Math.min(Math.max(a1.y, a2.y), Math.max(b1.y, b2.y)) -
+              Math.max(Math.min(a1.y, a2.y), Math.min(b1.y, b2.y)),
+          );
+        } else {
+          if (Math.abs(a1.y - b1.y) > 1.5) continue;
+          sum += Math.max(
+            0,
+            Math.min(Math.max(a1.x, a2.x), Math.max(b1.x, b2.x)) -
+              Math.max(Math.min(a1.x, a2.x), Math.min(b1.x, b2.x)),
+          );
+        }
+      }
+    }
+  }
+  return sum;
 }
 
 /**
