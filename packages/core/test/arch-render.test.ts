@@ -521,24 +521,22 @@ describe("rounded corners", () => {
   });
 
   it("draws a step too short to round as one transition, not two kinks", () => {
-    // An app and a narrower database in one service: their docks end up a few
-    // pixels out of line, so the router steps sideways by 7 — less than the cut
-    // a corner needs, and once upon a time two hard kinks that close together.
-    const src = [
-      "architecture",
-      '  service orders "Orders" {',
-      '    app api "Orders API"',
-      '    database db "Postgres"',
-      "    api -> db",
-      "  }",
-      '  service pay "Payments" {',
-      '    app papi "Payments API"',
-      '    database pdb "Postgres"',
-      "    papi -> pdb",
-      "  }",
-      "  api -> papi",
-    ].join("\n");
-    const drawn = connectors(svg(src)).map(corners);
+    // A path with a seven-pixel step in it, handed to the renderer directly.
+    //
+    // It used to come from a diagram: an app and a narrower database in one
+    // service docked a few pixels out of line. The router now slides such a dock
+    // onto the line the route arrived along, so that particular step is gone — but
+    // the rule about drawing one is a rule about *paths*, and steps still survive
+    // wherever sliding the dock is not free. So the path is the input.
+    const d = parseArchitecture('architecture\napp a "A"\napp b "B" @below(a)\na -> b');
+    layoutArchitecture(d);
+    d.connections[0]!.path = [
+      { x: 100, y: 100 },
+      { x: 100, y: 200 },
+      { x: 107, y: 200 },
+      { x: 107, y: 300 },
+    ];
+    const drawn = connectors(renderArchitecture(d)).map(corners);
     expect(drawn.reduce((n, c) => n + c.blends, 0)).toBeGreaterThan(0);
     // And the step never leaves a corner tighter than the radius behind it.
     for (const c of drawn) {

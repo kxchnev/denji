@@ -44,6 +44,25 @@ const TOUCHING = 3;
 export const DOCK_RUN = 20;
 /** Distance between neighbouring lines inside one bundle. */
 export const BUS_PITCH = 8;
+/**
+ * Distance between neighbouring lines that share an end.
+ *
+ * Lines that merely travel together are separate stories and want telling apart.
+ * Lines that all come from one box, or all arrive at one, are one story with
+ * several threads: bound tight they read as a single trunk, and every thread
+ * still has its own line and its own arrowhead. Tight enough to bind, wide enough
+ * that two strokes and the gap between them stay three distinct pixels.
+ */
+export const TRUNK_PITCH = 6;
+/**
+ * The docks a trunk lands on sit at exactly the same pitch as its lanes.
+ *
+ * Two different pitches is two combs with different teeth: every line arrives a
+ * few pixels off the lane it travelled in and has to step across in its last
+ * twenty — the wobble at the arrowhead, reinvented by the very thing meant to
+ * tidy the arrivals up. One number, so the trunk goes straight in.
+ */
+const TRUNK_DOCK_PITCH = TRUNK_PITCH;
 /** How far apart two corridors may be and still be read as one bundle. */
 const BUS_TOL = 22;
 /** How much a segment holding a dock outweighs a free one when a bundle settles. */
@@ -202,7 +221,10 @@ export function routeConnections(diagram: ArchDiagram, opts: RouteOptions): void
   // that costs nobody else anything.
   straightenApproach(wires, paths, blockersOf);
 
-  bundle(paths, blockersOf);
+  bundle(paths, blockersOf, wires);
+  // Once more, now that the trunks are bound: a line that ended up a few pixels
+  // off the lane it travels in can bring its dock across to meet it.
+  straightenApproach(wires, paths, blockersOf);
 
   wires.forEach((w, i) => {
     const pts = simplify(paths[i]!);
@@ -499,10 +521,6 @@ function spreadDocks(
     const { min, max } = sideSpan(first.rect, first.side);
     const width = max - min;
     const middle = min + width / 2;
-    const pitch = Math.min(
-      DOCK_PITCH,
-      Math.max(MIN_DOCK_PITCH, (width - DOCK_INSET * 2) / Math.max(1, g.length)),
-    );
     const key = (e: End): number => {
       const asked = keyOf?.(e.w, e.end);
       if (asked !== null && asked !== undefined) return asked;
@@ -510,6 +528,25 @@ function spreadDocks(
       return horizontal(e.side) ? c.y : c.x;
     };
     const ordered = [...g].sort((p, q) => key(p) - key(q) || p.w.index - q.w.index);
+    // How far apart the docks stand is how far apart the lines arrive.
+    //
+    // Several lines coming down one corridor into one side of one box are a trunk:
+    // spacing them a full pitch apart makes each step sideways in its last twenty
+    // pixels to reach a comb wider than they are, and the arrivals wobble. Several
+    // arriving from opposite ends of the drawing are not a trunk, and a tight comb
+    // would make *them* step. So the comb takes its pitch from the spread of where
+    // the lines actually come from — bound tight when they travel together, full
+    // width when they do not. Known only on the second pass, when `keyOf` reports
+    // where each route really set off.
+    const spread = key(ordered[ordered.length - 1]!) - key(ordered[0]!);
+    const asked =
+      keyOf && ordered.length > 1 && ordered.every((e) => e.end === ordered[0]!.end)
+        ? clamp(spread / (ordered.length - 1), TRUNK_PITCH, DOCK_PITCH)
+        : DOCK_PITCH;
+    const pitch = Math.min(
+      asked,
+      Math.max(MIN_DOCK_PITCH, (width - DOCK_INSET * 2) / Math.max(1, g.length)),
+    );
     const inset = Math.min(DOCK_INSET, width / 2);
     ordered.forEach((e, k) => {
       const raw = middle + (k - (ordered.length - 1) / 2) * pitch;
@@ -892,8 +929,12 @@ function straightenApproach(
       const { min, max } = sideSpan(rect, side);
       const inset = Math.min(DOCK_INSET, (max - min) / 2);
       if (want < min + inset || want > max - inset) return;
+      // Two docks going the same way on one side are threads of one trunk, and a
+      // trunk may be tight; anything else keeps its full distance.
       const room = (onSide.get(`${node}|${side}`) ?? []).every(
-        (o) => (o.i === i && o.end === end) || Math.abs(atOf(o.i, o.end) - want) >= MIN_DOCK_PITCH,
+        (o) =>
+          (o.i === i && o.end === end) ||
+          Math.abs(atOf(o.i, o.end) - want) >= (o.end === end ? TRUNK_DOCK_PITCH : MIN_DOCK_PITCH),
       );
       if (!room) return;
 
@@ -1002,7 +1043,38 @@ function doubledAround(paths: readonly Point[][], i: number): number {
  * its own corridor either: a bundle wider than the gap it runs through would
  * push its outermost line into exactly the box the route was built to avoid.
  */
-function bundle(paths: Point[][], blockersOf: Rect[][]): void {
+function bundle(paths: Point[][], blockersOf: Rect[][], wires?: readonly Wire[]): void {
+  const ends = wires?.map((w) => [w.c.from, w.c.to] as const);
+  /** The wire end a segment holds a dock for, if it holds one. */
+  const dockEnd = (s: Segment): "a" | "b" | null => {
+    const pts = paths[s.path]!;
+    if (s.i === 0) return "a";
+    if (s.i === pts.length - 2) return "b";
+    return null;
+  };
+  /** Where that dock may sit on its side, so a squeezed trunk stays on the box. */
+  const dockRoom = (s: Segment): { lo: number; hi: number } | null => {
+    const end = dockEnd(s);
+    const w = wires?.[s.path];
+    if (!end || !w) return null;
+    const side = end === "a" ? w.from : w.to;
+    if (horizontal(side) === s.vertical) return null;
+    const { min, max } = sideSpan(end === "a" ? w.a : w.b, side);
+    const inset = Math.min(DOCK_INSET, (max - min) / 2);
+    return { lo: min + inset, hi: max - inset };
+  };
+  /** Whether every route in a group touches one and the same box. */
+  const shareEnd = (members: readonly Segment[]): boolean => {
+    if (!ends || members.length < 2) return false;
+    const first = ends[members[0]!.path];
+    if (!first) return false;
+    return [first[0], first[1]].some((node) =>
+      members.every((s) => {
+        const e = ends[s.path];
+        return e !== undefined && (e[0] === node || e[1] === node);
+      }),
+    );
+  };
   const segs: Segment[] = [];
   paths.forEach((pts, path) => {
     for (let i = 0; i + 1 < pts.length; i++) {
@@ -1111,7 +1183,25 @@ function bundle(paths: Point[][], blockersOf: Rect[][]): void {
     /** What no amount of not-merging may talk a line out of. */
     const wall = (s: Segment): [number, number] =>
       s.hardHi - s.hardLo > 0.5 ? [s.hardLo, s.hardHi] : [s.coord, s.coord];
-    const loose = (s: Segment): boolean => s.movable;
+    /**
+     * Whether a segment may take a lane of its own.
+     *
+     * Normally the two holding the docks may not: sliding one tears the arrow off
+     * its box. Inside a trunk they may, because the dock comes with them — it
+     * slides along its own side, which is somewhere a dock is allowed to be, and
+     * that is the whole point of a trunk: the lines arrive bound together instead
+     * of fanned across a comb wider than the corridor they came down.
+     */
+    const loose = (s: Segment): boolean =>
+      s.movable || (trunkOf.get(s) === true && dockRoom(s) !== null);
+
+    // Which bundles are trunks: every line in them touches one and the same box.
+    const trunkOf = new Map<Segment, boolean>();
+    for (const members of bundles.values()) {
+      const group = members.map((m) => pool[m]!);
+      const isTrunk = shareEnd(group);
+      for (const s of group) trunkOf.set(s, isTrunk);
+    }
 
     for (const members of bundles.values()) {
       if (members.length < 2 || !members.some((m) => loose(pool[m]!))) continue;
@@ -1125,7 +1215,11 @@ function bundle(paths: Point[][], blockersOf: Rect[][]): void {
       // squeeze the two lines that actually needed separating down to two
       // pixels. Whatever genuinely does not fit is caught by the clamp below,
       // pinned, and solved around.
-      const pitch = BUS_PITCH;
+      //
+      // Unless the whole bundle shares an end: then it is a trunk rather than a
+      // crowd, and it reads better bound tight — every line still its own, at a
+      // pitch that says they belong together.
+      const pitch = trunkOf.get(pool[members[0]!]!) === true ? TRUNK_PITCH : BUS_PITCH;
       // Where each line would sit if the bundle were free to spread evenly. A
       // line that cannot move asks for exactly where it is instead, and loudly.
       const want = ordered.map((m, k) =>
@@ -1172,7 +1266,12 @@ function bundle(paths: Point[][], blockersOf: Rect[][]): void {
         // box has the last word, and a bundle too big for its gap comes out
         // tight rather than on top of something.
         const [floor, ceiling] = wall(s);
-        s.coord = clamp(want, floor, ceiling);
+        const room = dockRoom(s);
+        s.coord = room ? clamp(want, room.lo, room.hi) : clamp(want, floor, ceiling);
+        const end = room ? dockEnd(s) : null;
+        const w = end ? wires?.[s.path] : undefined;
+        if (w && end === "a") w.atFrom = s.coord;
+        if (w && end === "b") w.atTo = s.coord;
         taken = s.coord;
       });
     }

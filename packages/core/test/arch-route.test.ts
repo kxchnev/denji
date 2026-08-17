@@ -7,6 +7,7 @@ import {
   CORNER_RADIUS,
   DOCK_INSET,
   DOCK_PITCH,
+  TRUNK_PITCH,
   DOCK_RUN,
 } from "../src/layout/arch/route.js";
 import type { ArchDiagram, Connection } from "../src/model/arch.js";
@@ -250,7 +251,7 @@ describe("routing connectors", () => {
     }
   });
 
-  it("keeps the pitch between docks that share one side", () => {
+  it("binds a trunk tight, and keeps every line in it apart", () => {
     const d = parse(
       [
         "architecture",
@@ -271,8 +272,12 @@ describe("routing connectors", () => {
         .filter((x) => x.side === side)
         .map((x) => x.along)
         .sort((p, q) => p - q);
+      // Three lines into one box arrive as a trunk: bound at the trunk's own
+      // pitch rather than fanned across a full comb, and never nearer than that —
+      // every line in a trunk is still its own line with its own arrowhead.
       for (let i = 1; i < along.length; i++) {
-        expect(along[i]! - along[i - 1]!).toBeGreaterThanOrEqual(DOCK_PITCH - 0.01);
+        expect(along[i]! - along[i - 1]!).toBeGreaterThanOrEqual(TRUNK_PITCH - 0.01);
+        expect(along[i]! - along[i - 1]!).toBeLessThanOrEqual(DOCK_PITCH + 0.01);
       }
     }
   });
