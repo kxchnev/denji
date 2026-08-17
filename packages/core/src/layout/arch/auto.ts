@@ -697,13 +697,36 @@ function rankGap(layers: string[][], r: number, V: Map<string, Vertex>, base: nu
 
 /** The room between two neighbours in one layer, honouring an author's `@gap`. */
 function neighbourGap(a: Vertex, b: Vertex, base: number): number {
-  // A door has no width and stands exactly where the border is, so the member
-  // beside it may stand flush against it — a gap here would only hold the member
-  // back from the border it was sent to.
-  if (a.door || b.door) return 0;
   if (b.gap !== undefined && b.anchorAcross === a.id) return b.gap;
   if (a.gap !== undefined && a.anchorAcross === b.id) return a.gap;
   return base;
+}
+
+/**
+ * Where each member of a layer starts, measured from the layer's own beginning.
+ *
+ * A door **lives in the gap**: it has no width, so it claims none, and it must
+ * not swallow the gap either. Letting one stand between two boxes as an ordinary
+ * neighbour is what left `superset` and `biba` flush against each other — the
+ * door took the space between them and gave nothing back. So doors are stepped
+ * over, and the gap is always measured between the two real boxes.
+ */
+function layerOffsets(layer: string[], V: Map<string, Vertex>, gap: number): number[] {
+  const out: number[] = [];
+  let run = 0;
+  let lastReal: Vertex | undefined;
+  for (const id of layer) {
+    const v = V.get(id)!;
+    if (v.door) {
+      out.push(run);
+      continue;
+    }
+    if (lastReal) run += neighbourGap(lastReal, v, gap);
+    out.push(run);
+    run += v.across;
+    lastReal = v;
+  }
+  return out;
 }
 
 /** Pack the result against its own origin and measure it from there. */
@@ -1133,13 +1156,8 @@ function assignAcross(
   gap: number,
 ): void {
   for (const layer of layers) {
-    let x = 0;
-    layer.forEach((id, i) => {
-      const v = V.get(id)!;
-      if (i > 0) x += neighbourGap(V.get(layer[i - 1]!)!, v, gap);
-      v.pos = x;
-      x += v.across;
-    });
+    const offset = layerOffsets(layer, V, gap);
+    layer.forEach((id, i) => (V.get(id)!.pos = offset[i]!));
   }
   const centre = (id: string): number => {
     const v = V.get(id)!;
@@ -1217,13 +1235,7 @@ function settleLayer(
 ): void {
   const n = layer.length;
   if (n === 0) return;
-  const offset: number[] = [];
-  let run = 0;
-  for (let i = 0; i < n; i++) {
-    if (i > 0) run += neighbourGap(V.get(layer[i - 1]!)!, V.get(layer[i]!)!, gap);
-    offset.push(run);
-    run += V.get(layer[i]!)!.across;
-  }
+  const offset = layerOffsets(layer, V, gap);
 
   const pos: number[] = [];
   const w: number[] = [];
