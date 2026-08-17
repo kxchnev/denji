@@ -865,50 +865,58 @@ function straightenApproach(
   const atOf = (i: number, end: "a" | "b"): number =>
     end === "a" ? wires[i]!.atFrom : wires[i]!.atTo;
 
-  wires.forEach((w, i) => {
-    const path = paths[i]!;
-    if (path.length < 4) return;
-    const along = horizontal(w.to);
-    const lateral = (p: Point): number => (along ? p.y : p.x);
-    // ... M -> P -> Q -> R: R is the dock, Q -> R its straight approach, P -> Q the
-    // step, and M -> P the run the route actually arrived along.
-    const m = path[path.length - 4]!;
-    const p = path[path.length - 3]!;
-    const q = path[path.length - 2]!;
-    const r = path[path.length - 1]!;
-    const step = lateral(q) - lateral(p);
-    if (step === 0 || Math.abs(step) > DOCK_PITCH) return;
-    // The step has to be the only thing between the arrival run and the dock.
-    if (Math.abs(lateral(m) - lateral(p)) > 0.01) return;
+  // Arrival end first: it is where a reader is looking when the line lands, so
+  // if only one of the two can be straight, that one should be.
+  for (const end of ["b", "a"] as const) {
+    wires.forEach((w, i) => {
+      const path = paths[i]!;
+      if (path.length < 4) return;
+      // Read the path from the end being straightened: the dock, its straight
+      // approach, the small step, and the run the route really travels along.
+      const line = end === "b" ? path : [...path].reverse();
+      const side = end === "b" ? w.to : w.from;
+      const rect = end === "b" ? w.b : w.a;
+      const node = end === "b" ? w.c.to : w.c.from;
+      const lateral = (t: Point): number => (horizontal(side) ? t.y : t.x);
+      const n = line.length;
+      const m = line[n - 4]!;
+      const p = line[n - 3]!;
+      const q = line[n - 2]!;
+      const step = lateral(q) - lateral(p);
+      if (step === 0 || Math.abs(step) > DOCK_PITCH) return;
+      // The step has to be the only thing between that run and the dock.
+      if (Math.abs(lateral(m) - lateral(p)) > 0.01) return;
 
-    const want = w.atTo - step;
-    const { min, max } = sideSpan(w.b, w.to);
-    const inset = Math.min(DOCK_INSET, (max - min) / 2);
-    if (want < min + inset || want > max - inset) return;
-    const room = (onSide.get(`${w.c.to}|${w.to}`) ?? []).every(
-      (o) => (o.i === i && o.end === "b") || Math.abs(atOf(o.i, o.end) - want) >= MIN_DOCK_PITCH,
-    );
-    if (!room) return;
+      const at = end === "b" ? w.atTo : w.atFrom;
+      const want = at - step;
+      const { min, max } = sideSpan(rect, side);
+      const inset = Math.min(DOCK_INSET, (max - min) / 2);
+      if (want < min + inset || want > max - inset) return;
+      const room = (onSide.get(`${node}|${side}`) ?? []).every(
+        (o) => (o.i === i && o.end === end) || Math.abs(atOf(o.i, o.end) - want) >= MIN_DOCK_PITCH,
+      );
+      if (!room) return;
 
-    const kept = w.atTo;
-    w.atTo = want;
-    const dock = dockPoint(w.b, w.to, w.atTo);
-    // The two segments and the step become one run from where the route arrived.
-    // Simplified, because the step is gone: the arrival run and the approach are
-    // now one straight line, and two collinear segments left in the path would be
-    // handed to the bus as two — which is how one of them gets nudged sideways and
-    // the straight run comes out as a diagonal.
-    const merged = simplify([...path.slice(0, path.length - 3), { x: p.x, y: p.y }, dock]);
-    const tail = [merged[merged.length - 2]!, dock];
+      if (end === "b") w.atTo = want;
+      else w.atFrom = want;
+      const dock = dockPoint(rect, side, want);
+      // Simplified, because the step is gone: the run and the approach are now one
+      // straight line, and two collinear segments left in the path would be handed
+      // to the bus as two — which is how one of them gets nudged sideways and the
+      // straight run comes out as a diagonal.
+      const rebuilt = simplify([...line.slice(0, n - 3), { x: p.x, y: p.y }, dock]);
+      const run = [rebuilt[rebuilt.length - 2]!, dock];
 
-    const before = crossingsAround(paths, i) + doubledAround(paths, i);
-    const keptPath = paths[i]!;
-    paths[i] = merged;
-    const after = crossingsAround(paths, i) + doubledAround(paths, i);
-    if (straightIsClear(tail, blockersOf[i] ?? []) && after <= before) return;
-    paths[i] = keptPath;
-    w.atTo = kept;
-  });
+      const before = crossingsAround(paths, i) + doubledAround(paths, i);
+      const keptPath = paths[i]!;
+      paths[i] = end === "b" ? rebuilt : [...rebuilt].reverse();
+      const after = crossingsAround(paths, i) + doubledAround(paths, i);
+      if (straightIsClear(run, blockersOf[i] ?? []) && after <= before) return;
+      paths[i] = keptPath;
+      if (end === "b") w.atTo = at;
+      else w.atFrom = at;
+    });
+  }
 }
 
 /** Whether a straight stretch of a connector would be drawn over a box. */
