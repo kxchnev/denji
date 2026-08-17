@@ -193,6 +193,10 @@ export function routeConnections(diagram: ArchDiagram, opts: RouteOptions): void
   // destination lies in — two of those out of one box side cross each other
   // before they have gone anywhere, for no reason a reader could name.
   if (reorderDocks(wires, paths)) ({ paths, blockersOf } = layOut(wires, boxes, opts));
+  // Then untangle whatever still crosses, by measurement rather than by rule.
+  ({ paths, blockersOf } = untangleDocks(wires, { paths, blockersOf }, () =>
+    layOut(wires, boxes, opts),
+  ));
 
   bundle(paths, blockersOf);
 
@@ -216,7 +220,7 @@ function layOut(
   wires: readonly Wire[],
   boxes: ReadonlyArray<readonly [string, Rect]>,
   opts: RouteOptions,
-): { paths: Point[][]; blockersOf: Rect[][] } {
+): { paths: Point[][]; blockersOf: Rect[][]; xs: number[]; ys: number[] } {
   const marks = wires.flatMap((w) => {
     const p = dockPoint(w.a, w.from, w.atFrom);
     const q = dockPoint(w.b, w.to, w.atTo);
@@ -268,7 +272,124 @@ function layOut(
     mark(path, xs, ys, busyH, busyV);
     paths.push(path);
   }
-  return { paths, blockersOf };
+  return { paths, blockersOf, xs, ys };
+}
+
+/** How many times two paths cross each other. */
+function crossCount(a: readonly Point[], b: readonly Point[]): number {
+  let n = 0;
+  for (let i = 0; i + 1 < a.length; i++) {
+    const av = Math.abs(a[i]!.x - a[i + 1]!.x) < 0.01;
+    for (let j = 0; j + 1 < b.length; j++) {
+      const bv = Math.abs(b[j]!.x - b[j + 1]!.x) < 0.01;
+      if (av === bv) continue;
+      const v = av ? [a[i]!, a[i + 1]!] : [b[j]!, b[j + 1]!];
+      const h = av ? [b[j]!, b[j + 1]!] : [a[i]!, a[i + 1]!];
+      const vlo = Math.min(v[0]!.y, v[1]!.y);
+      const vhi = Math.max(v[0]!.y, v[1]!.y);
+      const hlo = Math.min(h[0]!.x, h[1]!.x);
+      const hhi = Math.max(h[0]!.x, h[1]!.x);
+      if (v[0]!.x > hlo && v[0]!.x < hhi && h[0]!.y > vlo && h[0]!.y < vhi) n++;
+    }
+  }
+  return n;
+}
+
+/** Crossings between every pair of routes, which is the thing to make smaller. */
+function totalCrossings(paths: readonly Point[][]): number {
+  let n = 0;
+  for (let i = 0; i < paths.length; i++) {
+    for (let j = i + 1; j < paths.length; j++) n += crossCount(paths[i]!, paths[j]!);
+  }
+  return n;
+}
+
+/**
+ * Swap neighbouring docks on a box side while that makes the drawing cleaner.
+ *
+ * Two connectors that share a side of a box must not cross each other: they meet
+ * within a few pixels of the box, where a crossing reads as a mistake rather than
+ * as a route. Ordering the docks by where their partners sit gets this right most
+ * of the time and wrong exactly when a route has to set off away from its target
+ * — and no rule stated up front can know that, because it depends on the path
+ * the search finds.
+ *
+ * So it is measured instead: try the swap, route the two again, count. The same
+ * adjacent-swap repair the layout runs over its layer orders, for the same reason
+ * — a heuristic order plus a measured fix beats a cleverer heuristic.
+ *
+ * Only the two wires that moved are re-routed, and the grid is untouched: a swap
+ * exchanges two dock coordinates, so the set of coordinates the grid was built
+ * from is exactly the same afterwards.
+ */
+function untangleDocks(
+  wires: readonly Wire[],
+  start: { paths: Point[][]; blockersOf: Rect[][] },
+  route: () => { paths: Point[][]; blockersOf: Rect[][] },
+): { paths: Point[][]; blockersOf: Rect[][] } {
+  interface End {
+    w: Wire;
+    end: "a" | "b";
+    i: number;
+  }
+  const groups = new Map<string, End[]>();
+  wires.forEach((w, i) => {
+    for (const [end, node, side] of [
+      ["a", w.c.from, w.from],
+      ["b", w.c.to, w.to],
+    ] as const) {
+      const k = `${node}|${side}`;
+      const g = groups.get(k);
+      const e: End = { w, end, i };
+      if (g) g.push(e);
+      else groups.set(k, [e]);
+    }
+  });
+
+  const atOf = (e: End): number => (e.end === "a" ? e.w.atFrom : e.w.atTo);
+  const setAt = (e: End, v: number): void => {
+    if (e.end === "a") e.w.atFrom = v;
+    else e.w.atTo = v;
+  };
+
+  // A crossing between two lines that share a box is the worst kind there is:
+  // it happens within a few pixels of the box, where a reader is still working
+  // out which line is which, and it reads as a mistake rather than as a route.
+  // Trading one of those for a crossing out in the open is a win, so the pair's
+  // own crossings weigh more than the drawing's total.
+  const NEAR_WEIGHT = 10;
+  let out = start;
+  const score = (paths: readonly Point[][], a: number, b: number): number =>
+    NEAR_WEIGHT * crossCount(paths[a]!, paths[b]!) + totalCrossings(paths);
+  for (let pass = 0; pass < 2; pass++) {
+    let improved = false;
+    for (const g of groups.values()) {
+      if (g.length < 2) continue;
+      const order = [...g].sort((p, q) => atOf(p) - atOf(q));
+      for (let k = 0; k + 1 < order.length; k++) {
+        const a = order[k]!;
+        const b = order[k + 1]!;
+        // Only a pair that crosses *now* is worth the price of finding out; two
+        // neighbours drawn cleanly have nothing to gain from changing places.
+        if (a.i === b.i || crossCount(out.paths[a.i]!, out.paths[b.i]!) === 0) continue;
+        const pa = atOf(a);
+        const pb = atOf(b);
+        const before = score(out.paths, a.i, b.i);
+        setAt(a, pb);
+        setAt(b, pa);
+        const trial = route();
+        if (score(trial.paths, a.i, b.i) < before) {
+          out = trial;
+          improved = true;
+        } else {
+          setAt(a, pa);
+          setAt(b, pb);
+        }
+      }
+    }
+    if (!improved) break;
+  }
+  return out;
 }
 
 /**
@@ -761,6 +882,9 @@ function bundle(paths: Point[][], blockersOf: Rect[][]): void {
     }
   });
 
+  /** Every bundle found, so the order inside them can be checked by measurement. */
+  const found: Segment[][] = [];
+
   for (const vertical of [true, false]) {
     // Every segment joins its bundle, including the two that hold the docks.
     // They cannot move, but they are still *there*: leaving them out let a free
@@ -822,6 +946,7 @@ function bundle(paths: Point[][], blockersOf: Rect[][]): void {
 
     for (const members of bundles.values()) {
       if (members.length < 2 || !members.some((m) => loose(pool[m]!))) continue;
+      found.push(members.map((m) => pool[m]!));
       const mid = members.reduce((s, i) => s + pool[i]!.coord, 0) / members.length;
       const ordered = order(members.map((m) => pool[m]!), mid).map((s) =>
         members[members.findIndex((m) => pool[m] === s)]!,
@@ -893,17 +1018,60 @@ function bundle(paths: Point[][], blockersOf: Rect[][]): void {
     if (g) g.push(s);
     else byPath.set(s.path, [s]);
   }
-  for (const [path, list] of byPath) {
-    const pts = paths[path]!;
-    for (const s of list) {
-      if (s.vertical) {
-        pts[s.i]!.x = s.coord;
-        pts[s.i + 1]!.x = s.coord;
-      } else {
-        pts[s.i]!.y = s.coord;
-        pts[s.i + 1]!.y = s.coord;
+  const apply = (): void => {
+    for (const [path, list] of byPath) {
+      const pts = paths[path]!;
+      for (const s of list) {
+        if (s.vertical) {
+          pts[s.i]!.x = s.coord;
+          pts[s.i + 1]!.x = s.coord;
+        } else {
+          pts[s.i]!.y = s.coord;
+          pts[s.i + 1]!.y = s.coord;
+        }
       }
     }
+  };
+  apply();
+
+  // Which line takes which lane, decided by looking at the result.
+  //
+  // The order a bundle settles into is a guess about who has to pass whom, and
+  // when it guesses wrong the two lines cross twice — a flat S a few pixels wide,
+  // right where the eye is trying to tell them apart. On the diagram this work
+  // started from, the bus was *making* seven of the sixteen crossings it was
+  // supposed to be tidying up. Swapping two lanes cannot introduce an overlap,
+  // because it is the same set of lanes either way, so the only thing to check is
+  // whether the picture got better — so that is what is checked.
+  let best = totalCrossings(paths);
+  for (let pass = 0; pass < 3 && best > 0; pass++) {
+    let improved = false;
+    for (const members of found) {
+      const order = [...members].sort((a, b) => a.coord - b.coord);
+      for (let k = 0; k + 1 < order.length; k++) {
+        const a = order[k]!;
+        const b = order[k + 1]!;
+        if (!a.movable || !b.movable || a.path === b.path) continue;
+        // Neither may take a lane its own corridor does not reach.
+        if (b.coord < a.hardLo || b.coord > a.hardHi) continue;
+        if (a.coord < b.hardLo || a.coord > b.hardHi) continue;
+        const ca = a.coord;
+        const cb = b.coord;
+        a.coord = cb;
+        b.coord = ca;
+        apply();
+        const now = totalCrossings(paths);
+        if (now < best) {
+          best = now;
+          improved = true;
+        } else {
+          a.coord = ca;
+          b.coord = cb;
+          apply();
+        }
+      }
+    }
+    if (!improved) break;
   }
 }
 
