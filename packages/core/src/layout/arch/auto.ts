@@ -2,6 +2,7 @@ import type { PlaceHint } from "../../model/arch.js";
 import type { Point } from "../../model/geometry.js";
 import { snapHalf } from "./grid.js";
 import type { ScopeEdge } from "./graph.js";
+import type { ScopePort } from "./ports.js";
 import { BUS_PITCH } from "./route.js";
 
 /**
@@ -67,6 +68,27 @@ const IDLE_WEIGHT = 0.25;
  * handful of lanes nobody is counting them anyway.
  */
 const MAX_LANES = 6;
+/**
+ * How loudly a door asks for its place, per connection through it.
+ *
+ * Louder than a node with neighbours on both sides, because a door is not an
+ * opinion about where something looks nicer: it is where the connector has to
+ * leave, and a member that has to leave through the right border and sits on the
+ * left is the long wandering line this is here to stop.
+ */
+const PORT_WEIGHT = 6;
+
+/**
+ * Where a connection's real end sits inside a scope member, in that member's own
+ * coordinates. `undefined` means the member *is* the end, and its middle is as
+ * good an answer as there is.
+ *
+ * The other half of {@link ScopePort}: a door seen from outside. A scope places
+ * members, but connections touch leaves, and a leaf can sit in the far corner of
+ * a group the size of a district. Aligning the districts leaves the connector
+ * with a dogleg to walk; aligning the doors is what makes it a straight line.
+ */
+export type PortOffset = (member: string, endpoint: string) => Point | undefined;
 
 export interface AutoResult {
   pos: Map<string, Point>;
@@ -82,6 +104,8 @@ export function autoPlace(
   gaps: AxisGaps,
   onWarn?: (warning: LayoutWarning) => void,
   flow: Flow = "down",
+  ports: readonly ScopePort[] = [],
+  doorOf?: PortOffset,
 ): AutoResult {
   if (items.length === 0) {
     return { pos: new Map(), width: 0, height: 0, lanes: new Map() };
@@ -101,7 +125,7 @@ export function autoPlace(
   // a hat, and going through the two-level path would only cost alignment.
   const gathers = [...buckets.values()].some((b) => b.length > 1);
   if (buckets.size <= 1 || !gathers) {
-    return layered(items, edges, gaps, flow, constraints);
+    return layered(items, edges, gaps, flow, constraints, ports, doorOf);
   }
   // A constraint that reaches across communities cannot be expressed once they
   // are laid out apart, so the author's hints decide the split too: anything
@@ -118,9 +142,9 @@ export function autoPlace(
       for (let guard = 0; guard < buckets.size && tied.has(g); guard++) g = tied.get(g)!;
       groups.set(it.id, g);
     }
-    return autoPlaceGrouped(items, edges, gaps, flow, constraints, groups);
+    return autoPlaceGrouped(items, edges, gaps, flow, constraints, groups, ports, doorOf);
   }
-  return autoPlaceGrouped(items, edges, gaps, flow, constraints, groups);
+  return autoPlaceGrouped(items, edges, gaps, flow, constraints, groups, ports, doorOf);
 }
 
 function autoPlaceGrouped(
@@ -130,6 +154,8 @@ function autoPlaceGrouped(
   flow: Flow,
   constraints: Constraints,
   groups: Map<string, string>,
+  ports: readonly ScopePort[],
+  doorOf?: PortOffset,
 ): AutoResult {
   const buckets = new Map<string, Placeable[]>();
   for (const it of items) {
@@ -138,7 +164,7 @@ function autoPlaceGrouped(
     if (b) b.push(it);
     else buckets.set(l, [it]);
   }
-  if (buckets.size <= 1) return layered(items, edges, gaps, flow, constraints);
+  if (buckets.size <= 1) return layered(items, edges, gaps, flow, constraints, ports, doorOf);
 
   const inner = new Map<string, AutoResult>();
   for (const [l, members] of buckets) {
@@ -151,9 +177,48 @@ function autoPlaceGrouped(
         gaps,
         flow,
         pick(constraints, keep),
+        ports.filter((p) => keep.has(p.member)),
+        doorOf,
       ),
     );
   }
+
+  // A community is one box to the outer pass, and it inherits the doors of
+  // everything inside it: whichever member has to reach out to the right, the
+  // community it belongs to is what has to end up on the right.
+  const superPorts = new Map<string, ScopePort>();
+  for (const p of ports) {
+    const community = groups.get(p.member);
+    if (community === undefined) continue;
+    const key = `${community}|${p.side}`;
+    const hit = superPorts.get(key);
+    if (hit) {
+      hit.target = (hit.target * hit.weight + p.target * p.weight) / (hit.weight + p.weight);
+      hit.weight += p.weight;
+    } else {
+      superPorts.set(key, { ...p, member: community });
+    }
+  }
+
+  const box = new Map(items.map((it) => [it.id, it]));
+  const memberOf = new Map<string, string>();
+  for (const e of edges) {
+    for (const p of e.pairs ?? []) {
+      if (!memberOf.has(p.from)) memberOf.set(p.from, e.from);
+      if (!memberOf.has(p.to)) memberOf.set(p.to, e.to);
+    }
+  }
+  /** A community's door: its member's door, moved by where the member landed. */
+  const superDoor: PortOffset = (community, endpoint) => {
+    const member = memberOf.get(endpoint);
+    if (member === undefined || groups.get(member) !== community) return undefined;
+    const at = inner.get(community)?.pos.get(member);
+    if (!at) return undefined;
+    const own = doorOf?.(member, endpoint);
+    const m = box.get(member);
+    const off = own ?? { x: (m?.width ?? 0) / 2, y: (m?.height ?? 0) / 2 };
+    return { x: at.x + off.x, y: at.y + off.y };
+  };
 
   // One community, one box. Its edges are whatever crossed its border, and it
   // carries the keys of the real edges so their corridors can be handed back.
@@ -173,16 +238,29 @@ function autoPlaceGrouped(
     if (hit) {
       hit.weight += e.weight;
       hit.indices.push(...e.indices);
+      hit.pairs.push(...(e.pairs ?? []));
       carried.get(key)!.push(e.key);
     } else {
-      superEdges.set(key, { key, from: a, to: b, weight: e.weight, indices: [...e.indices] });
+      superEdges.set(key, {
+        key,
+        from: a,
+        to: b,
+        weight: e.weight,
+        indices: [...e.indices],
+        pairs: [...(e.pairs ?? [])],
+      });
       carried.set(key, [e.key]);
     }
   }
-  const outer = layered(superItems, [...superEdges.values()], gaps, flow, {
-    same: [],
-    after: [],
-  });
+  const outer = layered(
+    superItems,
+    [...superEdges.values()],
+    gaps,
+    flow,
+    { same: [], after: [] },
+    [...superPorts.values()],
+    superDoor,
+  );
 
   const pos = new Map<string, Point>();
   const lanes = new Map<string, Point[]>();
@@ -362,6 +440,14 @@ interface Vertex {
   /** Who the node's hints point at, per axis, so `@gap` knows whose gap it is. */
   anchorAcross?: string;
   anchorAlong?: string;
+  /**
+   * A door rather than a box: no size, pinned across, never drawn. `side` is
+   * which end of its layer it belongs at — negative for the near edge of the
+   * scope, positive for the far one, zero for a door along the flow.
+   */
+  door?: { at: number; weight: number; side: number };
+  /** Sum of the sides of this node's own doors, i.e. which way it has to face. */
+  facing?: number;
 }
 
 interface Arc {
@@ -370,6 +456,11 @@ interface Arc {
   weight: number;
   key: string;
   reversed: boolean;
+  /**
+   * One entry per connection this arc stands for: how far along its own box each
+   * end really touches, across the flow. Empty means "use the middles".
+   */
+  ports?: Array<{ from: number; to: number }>;
 }
 
 function layered(
@@ -378,6 +469,8 @@ function layered(
   gaps: AxisGaps,
   flow: Flow,
   constraints: Constraints,
+  ports: readonly ScopePort[] = [],
+  doorOf?: PortOffset,
 ): AutoResult {
   const down = flow === "down";
   const gapAlong = down ? gaps.y : gaps.x;
@@ -404,8 +497,56 @@ function layered(
     });
   });
 
-  const arcs = orient(items, edges);
-  const rank = assignRanks(items, arcs, constraints);
+  // Doors join the scope's own graph. Across the flow a side door is pinned to
+  // the border and ordered outside its member, so the member is pushed out to
+  // meet it; along the flow a top or bottom door takes a rank of its own, so the
+  // member ends up in the layer nearest that border. Either way it is the
+  // ranking, ordering and settling already here that move the member — nothing
+  // places anything twice.
+  const doors: Array<{ id: string; port: ScopePort }> = [];
+  const same = [...constraints.same];
+  const doorArcs: Arc[] = [];
+  ports.forEach((p, k) => {
+    if (!V.has(p.member)) return;
+    const acrossSide = down ? p.side === "left" || p.side === "right" : p.side === "top" || p.side === "bottom";
+    const first = down ? p.side === "left" || p.side === "top" : p.side === "top" || p.side === "left";
+    // A space keeps the id out of reach of anything an author could write.
+    const id = ` door${k}`;
+    V.set(id, {
+      id,
+      along: 0,
+      across: 0,
+      stand: false,
+      seq: items.length + 1000 + k,
+      rank: 0,
+      order: 0,
+      pos: 0,
+      door: { at: p.target, weight: p.weight, side: acrossSide ? (first ? -1 : 1) : 0 },
+    });
+    doors.push({ id, port: p });
+    if (acrossSide) same.push(first ? [id, p.member] : [p.member, id]);
+    const arc: Arc = first
+      ? { from: id, to: p.member, weight: p.weight, key: ` door${k}`, reversed: false }
+      : { from: p.member, to: id, weight: p.weight, key: ` door${k}`, reversed: false };
+    doorArcs.push(arc);
+  });
+
+  const acrossOf = (p: Point): number => (down ? p.x : p.y);
+  const doorAt = (member: string, endpoint: string): number => {
+    const off = doorOf?.(member, endpoint);
+    if (off) return acrossOf(off);
+    return (V.get(member)?.across ?? 0) / 2;
+  };
+  const portsOf = (e: ScopeEdge): Array<{ from: number; to: number }> =>
+    (e.pairs ?? []).map((p) => ({ from: doorAt(e.from, p.from), to: doorAt(e.to, p.to) }));
+
+  const arcs = orient(items, edges, portsOf);
+  const rank = assignRanks(
+    [...items.map((it) => it.id), ...doors.map((d) => d.id)],
+    [...arcs, ...doorArcs],
+    { same, after: constraints.after },
+    (id) => V.get(id)?.door !== undefined,
+  );
   for (const [id, r] of rank) V.get(id)!.rank = r;
 
   const corridors = new Map<string, string[]>();
@@ -420,6 +561,13 @@ function layered(
     }
     const chain: string[] = [];
     let prev = a.from;
+    // A corridor is entered at the door the connection really uses and left at
+    // the middle of the stand-in, which is the corridor's whole width.
+    const midLane = LANE_WIDTH / 2;
+    const ap = a.ports ?? [];
+    const head = ap.map((p) => ({ from: p.from, to: midLane }));
+    const tail = ap.map((p) => ({ from: midLane, to: p.to }));
+    const through = ap.map(() => ({ from: midLane, to: midLane }));
     for (let r = r1 + 1; r < r2; r++) {
       // A space keeps the id out of reach of anything the author could have
       // written, so a stand-in can never collide with a real node.
@@ -435,17 +583,40 @@ function layered(
         pos: 0,
       });
       chain.push(id);
-      layerArcs.push({ from: prev, to: id, weight: a.weight, key: a.key, reversed: a.reversed });
+      layerArcs.push({
+        from: prev,
+        to: id,
+        weight: a.weight,
+        key: a.key,
+        reversed: a.reversed,
+        ports: prev === a.from ? head : through,
+      });
       prev = id;
     }
-    layerArcs.push({ from: prev, to: a.to, weight: a.weight, key: a.key, reversed: a.reversed });
+    layerArcs.push({
+      from: prev,
+      to: a.to,
+      weight: a.weight,
+      key: a.key,
+      reversed: a.reversed,
+      ports: prev === a.from ? a.ports : tail,
+    });
     corridors.set(a.key, a.reversed ? [...chain].reverse() : chain);
   }
 
+  // Which way each node has to face, from the doors hanging off it.
+  for (const { id, port } of doors) {
+    const d = V.get(id)!.door!;
+    if (d.side === 0) continue;
+    const m = V.get(port.member)!;
+    m.facing = (m.facing ?? 0) + d.side * port.weight;
+  }
+
   const layers = buildLayers(V);
-  const sides = adjacency(layerArcs, V);
+  const sides = adjacency([...layerArcs, ...doorArcs], V);
   minimizeCrossings(layers, sides, V);
-  applyOrderHints(layers, constraints.same, V);
+  applyDoorOrder(layers, V);
+  applyOrderHints(layers, same, V);
   assignAcross(layers, sides, V, gapAcross);
 
   // How many connections have to get across each gap between layers. That is
@@ -459,12 +630,15 @@ function layered(
   }
 
   const thickness = layers.map((l) => Math.max(0, ...l.map((id) => V.get(id)!.along)));
+  /** A layer of nothing but doors is a border, not a shelf: it claims no room. */
+  const allDoors = layers.map((l) => l.length > 0 && l.every((id) => V.get(id)!.door !== undefined));
   const start: number[] = [];
   let cursor = 0;
   for (let r = 0; r < layers.length; r++) {
     start.push(cursor);
     const lanes = Math.min(Math.max(0, (load[r] ?? 0) - 1), MAX_LANES);
-    cursor += thickness[r]! + rankGap(layers, r, V, gapAlong) + lanes * BUS_PITCH;
+    const gap = allDoors[r] || allDoors[r + 1] ? 0 : rankGap(layers, r, V, gapAlong);
+    cursor += thickness[r]! + gap + lanes * BUS_PITCH;
   }
 
   const at = (v: Vertex, whole: boolean): Point => {
@@ -523,6 +697,10 @@ function rankGap(layers: string[][], r: number, V: Map<string, Vertex>, base: nu
 
 /** The room between two neighbours in one layer, honouring an author's `@gap`. */
 function neighbourGap(a: Vertex, b: Vertex, base: number): number {
+  // A door has no width and stands exactly where the border is, so the member
+  // beside it may stand flush against it — a gap here would only hold the member
+  // back from the border it was sent to.
+  if (a.door || b.door) return 0;
   if (b.gap !== undefined && b.anchorAcross === a.id) return b.gap;
   if (a.gap !== undefined && a.anchorAcross === b.id) return a.gap;
   return base;
@@ -562,7 +740,11 @@ function frame(items: Placeable[], pos: Map<string, Point>, lanes: Map<string, P
  * reader takes for the beginning; only then does it fall back to declaration
  * order, so the choice of which edge to flip never depends on hash iteration.
  */
-function orient(items: Placeable[], edges: readonly ScopeEdge[]): Arc[] {
+function orient(
+  items: Placeable[],
+  edges: readonly ScopeEdge[],
+  portsOf: (e: ScopeEdge) => Array<{ from: number; to: number }>,
+): Arc[] {
   const out = new Map<string, string[]>();
   const indeg = new Map<string, number>();
   for (const it of items) {
@@ -605,12 +787,14 @@ function orient(items: Placeable[], edges: readonly ScopeEdge[]): Arc[] {
     .filter((e) => out.has(e.from) && out.has(e.to))
     .map((e) => {
       const rev = back.has(`${e.from} ${e.to}`);
+      const ports = portsOf(e);
       return {
         from: rev ? e.to : e.from,
         to: rev ? e.from : e.to,
         weight: e.weight,
         key: e.key,
         reversed: rev,
+        ports: rev ? ports.map((p) => ({ from: p.to, to: p.from })) : ports,
       };
     });
 }
@@ -626,11 +810,11 @@ function orient(items: Placeable[], edges: readonly ScopeEdge[]): Arc[] {
  * reads as an oversight rather than as a beginning.
  */
 function assignRanks(
-  items: Placeable[],
+  ids: string[],
   arcs: Arc[],
   constraints: Constraints,
+  isDoor: (id: string) => boolean = () => false,
 ): Map<string, number> {
-  const ids = items.map((it) => it.id);
   const parent = new Map(ids.map((id) => [id, id]));
   const find = (a: string): string => {
     let r = a;
@@ -703,6 +887,10 @@ function assignRanks(
   }
   for (const c of [...comps].sort((a, b) => rank.get(b)! - rank.get(a)!)) {
     if ((preds.get(c) ?? 0) > 0) continue;
+    // A door is not a node that hangs alone at the top: it is a border, and
+    // pulling it down to meet its member is exactly the pull it exists to
+    // resist. It stays where it is and the member stays after it.
+    if (isDoor(c)) continue;
     const outs = (cOut.get(c) ?? []).filter((to) => !dropped.has(`${c} ${to}`));
     if (outs.length === 0) continue;
     const latest = Math.min(...outs.map((to) => rank.get(to)! - 1));
@@ -728,22 +916,41 @@ function buildLayers(V: Map<string, Vertex>): string[][] {
   return layers;
 }
 
+/**
+ * One neighbour as seen from one node: which node, which door of it, and which
+ * door of ours. Lining those two up is what makes a connector straight, and a
+ * connection into the corner of a group is nowhere near that group's middle.
+ */
+interface Link {
+  id: string;
+  /** Where the connection leaves this node, across the flow, from its near edge. */
+  myAt: number;
+  /** Where it lands on the neighbour, likewise. */
+  theirAt: number;
+}
+
 interface Sides {
-  up: Map<string, string[]>;
-  dn: Map<string, string[]>;
+  up: Map<string, Link[]>;
+  dn: Map<string, Link[]>;
 }
 
 function adjacency(arcs: Arc[], V: Map<string, Vertex>): Sides {
-  const up = new Map<string, string[]>();
-  const dn = new Map<string, string[]>();
+  const up = new Map<string, Link[]>();
+  const dn = new Map<string, Link[]>();
   for (const id of V.keys()) {
     up.set(id, []);
     dn.set(id, []);
   }
+  const half = (id: string): number => V.get(id)!.across / 2;
   for (const a of arcs) {
     if (!V.has(a.from) || !V.has(a.to)) continue;
-    dn.get(a.from)!.push(a.to);
-    up.get(a.to)!.push(a.from);
+    // One entry per connection, not per pair of boxes: a member three
+    // connections lean on should feel three times the pull.
+    const ps = a.ports?.length ? a.ports : [{ from: half(a.from), to: half(a.to) }];
+    for (const p of ps) {
+      dn.get(a.from)!.push({ id: a.to, myAt: p.from, theirAt: p.to });
+      up.get(a.to)!.push({ id: a.from, myAt: p.to, theirAt: p.from });
+    }
   }
   return { up, dn };
 }
@@ -754,10 +961,10 @@ const reindex = (layer: string[], V: Map<string, Vertex>): void => {
 
 /** Median heuristic followed by adjacent swaps, keeping the best seen. */
 function minimizeCrossings(layers: string[][], sides: Sides, V: Map<string, Vertex>): void {
-  const median = (id: string, side: Map<string, string[]>): number => {
+  const median = (id: string, side: Map<string, Link[]>): number => {
     const ns = side
       .get(id)!
-      .map((n) => V.get(n)!.order)
+      .map((n) => V.get(n.id)!.order)
       .sort((x, y) => x - y);
     if (ns.length === 0) return -1;
     const m = ns.length >> 1;
@@ -827,7 +1034,7 @@ function crossingsBetween(
   const pairs: Array<[number, number]> = [];
   for (const id of layers[r] ?? []) {
     for (const to of sides.dn.get(id) ?? []) {
-      const t = V.get(to);
+      const t = V.get(to.id);
       if (t && t.rank === r + 1) pairs.push([V.get(id)!.order, t.order]);
     }
   }
@@ -847,6 +1054,35 @@ const crossings = (layers: string[][], sides: Sides, V: Map<string, Vertex>): nu
   for (let r = 0; r + 1 < layers.length; r++) n += crossingsBetween(layers, r, sides, V);
   return n;
 };
+
+/**
+ * Push whoever has to leave through a side border out to that side of its layer.
+ *
+ * Pinning a door to the border is not enough on its own: the isotonic solve may
+ * not reorder a layer, so a member ordered left of its neighbours stays left
+ * however loudly its door calls from the right, and the connector goes the long
+ * way round. This is the ordering half of the same statement — a node that has to
+ * reach out to the right belongs on the right of everything that does not.
+ *
+ * Stable, so nodes facing the same way keep whatever order minimised crossings.
+ */
+function applyDoorOrder(layers: string[][], V: Map<string, Vertex>): void {
+  const key = (id: string): number => {
+    const v = V.get(id)!;
+    // A door sits outside its own member, which sits outside everyone else.
+    if (v.door) return v.door.side * 2;
+    return Math.sign(v.facing ?? 0);
+  };
+  layers.forEach((layer, r) => {
+    if (layer.every((id) => key(id) === 0)) return;
+    const sorted = layer
+      .map((id, i) => ({ id, k: key(id), i }))
+      .sort((a, b) => a.k - b.k || a.i - b.i)
+      .map((o) => o.id);
+    layers[r] = sorted;
+    reindex(sorted, V);
+  });
+}
 
 /**
  * The order the author asked for, applied after the heuristic so it wins.
@@ -925,7 +1161,7 @@ function assignAcross(
       const weight: number[] = [];
       for (const id of layer) {
         const v = V.get(id)!;
-        const ns = both
+        const ns: Link[] = both
           ? [...sides.up.get(id)!, ...sides.dn.get(id)!]
           : (forward ? sides.up : sides.dn).get(id)!;
         if (ns.length === 0) {
@@ -944,7 +1180,12 @@ function assignAcross(
           weight.push(IDLE_WEIGHT);
           continue;
         }
-        const ms = ns.map(centre).sort((a, b) => a - b);
+        // What each connection asks for: this node moved until its own door
+        // lines up with the door at the other end. Read as a centre, which is
+        // what settleLayer takes.
+        const ms = ns
+          .map((l) => V.get(l.id)!.pos + l.theirAt - l.myAt + v.across / 2)
+          .sort((a, b) => a - b);
         const m = ms.length >> 1;
         want.push(ms.length % 2 === 1 ? ms[m]! : (ms[m - 1]! + ms[m]!) / 2);
         weight.push(v.stand ? LANE_WEIGHT : Math.max(1, ns.length));

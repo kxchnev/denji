@@ -17,6 +17,7 @@ import {
 } from "./measure.js";
 import { autoPlace, type AxisGaps, type LayoutWarning, type Placeable } from "./auto.js";
 import { hierarchy, projectEdges } from "./graph.js";
+import { derivePorts, type ScopePort } from "./ports.js";
 import { routeConnections } from "./route.js";
 
 /**
@@ -99,11 +100,17 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
   // to sit near each other.
   const scopeEdges = projectEdges(diagram, parentOf);
 
-  const sizeMap = new Map<string, Size>();
-  const childLocal = new Map<string, Map<string, Local>>();
-  const innerOffset = new Map<string, Local>();
+  let sizeMap = new Map<string, Size>();
+  let childLocal = new Map<string, Map<string, Local>>();
+  let innerOffset = new Map<string, Local>();
   /** Per scope: the corridors it kept clear, in that scope's own coordinates. */
-  const scopeLanes = new Map<string, Map<string, Local[]>>();
+  let scopeLanes = new Map<string, Map<string, Local[]>>();
+  /** Per scope: how big its content came out, so a border has a coordinate. */
+  let scopeContent = new Map<string, Size>();
+  /** Where each scope's own (0, 0) ended up on the drawing. */
+  let scopeOrigin = new Map<string, Local>([["", { x: 0, y: 0 }]]);
+  /** The doors this pass was told about; empty on the probe. */
+  let ports = new Map<string, ScopePort[]>();
 
   // Bottom-up sizing: a container's size depends on its laid-out children.
   // `inherited` flows down the container tree so a diagram-level spacing reaches
@@ -120,6 +127,36 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     diagram.nodes.filter((n): n is Shape => n.type === "shape"),
     (s) => resolveStyle(diagram.styles, s.kind, s.styleRefs, s.styleProps),
   );
+
+  /**
+   * The middle of `endpoint` in `member`'s own coordinates — a door seen from
+   * outside — or `undefined` when the member is the endpoint itself.
+   *
+   * Everything it reads was filled in on the way up: a container is sized only
+   * after its children have been placed inside it.
+   */
+  const doorOf = (member: string, endpoint: string): Local | undefined => {
+    if (member === endpoint) return undefined;
+    const down: string[] = [];
+    for (let cur = endpoint; cur !== member; ) {
+      const p = parentOf.get(cur);
+      if (p === undefined) return undefined;
+      down.push(cur);
+      cur = p;
+    }
+    let x = 0;
+    let y = 0;
+    for (let i = down.length - 1, parent = member; i >= 0; i--) {
+      const off = innerOffset.get(parent);
+      const at = childLocal.get(parent)?.get(down[i]!);
+      if (!off || !at) return undefined;
+      x += off.x + at.x;
+      y += off.y + at.y;
+      parent = down[i]!;
+    }
+    const own = sizeMap.get(endpoint);
+    return { x: x + (own?.width ?? 0) / 2, y: y + (own?.height ?? 0) / 2 };
+  };
 
   const sizeNode = (id: string, inherited: AxisGaps): Size => {
     const n = nodes.get(id)!;
@@ -140,7 +177,15 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     let contentW = 0;
     let contentH = 0;
     if (items.length > 0) {
-      const scope = autoPlace(items, scopeEdges.get(id) ?? [], gaps, onWarn);
+      const scope = autoPlace(
+        items,
+        scopeEdges.get(id) ?? [],
+        gaps,
+        onWarn,
+        "down",
+        ports.get(id) ?? [],
+        doorOf,
+      );
       childLocal.set(id, scope.pos);
       scopeLanes.set(id, scope.lanes);
       contentW = scope.width;
@@ -148,6 +193,7 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     } else {
       childLocal.set(id, new Map());
     }
+    scopeContent.set(id, { width: contentW, height: contentH });
     const iconW = n.icon ? ICON_SIZE + ICON_GAP : 0;
     const labelW = measureLabelWidth(n.label) + iconW + 24;
     // Corner texts get bands of their own so they never land on the children:
@@ -175,16 +221,6 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
     return size;
   };
 
-  const topItems: Placeable[] = topLevel.map((id) => {
-    const s = sizeNode(id, rootGaps);
-    return { id, width: s.width, height: s.height, hint: nodes.get(id)!.hint };
-  });
-  const topScope = autoPlace(topItems, scopeEdges.get("") ?? [], rootGaps, onWarn);
-  scopeLanes.set("", topScope.lanes);
-
-  /** Where each scope's own (0, 0) ended up on the drawing. */
-  const scopeOrigin = new Map<string, Local>([["", { x: 0, y: 0 }]]);
-
   // Top-down absolute placement. `local` travels alongside: the same position in
   // the scope's own space, which `rect` cannot recover because every scope was
   // packed against its own origin on the way up and then the whole drawing was
@@ -205,12 +241,63 @@ export function layoutArchitecture(diagram: ArchDiagram, opts: ArchLayoutOptions
       }
     }
   };
-  for (const id of topLevel) {
-    const p = topScope.pos.get(id)!;
-    place(id, p.x, p.y, { x: p.x, y: p.y });
-  }
 
-  const framed = normalizeToOrigin(diagram, margin);
+  /**
+   * One full pass: size everything bottom-up, place it top-down, frame it.
+   *
+   * Run twice. The first pass knows nothing about which way anything faces and
+   * exists to find that out; the second runs with the doors it found. Everything
+   * a pass computes is per-pass state, so the second starts clean rather than
+   * reading half of the first one's answers.
+   */
+  const runPass = (): Local => {
+    sizeMap = new Map();
+    childLocal = new Map();
+    innerOffset = new Map();
+    scopeLanes = new Map();
+    scopeContent = new Map();
+    scopeOrigin = new Map([["", { x: 0, y: 0 }]]);
+
+    const topItems: Placeable[] = topLevel.map((id) => {
+      const s = sizeNode(id, rootGaps);
+      return { id, width: s.width, height: s.height, hint: nodes.get(id)!.hint };
+    });
+    const topScope = autoPlace(
+      topItems,
+      scopeEdges.get("") ?? [],
+      rootGaps,
+      onWarn,
+      "down",
+      [],
+      doorOf,
+    );
+    scopeLanes.set("", topScope.lanes);
+    scopeContent.set("", { width: topScope.width, height: topScope.height });
+    for (const id of topLevel) {
+      const p = topScope.pos.get(id)!;
+      place(id, p.x, p.y, { x: p.x, y: p.y });
+    }
+    return normalizeToOrigin(diagram, margin);
+  };
+
+  // The probe: the layout as it was before doors existed. Its only job is to say
+  // which side of each container its outside partners ended up on — a fact coarse
+  // enough to survive every box in the drawing being resized by the second pass,
+  // which is why two passes settle it and there is no third.
+  let framed = runPass();
+  const probeOrigin = scopeOrigin;
+  const probeContent = scopeContent;
+  ports = derivePorts(
+    diagram,
+    parentOf,
+    {
+      rectOf: (id) => nodes.get(id)?.rect,
+      originOf: (scope) => probeOrigin.get(scope),
+      contentOf: (scope) => probeContent.get(scope),
+    },
+    rootGaps.x,
+  );
+  if (ports.size > 0) framed = runPass();
   // From document coordinates to rects: what framing the drawing added. A viewer
   // that pans in document coordinates undoes exactly this, which is what keeps
   // its canvas still while a drag grows the picture.
