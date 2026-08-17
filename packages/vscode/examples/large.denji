@@ -1,0 +1,136 @@
+architecture @theme(dark)
+
+  group infra "Контурная инфраструктура" @below(company) {
+
+    group k8s "Kubernetes" @icon(k8s) {
+
+      service dm_airflow "dm-airflow" {
+        app dm_airflow_app "Airflow" @icon(airflow)
+        database dm_airflow_db "dm-airflow" @icon(postgres)
+        database dm_airflow_locks_db "dm-airflow-locks" @icon(postgres)
+
+        dm_airflow_app -> dm_airflow_db
+        dm_airflow_app -> dm_airflow_locks_db
+      }
+
+      text "kube-data-mesh-staging" @corner(topLeft)
+      text "kube-data-mesh-production" @corner(topLeft)
+
+      app spark_application "SparkApplication CRD" @icon(k8s)
+
+      service spark_operator "spark-operator" {
+        app spark_operator_app "Spark Operator"
+      }
+
+      app spark_cluster "Spark" @rightOf(spark_application) @icon(spark)
+
+      service cocona "cocona" {
+        app cocona_auth "cocona-auth"
+        app spark_connect "Spark" @icon(spark)
+
+        cocona_auth -> spark_connect
+      }
+
+      service hive_metastore "hive-metastore" {
+        app hive_metastore_app "hive-metastore"
+        database hive_metastore_db "hive-metastore" @icon(postgres)
+
+        hive_metastore_app -> hive_metastore_db
+      }
+
+      dm_airflow_app -> spark_application : создаёт CRD
+      spark_operator_app -> spark_application : читает
+      spark_operator_app -> spark_cluster : создаёт
+      dm_airflow_app -> hive_metastore_app
+      spark_cluster -> hive_metastore_app
+      spark_connect -> hive_metastore_app
+    }
+
+    database s3 "S3 Object Storage" @icon(yandexcloud)
+
+    queue kafka "Kafka" @icon(kafka)
+    app debezium "Debezium"
+
+    service microservices "Микросервисы" {
+      app microservices_app "Микросервис"
+      database microservices_db "БД микросервиса" @icon(postgres)
+
+      microservices_app -> microservices_db
+    }
+
+    service cdp "CDP" {
+      app cdp_app "CDP"
+      database cdp_db "cdp (SQL Server)"
+
+      cdp_app -> cdp_db
+    }
+
+    app vault "Vault" @icon(vault)
+
+    spark_cluster -> s3
+    hive_metastore_app -> s3
+    spark_connect -> s3
+    spark_connect -> microservices_db
+    spark_connect -> cdp_db
+
+    microservices_db -> debezium
+    debezium -> kafka
+    cdp_app -> kafka
+    spark_cluster -> kafka : читает
+  }
+
+  group company "Общая инфраструктура" @leftOf(infra) @padding(40) {
+
+    service bi "bi" {
+      app bi_app "bi (Superset)" @icon(apachesuperset)
+      database bi_db "superset" @icon(postgres)
+      app biba "biba (Trino)" @icon(trino)
+
+      bi_app -> bi_db
+      bi_app -> biba
+    }
+
+    service data_mesh_auth "data-mesh-auth-server" @below(bi) {
+      app data_mesh_auth_app "data-mesh-auth-server"
+    }
+
+    service datahub "datahub" {
+      app datahub_app "DataHub"
+      database datahub_db "datahub" @icon(postgres)
+      queue datahub_kafka "Kafka" @icon(kafka)
+      database datahub_os "OpenSearch" @icon(opensearch)
+
+      datahub_app -> datahub_db
+      datahub_app -> datahub_kafka
+      datahub_app -> datahub_os
+    }
+
+    service coder "coder" @leftOf(cocona_workspace) {
+      app coder_app "Coder"
+      database coder_db "coder" @icon(postgres)
+
+      coder_app -> coder_db
+    }
+
+    service cocona_workspace "cocona-workspace" {
+      app vscode_server "vscode-server"
+      app cocona_vscode "cocona-vscode" @link(https://test.com/)
+    }
+
+    bi_app -> data_mesh_auth_app
+    biba -> data_mesh_auth_app
+    datahub_app -> data_mesh_auth_app
+    coder_app -> cocona_workspace
+    coder_app -> data_mesh_auth_app
+  }
+
+  app vscode "VS Code"
+
+  vscode -> vscode_server
+  vscode_server -> cocona_vscode
+  vscode_server -> cocona_auth
+  cocona_vscode -> vault
+  cocona_vscode -> data_mesh_auth_app
+
+  biba -> microservices_db
+  biba -> s3
