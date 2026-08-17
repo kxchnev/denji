@@ -332,8 +332,12 @@ function pickSides(a: Rect, b: Rect, lane?: Point[]): { from: Side; to: Side } {
     const from: Side = a.x + a.width <= b.x ? "right" : "left";
     return { from, to: flip(from) };
   }
-  const s = toward(ca, cb, a);
-  return { from: s, to: flip(s) };
+  // Each end picks its own side, from its own proportions. Flipping the first
+  // answer for the second is what sent everything arriving from the left into the
+  // *top* of a squat database: `biba` is wide and flat, so it leaves through its
+  // bottom, and the flip made that the target's top — three lines crowding one
+  // side and crossing each other to reach it, with two free sides going spare.
+  return { from: toward(ca, cb, a), to: toward(cb, ca, b) };
 }
 
 /**
