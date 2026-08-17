@@ -24,12 +24,22 @@ import { BUS_PITCH } from "./route.js";
 
 export type Flow = "down" | "right";
 
+const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+
 /** One node as the layout sees it: a size, and whatever the author asked for. */
 export interface Placeable {
   id: string;
   width: number;
   height: number;
   hint?: PlaceHint;
+  /**
+   * One node, or a whole community folded into one box. Only a single node may be
+   * placed by its door alone: a community *is* a layered drawing, and treating
+   * the entire rest of a scope as something to hang off a border is how `infra`
+   * ended up with its Kubernetes cluster and its Vault both shoved outside their
+   * own content.
+   */
+  atomic?: boolean;
 }
 
 /** Resolved spacing for one scope: horizontal and vertical gaps between siblings. */
@@ -193,8 +203,13 @@ function autoPlaceGrouped(
     const key = `${community}|${p.side}`;
     const hit = superPorts.get(key);
     if (hit) {
-      hit.target = (hit.target * hit.weight + p.target * p.weight) / (hit.weight + p.weight);
-      hit.weight += p.weight;
+      const w = hit.weight + p.weight;
+      hit.target = (hit.target * hit.weight + p.target * p.weight) / w;
+      hit.at = {
+        x: (hit.at.x * hit.weight + p.at.x * p.weight) / w,
+        y: (hit.at.y * hit.weight + p.at.y * p.weight) / w,
+      };
+      hit.weight = w;
     } else {
       superPorts.set(key, { ...p, member: community });
     }
@@ -226,6 +241,7 @@ function autoPlaceGrouped(
     id: l,
     width: inner.get(l)!.width,
     height: inner.get(l)!.height,
+    atomic: (buckets.get(l)?.length ?? 0) === 1,
   }));
   const superEdges = new Map<string, ScopeEdge>();
   const carried = new Map<string, string[]>();
@@ -448,6 +464,8 @@ interface Vertex {
   door?: { at: number; weight: number; side: number };
   /** Sum of the sides of this node's own doors, i.e. which way it has to face. */
   facing?: number;
+  /** Placed by its door instead of by a rank: nothing inside the scope links it. */
+  afloat?: boolean;
 }
 
 interface Arc {
@@ -612,6 +630,28 @@ function layered(
     m.facing = (m.facing ?? 0) + d.side * port.weight;
   }
 
+  // A member with no connection at all inside its scope has nothing to be
+  // layered *by*: ranking it puts it wherever the rank happens to start, which
+  // is how `Vault` ended up against the far border of `infra` while its one line
+  // came in from the near one, crossing everything on the way. If it has a door,
+  // that door is the only thing in the drawing that says where it belongs — so it
+  // is placed by the door and sits out the layering.
+  const linked = new Set<string>();
+  for (const a of arcs) {
+    linked.add(a.from);
+    linked.add(a.to);
+  }
+  const doorsOf = new Map<string, ScopePort[]>();
+  for (const { port } of doors) {
+    const g = doorsOf.get(port.member);
+    if (g) g.push(port);
+    else doorsOf.set(port.member, [port]);
+  }
+  const floaters = items.filter(
+    (it) => it.atomic !== false && !linked.has(it.id) && doorsOf.has(it.id),
+  );
+  for (const f of floaters) V.get(f.id)!.afloat = true;
+
   const layers = buildLayers(V);
   const sides = adjacency([...layerArcs, ...doorArcs], V);
   minimizeCrossings(layers, sides, V);
@@ -654,7 +694,58 @@ function layered(
   };
 
   const pos = new Map<string, Point>();
-  for (const it of items) pos.set(it.id, at(V.get(it.id)!, true));
+  for (const it of items) {
+    if (V.get(it.id)!.afloat) continue;
+    pos.set(it.id, at(V.get(it.id)!, true));
+  }
+
+  // Now the floaters, against the border their door is on, at the height their
+  // line arrives at. Outside the content rather than in it: the space inside is
+  // taken, and `frame` grows the scope to hold them — a box beside the border is
+  // what a reader would draw for something one line reaches into a group.
+  if (floaters.length > 0) {
+    let contentW = 0;
+    let contentH = 0;
+    for (const it of items) {
+      const p = pos.get(it.id);
+      if (!p) continue;
+      contentW = Math.max(contentW, p.x + it.width);
+      contentH = Math.max(contentH, p.y + it.height);
+    }
+    const taken: Array<{ x: number; y: number; width: number; height: number }> = [];
+    for (const f of floaters) {
+      const own = [...doorsOf.get(f.id)!].sort((a, b) => b.weight - a.weight)[0]!;
+      const gx = gaps.x;
+      const gy = gaps.y;
+      let x =
+        own.side === "left"
+          ? -(f.width + gx)
+          : own.side === "right"
+            ? contentW + gx
+            : clamp(own.at.x - f.width / 2, 0, Math.max(0, contentW - f.width));
+      let y =
+        own.side === "top"
+          ? -(f.height + gy)
+          : own.side === "bottom"
+            ? contentH + gy
+            : clamp(own.at.y - f.height / 2, 0, Math.max(0, contentH - f.height));
+      // Two floaters on one border queue up along it rather than pile up.
+      for (let guard = 0; guard < taken.length + 1; guard++) {
+        const hit = taken.find(
+          (t) =>
+            x < t.x + t.width + gx &&
+            x + f.width + gx > t.x &&
+            y < t.y + t.height + gy &&
+            y + f.height + gy > t.y,
+        );
+        if (!hit) break;
+        if (own.side === "left" || own.side === "right") y = hit.y + hit.height + gy;
+        else x = hit.x + hit.width + gx;
+      }
+      taken.push({ x, y, width: f.width, height: f.height });
+      pos.set(f.id, { x: snapHalf(x), y: snapHalf(y) });
+    }
+  }
 
   const lanes = new Map<string, Point[]>();
   for (const [key, chain] of corridors) {
@@ -932,9 +1023,10 @@ function assignRanks(
 }
 
 function buildLayers(V: Map<string, Vertex>): string[][] {
-  const max = Math.max(...[...V.values()].map((v) => v.rank));
+  const ranked = [...V.values()].filter((v) => !v.afloat);
+  const max = Math.max(0, ...ranked.map((v) => v.rank));
   const layers: string[][] = Array.from({ length: max + 1 }, () => []);
-  for (const v of [...V.values()].sort((a, b) => a.seq - b.seq)) layers[v.rank]!.push(v.id);
+  for (const v of ranked.sort((a, b) => a.seq - b.seq)) layers[v.rank]!.push(v.id);
   for (const l of layers) reindex(l, V);
   return layers;
 }

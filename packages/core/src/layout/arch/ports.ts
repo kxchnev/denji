@@ -39,6 +39,8 @@ export interface ScopePort {
    * what the member needs there is to be the outermost thing in the scope.
    */
   target: number;
+  /** Where the partner is, in the scope's own coordinates. */
+  at: Point;
   /** How many connections use it. */
   weight: number;
 }
@@ -83,6 +85,8 @@ export function derivePorts(
     member: string;
     side: PortSide;
     sum: number;
+    atX: number;
+    atY: number;
     weight: number;
   }
   const byScope = new Map<string, Map<string, Draft>>();
@@ -145,9 +149,18 @@ export function derivePorts(
       const hit = bucket.get(key);
       if (hit) {
         hit.sum += target;
+        hit.atX += p.x - origin.x;
+        hit.atY += p.y - origin.y;
         hit.weight += 1;
       } else {
-        bucket.set(key, { member, side, sum: target, weight: 1 });
+        bucket.set(key, {
+          member,
+          side,
+          sum: target,
+          atX: p.x - origin.x,
+          atY: p.y - origin.y,
+          weight: 1,
+        });
       }
     }
   }
@@ -161,6 +174,7 @@ export function derivePorts(
         side: d.side,
         // Several connections through one door pull it to their middle.
         target: d.sum / d.weight,
+        at: { x: d.atX / d.weight, y: d.atY / d.weight },
         weight: d.weight,
       })),
     );
