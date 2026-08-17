@@ -331,6 +331,14 @@ round-trip внутри 60fps-цикла заметен. Расширение с
 - `npm run vscode` — пересборка расширения по изменениям; F5 (`.vscode/launch.json`)
   открывает Extension Development Host на `packages/vscode/examples/sample.denji`
 - `npm run vscode:package` — `.vsix`
+- `npm run vscode:install` — собрать `.vsix` и поставить его **локально** во все
+  найденные редакторы (`code`, `code-insiders`, `cursor`, `windsurf`) вместо
+  версии из Marketplace: та всегда та, что опубликована последней, и пока она
+  стоит, редактор грузит её, а не то, что ты правишь. `--force` заменяет её даже
+  при том же номере версии — а он посреди работы обычно тот же.
+  ⚠️ Marketplace отыграет обратно, как только опубликует версию выше:
+  чтобы локальная сборка осталась, у расширения нужно выключить Auto Update.
+  `npm run vscode:uninstall` — снять её и вернуться к опубликованной.
 - `npm run release:core <версия>` / `npm run release:vscode <версия>` — поднять
   версию пакета (и лок вместе с ней). Больше ничего не нужно:
   `.github/workflows/release.yml` на push в `main` видит, что такой версии нет

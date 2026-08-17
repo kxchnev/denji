@@ -13,6 +13,8 @@
     "docs:build": "npm run -w packages/docs build",
     "vscode": "npm run -w packages/vscode watch",
     "vscode:package": "npm run -w packages/vscode package",
+    "vscode:install": "npm run -w packages/vscode install:local",
+    "vscode:uninstall": "npm run -w packages/vscode uninstall:local",
     "release:core": "npm version -w packages/core --no-git-tag-version",
     "release:vscode": "npm version -w packages/vscode --no-git-tag-version",
     "icons:update": "npm i -D simple-icons@latest -w packages/core && npm run build && npm run vscode:package"
