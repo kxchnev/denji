@@ -10,6 +10,11 @@
  * `llms.txt` is the convention agents look for at the root of a docs site;
  * `skill.md` is the same file Claude Code reads out of `.claude/skills/`, so
  * installing it is one `curl`.
+ *
+ * The typeface and the rasterizer travel the same way, for a different reason:
+ * they are only needed when a reader saves a picture, and WebAssembly is not
+ * something a module can be. The brand marks are *not* here — they come with the
+ * engine's own import, which is the compatibility the package promises.
  */
 import { copyFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -19,12 +24,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "..", "..", "..");
 const out = join(here, "..", "public");
 
+const core = join(repo, "packages", "core");
+const assets = join(out, "denji");
 const files: Array<[from: string, to: string]> = [
   [join(repo, "packages", "core", "LANGUAGE.md"), join(out, "llms.txt")],
   [join(repo, ".claude", "skills", "denji-diagrams", "SKILL.md"), join(out, "skill.md")],
+  [join(core, "assets", "inter.ttf"), join(assets, "inter.ttf")],
+  [join(core, "assets", "inter-latin.woff2"), join(assets, "inter-latin.woff2")],
+  [join(core, "assets", "inter-cyrillic.woff2"), join(assets, "inter-cyrillic.woff2")],
+  [join(repo, "node_modules", "@resvg", "resvg-wasm", "index_bg.wasm"), join(assets, "resvg.wasm")],
 ];
 
 mkdirSync(out, { recursive: true });
+mkdirSync(assets, { recursive: true });
 for (const [from, to] of files) {
   copyFileSync(from, to);
   console.log(`${to.slice(repo.length + 1)} ← ${from.slice(repo.length + 1)}`);

@@ -3,39 +3,42 @@
 import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { ArchDiagram, ThemeName } from "@kxchnev/denji";
 import {
-  DEFAULT_SCALE,
   downloadDiagram,
   downloadSource,
   type ExportFormat,
 } from "@/lib/export-diagram";
 import { cn } from "@/lib/utils";
 
-/** `scale` is only meaningful for the raster formats; SVG ignores it. */
-const FORMATS: { value: ExportFormat; label: string; scale?: number; hint?: string }[] = [
+/**
+ * Three formats, one line each — the same three the editor's preview offers.
+ *
+ * There used to be `PNG 2×` and `PNG 5×` here, which asked the reader a question
+ * they have no way to answer ("how many pixels do you need?") and made the menu
+ * disagree with the extension's. A raster is written at twice the diagram's units
+ * everywhere now, which is the size that stays sharp on a retina screen and in a
+ * slide.
+ */
+const FORMATS: { value: ExportFormat; label: string }[] = [
   { value: "svg", label: "SVG" },
-  { value: "png", label: "PNG", scale: DEFAULT_SCALE, hint: `${DEFAULT_SCALE}×` },
-  { value: "png", label: "PNG", scale: 5, hint: "5×" },
-  { value: "jpeg", label: "JPEG", scale: DEFAULT_SCALE, hint: `${DEFAULT_SCALE}×` },
-  { value: "jpeg", label: "JPEG", scale: 5, hint: "5×" },
+  { value: "png", label: "PNG" },
+  { value: "jpeg", label: "JPEG" },
 ];
 
 export function DownloadButton({
-  exportSvg,
-  width,
-  height,
+  exportDiagram,
   name = "diagram",
   source,
   openTo = "down",
   className,
 }: {
   /**
-   * Renders the diagram with one palette baked in, plus the opaque backdrop
-   * JPEG needs. Called at click time so the file matches what is on screen.
+   * The laid-out diagram and the palette to bake in. Called at click time so the
+   * file matches what is on screen — including the theme the reader has switched
+   * to since the page loaded.
    */
-  exportSvg: () => { svg: string; matte: string };
-  width: number;
-  height: number;
+  exportDiagram: () => { diagram: ArchDiagram; theme: ThemeName };
   name?: string;
   /** The diagram's `.denji` source. Given one, the menu can also save the code. */
   source?: string;
@@ -93,16 +96,15 @@ export function DownloadButton({
           )}
           {FORMATS.map((f) => (
             <button
-              key={`${f.value}-${f.scale ?? 0}`}
-              className="flex items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+              key={f.value}
+              className="whitespace-nowrap px-3 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
               onClick={() => {
                 setOpen(false);
-                const { svg, matte } = exportSvg();
-                void downloadDiagram(svg, width, height, f.value, name, matte, f.scale);
+                const { diagram, theme } = exportDiagram();
+                void downloadDiagram(diagram, f.value, { name, theme });
               }}
             >
               {f.label}
-              {f.hint && <span className="text-xs text-muted-foreground">{f.hint}</span>}
             </button>
           ))}
         </div>

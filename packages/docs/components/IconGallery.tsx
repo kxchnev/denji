@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
-import { ICONS, ICON_ALIASES, ICON_NAMES, ICONSET_VERSION, POPULAR_ICONS } from "@kxchnev/denji";
+import {
+  ICON_ALIASES,
+  ICON_NAMES,
+  ICON_TITLES,
+  ICONSET_VERSION,
+  POPULAR_ICONS,
+  registeredIcons,
+} from "@kxchnev/denji";
 
 /**
  * How many marks a search may show at once. The whole set is three and a half
@@ -27,12 +34,15 @@ export function IconGallery() {
     return ICON_NAMES.filter(
       (name) =>
         name.includes(q) ||
-        ICONS[name]?.title?.toLowerCase().includes(q) ||
+        ICON_TITLES[name]?.toLowerCase().includes(q) ||
         ALIASES[name]?.some((a) => a.includes(q)),
     );
   }, [query]);
 
   const shown = useMemo(() => matches.slice(0, LIMIT), [matches]);
+  // Importing the engine registers the bundled artwork, so this is the full set —
+  // on the server too, which is why a prerendered gallery card has its logo.
+  const icons = registeredIcons();
 
 
 
@@ -62,7 +72,9 @@ export function IconGallery() {
       ) : (
         <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {shown.map((name) => {
-            const icon = ICONS[name]!;
+            // A card before the artwork lands: the name and its shorthands, with
+            // the swatch left blank rather than the whole list withheld.
+            const icon = icons[name] ?? { path: "", color: "transparent" };
             return (
               <li key={name} className="flex items-center gap-3 rounded-md border px-3 py-2">
                 <svg

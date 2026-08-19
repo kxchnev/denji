@@ -5,7 +5,6 @@ import {
   parseArchitecture,
   layoutArchitecture,
   renderArchitecture,
-  resolveTheme,
   linkAt,
   nodeAt,
   nodeDepths,
@@ -153,21 +152,17 @@ export function Diagram({
   // looking at right now and bakes it in, media query and all removed. It follows
   // what is on screen, so it re-parses `shown.dsl` — re-parsing a broken document
   // would only throw.
-  const exportSvg = useCallback((): { svg: string; matte: string } => {
+  const exportDiagram = useCallback((): { diagram: ArchDiagram; theme: ThemeName } => {
     const dark =
       pinned === "dark" ||
       (!pinned && document.documentElement.classList.contains("dark"));
-    const theme = dark ? "dark" : "light";
     const diagram = parseArchitecture(shown.dsl);
     layoutArchitecture(diagram);
-    return {
-      // No `linkAnchors`: a download is a picture. It goes into a slide or a
-      // README, where a live `href` is at best inert and at worst a surprise in
-      // someone else's document — the button is still drawn, it just does not
-      // carry the URL out of here.
-      svg: renderArchitecture(diagram, { theme, themeMode: "fixed" }),
-      matte: resolveTheme(theme).surface,
-    };
+    // The file itself is written by the engine (`toSvgFile` / `toPng` / `toJpeg`),
+    // so a download from this page is byte-for-byte what `denji render` writes and
+    // what the VS Code extension saves. Nothing about the palette, the typeface or
+    // the rasterizer is decided here.
+    return { diagram, theme: dark ? "dark" : "light" };
   }, [shown.dsl, pinned]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   // Until the first measurement the diagram is centred in CSS instead of by
@@ -489,9 +484,7 @@ export function Diagram({
         />
         {controls && (
           <DownloadButton
-            exportSvg={exportSvg}
-            width={width}
-            height={height}
+            exportDiagram={exportDiagram}
             name={name}
             source={shown.dsl}
             className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
@@ -649,9 +642,7 @@ export function Diagram({
           {/* This control cluster is pinned to the bottom edge, so the menu has
               to open upwards to stay on screen. */}
           <DownloadButton
-            exportSvg={exportSvg}
-            width={width}
-            height={height}
+            exportDiagram={exportDiagram}
             name={name}
             source={shown.dsl}
             openTo="up"

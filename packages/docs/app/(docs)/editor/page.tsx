@@ -88,6 +88,25 @@ export default function EditorPage() {
         , and the engine honours them from there.
       </p>
 
+      <h2 className="mt-10 text-xl font-semibold tracking-tight">Saving a picture</h2>
+      <p className="mt-2 leading-7">
+        The save button in the preview&apos;s own toolbar offers SVG, PNG and JPEG; the same three
+        sit under <strong className="font-semibold">Export diagram</strong> when you right-click a{" "}
+        <InlineCode>.denji</InlineCode> file in the Explorer, right-click inside the editor, or open
+        the editor&apos;s title-bar menu. The Explorer route needs nothing open — the extension draws
+        the picture itself rather than asking a preview for one, so exporting a folder full of
+        diagrams never means opening them.
+      </p>
+      <p className="mt-4 leading-7">
+        What gets drawn is the buffer, not the file on disk, so an unsaved edit is in the picture.
+        And it is drawn by the same engine as{" "}
+        <Link className="font-medium underline underline-offset-4" href="/cli">
+          <InlineCode>denji render</InlineCode>
+        </Link>{" "}
+        and the playground on this site: one rasterizer and one typeface that travel inside the
+        extension, so the file is byte-for-byte the same wherever you export it from.
+      </p>
+
       <h2 className="mt-10 text-xl font-semibold tracking-tight">Problems</h2>
       <p className="mt-2 leading-7">
         Errors and layout warnings appear in the Problems panel as you type, on the line that causes

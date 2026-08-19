@@ -14,7 +14,8 @@ import type { Extension } from "@codemirror/state";
 import {
   CORNERS,
   DIRECTIVES as CORE_DIRECTIVES,
-  ICONS,
+  ICON_TITLES,
+  registeredIcons,
   ICON_NAMES,
   POPULAR_ICONS,
   STYLE_PROPS,
@@ -140,8 +141,8 @@ const popularIconOptions = (): Completion[] =>
   (popular ??= POPULAR_ICONS.map((name, i) => ({
     label: name,
     type: "constant",
-    detail: ICONS[name]?.color,
-    info: ICONS[name]?.title,
+    detail: registeredIcons()[name]?.color,
+    info: ICON_TITLES[name],
     boost: 50 - i,
   })));
 
@@ -150,8 +151,8 @@ const allIconOptions = (): Completion[] =>
   (iconOptions ??= ICON_NAMES.map((name) => ({
     label: name,
     type: "constant",
-    detail: ICONS[name]?.color,
-    info: ICONS[name]?.title,
+    detail: registeredIcons()[name]?.color,
+    info: ICON_TITLES[name],
   })));
 
 /** Icon block properties — a different, much shorter list than the style ones. */

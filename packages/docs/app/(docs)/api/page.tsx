@@ -36,6 +36,15 @@ const diagram = parseArchitecture(source);
 layoutArchitecture(diagram, { gap: 56, onWarn: () => {} });
 const svg = renderArchitecture(diagram, { themeMode: "selector" });`;
 
+const ASSETS = `import { toSvgFile, toPng, toJpeg } from "${PRODUCT.pkg}";
+import { loadAll } from "${PRODUCT.pkg}/assets-node";
+
+loadAll(); // the typeface and the rasterizer, from files the package ships
+
+const svg = toSvgFile(diagram);              // embeds its own @font-face
+const png = await toPng(diagram, { scale: 2 });
+const jpg = await toJpeg(diagram, { quality: 0.92 });`;
+
 const CHECK = `import { checkDiagram } from "${PRODUCT.pkg}";
 
 const { diagnostics, failed } = checkDiagram(source);
@@ -57,8 +66,10 @@ export default function ApiPage() {
         build it in code — both produce one model, and the model renders to SVG.
       </p>
       <p className="mt-6 leading-7">
-        One entry point, ESM only. Everything below is a named export of{" "}
-        <InlineCode>{PRODUCT.pkg}</InlineCode>; there are no deep imports to remember.
+        ESM only. Everything below is a named export of <InlineCode>{PRODUCT.pkg}</InlineCode>, with
+        one deep import to remember: <InlineCode>{PRODUCT.pkg}/assets-node</InlineCode>, which reads
+        the shipped font and rasterizer off disk and so cannot live in the entry point a browser
+        bundles.
       </p>
 
       <h2 className="mt-10 text-xl font-semibold tracking-tight">From text to SVG</h2>
@@ -135,6 +146,35 @@ export default function ApiPage() {
         <InlineCode>@theme(...)</InlineCode> in the source pins the palette and leaves nothing to
         switch to, and <InlineCode>@spacing</InlineCode> beats the <InlineCode>gap</InlineCode> you
         passed. What an author wrote down outranks a default from the outside.
+      </p>
+
+      <h2 className="mt-10 text-xl font-semibold tracking-tight">Writing a picture</h2>
+      <p className="mt-2 leading-7">
+        Rasterizing needs two things that cannot travel as a JavaScript import: a font with real
+        outlines, and resvg as WebAssembly. Both ship inside the package as files;{" "}
+        <InlineCode>loadAll()</InlineCode> hands them over in Node, and in a browser you fetch them
+        from <InlineCode>{PRODUCT.pkg}/assets/</InlineCode> and pass the bytes to{" "}
+        <InlineCode>registerFont</InlineCode> and <InlineCode>registerRasterizer</InlineCode>.
+        Nothing is ever downloaded from the network on your behalf. SVG needs neither — it embeds
+        the woff2 subsets when a font is registered, and is a complete file without one.
+      </p>
+      <CodeBlock code={ASSETS} lang="ts" />
+      <p className="mt-4 leading-7">
+        The brand marks are not on that list: importing the package registers them, so an{" "}
+        <InlineCode>@icon(...)</InlineCode> draws with nothing asked of you. Worth knowing what it
+        weighs — that is 4.8 MB of path data in whatever bundles the entry point.{" "}
+        <InlineCode>registerIcons</InlineCode> merges in more (your own artwork, or a set you
+        fetched) and <InlineCode>registeredIcons()</InlineCode> answers with everything registered.
+      </p>
+      <p className="mt-4 leading-7">
+        <InlineCode>toSvgFile</InlineCode>, <InlineCode>toPng</InlineCode> and{" "}
+        <InlineCode>toJpeg</InlineCode> take a laid-out diagram and give you a file:{" "}
+        <InlineCode>theme</InlineCode>, <InlineCode>scale</InlineCode> (2 by default),{" "}
+        <InlineCode>embedFont</InlineCode>, and <InlineCode>background</InlineCode> /{" "}
+        <InlineCode>quality</InlineCode> for JPEG, which has no transparency and is flattened onto
+        the theme&apos;s own surface. These are the same three functions the CLI, the editor
+        extension and the playground on this site call, so one diagram gives the same bytes wherever
+        it is exported from — one rasterizer, one typeface, nothing read off the machine it runs on.
       </p>
 
       <h2 className="mt-10 text-xl font-semibold tracking-tight">Checking a document</h2>
