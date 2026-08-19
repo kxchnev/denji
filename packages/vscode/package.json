@@ -2,7 +2,7 @@
   "name": "denji",
   "displayName": "Denji — architecture diagrams",
   "description": "Live preview for .denji architecture diagrams — drag a node, the source learns where it belongs",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "publisher": "kxchnev",
   "icon": "icon.png",
@@ -73,6 +73,24 @@
         "title": "Open Preview to the Side",
         "category": "denji",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "denji.exportSVG",
+        "title": "Export as SVG…",
+        "category": "denji",
+        "icon": "$(file-media)"
+      },
+      {
+        "command": "denji.exportPNG",
+        "title": "Export as PNG…",
+        "category": "denji",
+        "icon": "$(file-media)"
+      },
+      {
+        "command": "denji.exportJPEG",
+        "title": "Export as JPEG…",
+        "category": "denji",
+        "icon": "$(file-media)"
       }
     ],
     "keybindings": [
@@ -95,6 +113,11 @@
           "command": "denji.showPreviewToSide",
           "when": "editorLangId == denji",
           "group": "navigation"
+        },
+        {
+          "submenu": "denji.export",
+          "when": "resourceLangId == denji || activeWebviewPanelId == denji.preview",
+          "group": "1_denji"
         }
       ],
       "commandPalette": [
@@ -105,6 +128,52 @@
         {
           "command": "denji.showPreviewToSide",
           "when": "editorLangId == denji"
+        },
+        {
+          "command": "denji.exportSVG",
+          "when": "resourceLangId == denji || activeWebviewPanelId == denji.preview"
+        },
+        {
+          "command": "denji.exportPNG",
+          "when": "resourceLangId == denji || activeWebviewPanelId == denji.preview"
+        },
+        {
+          "command": "denji.exportJPEG",
+          "when": "resourceLangId == denji || activeWebviewPanelId == denji.preview"
+        }
+      ],
+      "explorer/context": [
+        {
+          "submenu": "denji.export",
+          "when": "resourceExtname == .denji",
+          "group": "2_workspace"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "denji.export",
+          "when": "resourceLangId == denji",
+          "group": "2_denji"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "submenu": "denji.export",
+          "when": "resourceLangId == denji"
+        }
+      ],
+      "denji.export": [
+        {
+          "command": "denji.exportSVG",
+          "group": "1_export@1"
+        },
+        {
+          "command": "denji.exportPNG",
+          "group": "1_export@2"
+        },
+        {
+          "command": "denji.exportJPEG",
+          "group": "1_export@3"
         }
       ]
     },
@@ -147,13 +216,20 @@
           "description": "Palette for the preview. 'auto' follows the editor's colour theme. A document with @theme(...) overrides this."
         }
       }
-    }
+    },
+    "submenus": [
+      {
+        "id": "denji.export",
+        "label": "Export diagram",
+        "icon": "$(desktop-download)"
+      }
+    ]
   },
   "scripts": {
     "grammar": "tsx scripts/generate-grammar.ts",
     "build": "npm run grammar && node esbuild.mjs",
     "watch": "npm run grammar && node esbuild.mjs --watch",
-    "test": "npm run build && tsx test/diff.test.ts && tsx test/extension.test.ts && tsx test/grammar.test.ts && tsx test/open.test.ts && tsx test/webview.test.ts",
+    "test": "npm run build && tsx test/diff.test.ts && tsx test/extension.test.ts && tsx test/grammar.test.ts && tsx test/open.test.ts && tsx test/webview.test.ts && tsx test/export.test.ts",
     "typecheck": "tsc --noEmit",
     "package": "npm run build && vsce package --no-dependencies -o denji.vsix",
     "install:local": "npm run package && node scripts/install-local.mjs",

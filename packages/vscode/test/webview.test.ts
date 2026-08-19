@@ -457,6 +457,46 @@ test("says where a link goes before anyone presses it", () => {
   assert.equal(h.surface.title, "");
 });
 
+test("draws brand marks with nothing fetched", () => {
+  // The preview has no network and asks for none: importing the engine registers
+  // the artwork, which is the same promise the npm package makes to everyone
+  // else. There is no `fetch` in this harness at all — if this passes, the marks
+  // came from the bundle. When 2.0 takes that away (NEXT-MAJOR.md), this test is
+  // the one that says the preview has to load them some other way.
+  const h = boot();
+  h.send({ type: "source", text: 'architecture\n  app a "A" @icon(postgresql)\n' });
+  const svg = h.document.querySelector(".stage svg")!;
+  assert.ok(svg.querySelector(".denji-icon-postgresql"), "the mark is drawn");
+  assert.ok(
+    svg.querySelector(".denji-icon-postgresql")!.getAttribute("d")!.length > 100,
+    "with real path data behind it",
+  );
+});
+
+test("the toolbar can ask the host to save a picture", () => {
+  // The preview draws; the host writes. So the button's whole job is to name the
+  // format someone pressed. It began life as a right-click menu over the whole
+  // drawing, which put a menu between the reader and the diagram on every click.
+  const h = boot();
+  h.send({ type: "source", text: SOURCE });
+  const save = h.document.querySelector<HTMLButtonElement>('.controls button[title^="Save"]');
+  assert.ok(save, "the toolbar has a save button");
+  const menu = h.document.querySelector<HTMLElement>(".menu")!;
+  assert.equal(menu.hidden, true, "the menu starts closed");
+  save.dispatchEvent(new h.window.MouseEvent("click", { bubbles: true }));
+  assert.equal(menu.hidden, false, "pressing it opens the menu");
+
+  const png = [...menu.querySelectorAll("button")].find((b) => b.textContent === "PNG");
+  assert.ok(png, "the menu offers PNG");
+  png.dispatchEvent(new h.window.MouseEvent("click", { bubbles: true }));
+  // Field by field: the message was built inside jsdom's realm, so its prototype
+  // is not this one's and a deep comparison would fail on that alone.
+  const asked = h.sent.at(-1) as { type: string; format?: string };
+  assert.equal(asked.type, "export");
+  assert.equal(asked.format, "png");
+  assert.equal(menu.hidden, true, "and closes itself");
+});
+
 // ── go ───────────────────────────────────────────────────────────────────────
 
 async function run(): Promise<void> {

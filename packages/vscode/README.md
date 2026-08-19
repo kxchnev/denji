@@ -38,6 +38,19 @@ Nothing else in the document is touched: the drop is one relation on one line,
 and the drawing holds still until you let go, so you are aiming at a target that
 is not running away.
 
+## Saving a picture
+
+The save button in the preview's toolbar offers **SVG**, **PNG** and **JPEG**;
+the same three live under **Export diagram** when you right-click a `.denji`
+file in the Explorer, right-click in the editor, or open the editor title-bar
+menu. The Explorer route needs nothing open — the extension draws the picture
+itself instead of asking a preview for one.
+
+What is drawn is the buffer, so an unsaved edit is in the file you save. The
+rasterizer and the typeface travel inside the extension, which is what makes an
+export here identical, byte for byte, to one written by the `denji` command
+line: no system fonts, nothing downloaded, the same picture on every machine.
+
 ## Settings
 
 | Setting | Default | |

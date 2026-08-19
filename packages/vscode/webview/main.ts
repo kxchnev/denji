@@ -159,6 +159,8 @@ const ICON_FIT = icon(
     'M14 11v1.5a1.5 1.5 0 0 1-1.5 1.5H11M5 14H3.5A1.5 1.5 0 0 1 2 12.5V11"/>' +
     '<rect x="5" y="6" width="6" height="4" rx="1"/>',
 );
+/** A tray with the diagram's own downward arrow in it — save, not "install". */
+const ICON_SAVE = icon('<path d="M8 2.5v7M5 7l3 3 3-3M3 12.5h10"/>');
 const button = (svg: string, title: string, onClick: () => void): HTMLButtonElement => {
   const b = document.createElement("button");
   b.type = "button";
@@ -168,6 +170,45 @@ const button = (svg: string, title: string, onClick: () => void): HTMLButtonElem
   b.addEventListener("click", onClick);
   return b;
 };
+/**
+ * Saving the picture, from the preview's own toolbar.
+ *
+ * A menu of three formats rather than three buttons: the toolbar sits over the
+ * drawing, and every permanent button is a piece of the diagram someone cannot
+ * see. The host does the writing — see the `export` message.
+ */
+const exportMenu = document.createElement("div");
+exportMenu.className = "menu";
+exportMenu.hidden = true;
+for (const format of ["svg", "png", "jpeg"] as const) {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.textContent = format.toUpperCase();
+  item.addEventListener("click", () => {
+    exportMenu.hidden = true;
+    vscode.postMessage({ type: "export", format });
+  });
+  exportMenu.append(item);
+}
+const exportButton = button(ICON_SAVE, "Save as SVG, PNG or JPEG", () => {
+  exportMenu.hidden = !exportMenu.hidden;
+});
+
+// Anywhere else closes it, including on the drawing: a menu left open over a
+// diagram is a menu in the way of the diagram.
+addEventListener(
+  "pointerdown",
+  (e) => {
+    if (exportMenu.hidden) return;
+    const on = e.target as Node;
+    if (!exportMenu.contains(on) && !exportButton.contains(on)) exportMenu.hidden = true;
+  },
+  true,
+);
+addEventListener("keydown", (e) => {
+  if (e.key === "Escape") exportMenu.hidden = true;
+});
+
 controls.append(
   zoomLabel,
   button(ICON_MINUS, "Zoom out", () => zoomBy(1 / 1.2)),
@@ -176,9 +217,10 @@ controls.append(
     touched = false; // let resizes re-centre again
     fit();
   }),
+  exportButton,
 );
 
-root.append(grid.element, surface, errorBox, empty, controls);
+root.append(grid.element, surface, errorBox, empty, controls, exportMenu);
 document.body.append(root);
 
 // ── State ────────────────────────────────────────────────────────────────────

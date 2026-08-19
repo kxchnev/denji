@@ -242,8 +242,11 @@ test("activates without throwing", () => {
   ext.activate({ subscriptions: rec.subscriptions, extensionUri: {} });
 });
 
-test("registers both commands", () => {
+test("registers every command it contributes", () => {
   assert.deepEqual(rec.commands.slice().sort(), [
+    "denji.exportJPEG",
+    "denji.exportPNG",
+    "denji.exportSVG",
     "denji.showPreview",
     "denji.showPreviewToSide",
   ]);

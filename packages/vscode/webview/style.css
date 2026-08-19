@@ -207,3 +207,40 @@ body {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 1px;
 }
+
+/*
+ * The export menu, anchored to the toolbar it opens from.
+ *
+ * Opening upwards, because the toolbar is at the bottom of the panel: downwards
+ * would put the list past the edge, where `overflow: hidden` on `.root` swallows
+ * it and no click can land.
+ */
+.menu {
+  position: absolute;
+  right: 8px;
+  bottom: 40px;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border));
+  border-radius: 4px;
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+  color: var(--vscode-menu-foreground, var(--vscode-editor-foreground));
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+}
+
+.menu button {
+  padding: 4px 14px 4px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu button:hover {
+  background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
+  color: var(--vscode-menu-selectionForeground, inherit);
+}

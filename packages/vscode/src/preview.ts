@@ -12,6 +12,7 @@
  */
 import * as vscode from "vscode";
 import { applyMoves, revealNode } from "./edit.js";
+import { exportDiagram, notePreviewFocus } from "./export.js";
 import { safeLink } from "./open.js";
 import type { FromWebview, PreviewConfig, PreviewTheme, ToWebview } from "./protocol.js";
 
@@ -112,7 +113,7 @@ class Preview {
   private readonly key: string;
 
   constructor(
-    context: vscode.ExtensionContext,
+    private readonly context: vscode.ExtensionContext,
     private readonly uri: vscode.Uri,
     private readonly panel: vscode.WebviewPanel,
     onDispose: () => void,
@@ -120,7 +121,15 @@ class Preview {
     this.key = uri.toString();
     panel.webview.html = this.html(context.extensionUri);
 
+    // Which document an export means when the preview itself is the active tab:
+    // there is no active editor then, and "the picture I am looking at" is the
+    // only reading of the command that makes sense.
+    if (panel.active) notePreviewFocus(uri);
+
     this.disposables.push(
+      panel.onDidChangeViewState(() => {
+        if (panel.active) notePreviewFocus(uri);
+      }),
       panel.webview.onDidReceiveMessage((m: FromWebview) => this.onMessage(m)),
 
       // Reading the open document rather than the file on disk is what makes the
@@ -140,6 +149,7 @@ class Preview {
     );
 
     panel.onDidDispose(() => {
+      notePreviewFocus(undefined);
       if (this.timer) clearTimeout(this.timer);
       for (const d of this.disposables) d.dispose();
       onDispose();
@@ -200,6 +210,11 @@ class Preview {
         if (doc) revealNode(doc, m.id);
         return;
       }
+      case "export":
+        // The button in the preview and the command in the menu are the same
+        // road from here on — one dialog, one writer, one set of assets.
+        void exportDiagram(this.context, m.format, this.uri);
+        return;
       case "open": {
         const url = safeLink(m.url);
         // Silently, when it fails: a refused URL is a bug or an attack, and
@@ -221,10 +236,16 @@ class Preview {
     // its own <style> block, which is how the palette and the per-diagram scope
     // class travel with the SVG. Nothing is ever fetched — icons are inlined as
     // paths — so no img-src or connect-src is needed at all.
+    // `font-src` is the one addition, and it is narrow: the typeface travels as a
+    // file next to the bundle, from this extension's own directory — `cspSource`
+    // is exactly the `vscode-resource` origin of `localResourceRoots`, and nothing
+    // else is reachable. The marks need no permission at all: they come with the
+    // engine the bundle already carries.
     const csp = [
       "default-src 'none'",
       `style-src ${webview.cspSource} 'unsafe-inline'`,
       `script-src 'nonce-${nonce}'`,
+      `font-src ${webview.cspSource}`,
     ].join("; ");
     return `<!doctype html>
 <html lang="en">
@@ -233,6 +254,7 @@ class Preview {
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="${asset("webview.css")}">
+<style>${fontFaces(asset)}</style>
 <title>denji preview</title>
 </head>
 <body data-uri="${escapeAttr(this.key)}">
@@ -240,6 +262,36 @@ class Preview {
 </body>
 </html>`;
   }
+}
+
+/**
+ * The typeface the export draws with, given to the preview as well.
+ *
+ * Otherwise the two disagree: a rendered diagram asks for `Inter` first and falls
+ * back to the system stack, so the panel drew in San Francisco or Segoe while the
+ * PNG beside it drew in Inter — measured, and every label in the drawing differed.
+ * The same two woff2 subsets the export embeds, served from `dist/assets`; 31 KB,
+ * and the panel is then the picture the file will be.
+ *
+ * Written here rather than in `webview.css` because only this side knows the
+ * `vscode-resource` URI the files answer on.
+ */
+function fontFaces(asset: (name: string) => vscode.Uri): string {
+  const subsets = [
+    {
+      file: "assets/inter-latin.woff2",
+      range:
+        "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
+    },
+    { file: "assets/inter-cyrillic.woff2", range: "U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116" },
+  ];
+  return subsets
+    .map(
+      (s) =>
+        `@font-face{font-family:'Inter';font-style:normal;font-weight:400;` +
+        `unicode-range:${s.range};src:url(${asset(s.file)}) format('woff2')}`,
+    )
+    .join("");
 }
 
 const basename = (uri: vscode.Uri): string => uri.path.split("/").pop() ?? uri.path;

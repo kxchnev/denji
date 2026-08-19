@@ -28,6 +28,9 @@ export type ToWebview =
   | { type: "source"; text: string }
   | { type: "config"; config: PreviewConfig };
 
+/** What an export writes. */
+export type ExportFormat = "svg" | "png" | "jpeg";
+
 /** Webview → host. */
 export type FromWebview =
   /** A drag was dropped: write this relation into the document. */
@@ -36,5 +39,13 @@ export type FromWebview =
   | { type: "reveal"; id: string }
   /** A link button was pressed: open this URL outside the editor. */
   | { type: "open"; url: string }
+  /**
+   * The reader pressed a format in the preview's own toolbar.
+   *
+   * The picture is drawn in the **host**, not here: it owns the file dialog and
+   * the assets, and a webview cannot write a file anyway. So this is a request,
+   * and the same one the menu commands make.
+   */
+  | { type: "export"; format: ExportFormat }
   /** The webview is listening — the host may send the first source now. */
   | { type: "ready" };
