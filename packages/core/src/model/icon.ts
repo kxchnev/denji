@@ -1,7 +1,6 @@
-import { ICONS } from "./icon.data.js";
 import { ICON_ALIASES, ICON_NAMES, ICON_TITLES } from "./icon.names.js";
+import { registeredIcons } from "../resources.js";
 
-export { ICONS } from "./icon.data.js";
 export { ICON_ALIASES, ICON_NAMES, ICON_TITLES, ICONSET_VERSION } from "./icon.names.js";
 
 /**
@@ -46,11 +45,19 @@ export function validateIcon(icon: Icon): Icon {
 
 /**
  * Document icons first, so `icon postgresql { … }` can replace a bundled mark;
- * then the bundled set; then the shorthands.
+ * then whatever artwork this installation registered; then the shorthands.
+ *
+ * The artwork is asked for through {@link registeredIcons} rather than imported,
+ * because 4.9 MB of path data has no business inside a bundle that only checks a
+ * document — and because the same registry is how a product hands over the marks
+ * it fetched. A caller that registered nothing gets `undefined` and draws the
+ * label without a mark, which is what a diagram looks like before its icons have
+ * finished loading.
  */
 export function resolveIcon(name: string, custom?: Record<string, Icon>): Icon | undefined {
   const key = name.toLowerCase();
-  return custom?.[name] ?? custom?.[key] ?? ICONS[key] ?? ICONS[ICON_ALIASES[key] ?? ""];
+  const bundled = registeredIcons();
+  return custom?.[name] ?? custom?.[key] ?? bundled[key] ?? bundled[ICON_ALIASES[key] ?? ""];
 }
 
 /**

@@ -4,7 +4,10 @@ dist/
 packages/vscode/syntaxes/
 # Generated from simple-icons by packages/core/scripts/generate-icons.ts. Five
 # megabytes of path data: the build writes them, so they can never go stale, and
-# the history never carries them.
+# the history never carries them. The artwork is an asset rather than a module —
+# a module has to be bundled by whoever imports it, and that made a copy of it in
+# every product.
+packages/core/assets/icons.json
 packages/core/src/model/icon.data.ts
 packages/core/src/model/icon.names.ts
 # A bench for choosing the layout engine: six candidates, a corpus of diagrams

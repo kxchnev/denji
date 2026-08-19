@@ -1,9 +1,11 @@
 {
   "name": "@kxchnev/denji",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Architecture diagrams as text — the connections decide the layout, and the connectors go around the boxes",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/index.js"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -11,6 +13,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./assets-node": {
+      "types": "./dist/assets-node.d.ts",
+      "default": "./dist/assets-node.js"
+    },
+    "./assets/*": "./assets/*",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -19,6 +26,7 @@
   "files": [
     "dist",
     "!dist/**/*.map",
+    "assets",
     "LANGUAGE.md",
     "LICENSE",
     "NOTICE"
@@ -65,12 +73,12 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "commander": "^12.1.0"
-  },
-  "optionalDependencies": {
-    "sharp": "^0.34.5"
+    "@resvg/resvg-wasm": "^2.6.2",
+    "commander": "^12.1.0",
+    "jpeg-js": "^0.4.4"
   },
   "devDependencies": {
+    "@types/jpeg-js": "^0.3.0",
     "@types/node": "^26.1.1",
     "simple-icons": "^16.27.1",
     "tsx": "^4.19.2",

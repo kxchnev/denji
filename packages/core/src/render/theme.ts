@@ -46,7 +46,16 @@ export interface Theme {
   link?: LinkChrome;
 }
 
-const FONT_FAMILY = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+/**
+ * Inter first, then the system stack.
+ *
+ * Inter is the face the package ships and the rasterizer draws with, so naming it
+ * first is what makes a browser, a PNG and someone else's editor agree about the
+ * shape of a label. The system stack stays behind it for the one case the file
+ * cannot carry its own type — a preview in a page that already has Inter loaded
+ * gets it either way.
+ */
+const FONT_FAMILY = "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
 
 /**
  * The palette the library shipped before themes existed, unchanged — an

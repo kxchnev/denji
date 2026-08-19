@@ -3,11 +3,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
 import { NAME } from "./brand.js";
 import { checkDiagram } from "./check.js";
-import { ICON_ALIASES, ICON_NAMES, ICONS, ICONSET_VERSION } from "./model/icon.js";
+import { ICON_ALIASES, ICON_NAMES, ICON_TITLES, ICONSET_VERSION } from "./model/icon.js";
 import { POPULAR_ICONS } from "./model/icon.popular.js";
 import { parseArchitecture } from "./dsl/arch-parse.js";
 import { DiagramParseError } from "./dsl/error.js";
-import { toSvg } from "./index.js";
+import { toJpeg, toPng, toSvgFile } from "./export.js";
+import { layoutArchitecture } from "./layout/arch/index.js";
 import { resolveTheme } from "./render/theme.js";
 import { watchDiagram } from "./watch.js";
 
@@ -32,24 +33,18 @@ program
   .description("Architecture diagrams that lay themselves out")
   .version(version());
 
-/** Render at 2x the diagram's own units so raster output stays crisp. */
-const RASTER_DENSITY = 144;
-
 /**
- * `sharp`, loaded only when someone actually asks for a raster.
+ * The shipped assets, loaded when a command actually needs them.
  *
- * It is an optional dependency, and a native one at that — some 20 MB of libvips
- * per platform, with a post-install step that fails behind a proxy or under
- * `--ignore-scripts`. A library consumer who only lays diagrams out, and a CLI
- * user writing SVG, should never pay for it; loading it at the top of this file
- * charged even `denji check` for it.
+ * Nothing here is imported at the top of the file: `check` and `spec` draw
+ * nothing, and charging them for 4.8 MB of brand marks — let alone 2.4 MB of
+ * rasterizer — is how a linter comes to take a second to start.
  */
-async function rasterizer() {
-  try {
-    return (await import("sharp")).default;
-  } catch {
-    throw new Error(`PNG and JPEG need the optional "sharp" package — install it, or write .svg`);
-  }
+async function loadAssets(format: "svg" | "png" | "jpeg"): Promise<void> {
+  const assets = await import("./assets-node.js");
+  assets.loadIcons();
+  assets.loadFont(undefined, { outlines: format !== "svg" });
+  if (format !== "svg") assets.loadRasterizer();
 }
 
 function formatFor(out: string): "svg" | "png" | "jpeg" | null {
@@ -91,23 +86,17 @@ program
     try {
       const name = opts.theme;
       const diagram = parseArchitecture(source);
-      // A standalone `.svg` is the one output with no viewer to hit-test its
-      // link buttons for it, so there the button becomes a real anchor. A
-      // rasterizer drops those anyway, which keeps PNG and JPEG byte-identical
-      // to what the previews draw.
-      const svg = toSvg(diagram, { render: { theme: name, linkAnchors: format === "svg" } });
+      await loadAssets(format);
+      layoutArchitecture(diagram);
+      // The same three functions the extension and the playground call, so the
+      // file this writes is the file they write.
       if (format === "svg") {
-        writeFileSync(out, svg);
+        writeFileSync(out, toSvgFile(diagram, { theme: name }));
       } else {
-        // JPEG has no alpha, so the transparent backdrop must be flattened onto
-        // the theme's own surface — white would ruin a dark diagram.
-        const surface = resolveTheme(diagram.theme ?? name).surface;
-        const sharp = await rasterizer();
-        const raster = await sharp(Buffer.from(svg), { density: RASTER_DENSITY })
-          .flatten(format === "jpeg" ? { background: surface } : false)
-          [format]()
-          .toBuffer();
-        writeFileSync(out, raster);
+        const bytes = format === "png"
+          ? await toPng(diagram, { theme: name })
+          : await toJpeg(diagram, { theme: name });
+        writeFileSync(out, bytes);
       }
       console.log(`wrote ${out}`);
     } catch (err) {
@@ -145,6 +134,11 @@ program
       return;
     }
     try {
+      // The same assets `render` loads, minus the rasterizer: a preview is the
+      // picture the file will be, so it needs the marks and the typeface. Missing
+      // them is not loud — a diagram simply draws without its logos, which is how
+      // this went unnoticed once already.
+      await loadAssets("svg");
       await watchDiagram(input, { port, theme: opts.theme, open: opts.open });
     } catch (err) {
       console.error(`${NAME}: ${(err as Error).message}`);
@@ -230,7 +224,7 @@ program
     }
 
     const q = query.toLowerCase();
-    const titleOf = (name: string) => ICONS[name]!.title ?? name;
+    const titleOf = (name: string) => ICON_TITLES[name] ?? name;
     /** Ranked, so `denji icons go` does not open on `agora` and `algolia`. */
     const rank = (name: string): number => {
       const title = titleOf(name).toLowerCase();

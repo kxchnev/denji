@@ -15,8 +15,9 @@ npm install @kxchnev/denji
 ```
 
 Node 22 or newer. ESM only: reach for it with `import`, not `require`. Types
-ship with the package. Rendering to PNG or JPEG uses `sharp`, which is an
-**optional** dependency loaded on demand — SVG needs nothing extra.
+ship with the package. Nothing is native and nothing is fetched over the
+network: PNG and JPEG go through resvg compiled to WebAssembly, and the brand
+marks and the typeface travel inside the package.
 
 ## Use it from text
 
@@ -92,6 +93,44 @@ in the source pins the palette, and `@spacing` beats the `gap` you passed.
 findings the CLI prints and the editor shows, each with a `code`, a `line` and a
 `col`.
 
+## Writing a picture
+
+```ts
+import { toSvgFile, toPng, toJpeg } from "@kxchnev/denji";
+import { loadAll } from "@kxchnev/denji/assets-node";
+
+loadAll(); // the typeface and the rasterizer, from the files this package ships
+
+const svg = toSvgFile(diagram); // its own @font-face, no CSS variables, links as anchors
+const png = await toPng(diagram, { scale: 2 });
+const jpg = await toJpeg(diagram, { quality: 0.92 }); // flattened onto the theme's surface
+```
+
+These are the functions the CLI, the VS Code extension and the playground all
+call, so the same diagram gives the same bytes wherever it is exported from — one
+rasterizer, one typeface, nothing read from the machine it runs on.
+
+Rasterizing needs two things that cannot be part of a JavaScript import: a font
+with real outlines, and resvg as WebAssembly. `loadAll()` hands both over in
+Node; in a browser, fetch them from `@kxchnev/denji/assets/` and pass the bytes
+to `registerFont` and `registerRasterizer`. Nothing is ever downloaded on your
+behalf — the files travel inside the package. SVG needs neither: it embeds the
+woff2 subsets if a font is registered, and is a complete file without one.
+
+## About the brand marks
+
+Importing `@kxchnev/denji` registers the bundled marks, so `@icon(postgresql)`
+draws without being asked — as it has in every release. Be aware of the size:
+that is 4.8 MB of path data in whatever bundles the entry point. The same
+artwork also ships as a plain file, `@kxchnev/denji/assets/icons.json`, which is
+what the command line reads rather than importing it.
+
+`registerIcons(table)` merges more marks in — your own artwork, or a set you
+fetched — and `registeredIcons()` answers with everything registered. A document
+can also define its own with an `icon` block, and those win over the bundled
+ones. A diagram whose marks are missing draws its labels and keeps their space,
+so the picture does not move if they arrive later.
+
 ## Build your own viewer
 
 Everything an interactive viewer needs on top of a laid-out diagram is exported,
@@ -127,7 +166,10 @@ into the source which sibling a node ended up next to.
 
 Brand marks come from [Simple Icons](https://simpleicons.org), released under
 CC0. The logos remain the trademarks of their respective owners, and bundling
-them implies no affiliation or endorsement. See [NOTICE](./NOTICE).
+them implies no affiliation or endorsement. The typeface is
+[Inter](https://rsms.me/inter/) under the SIL Open Font License, and rasters are
+drawn by [resvg](https://github.com/linebender/resvg) under the MPL 2.0. See
+[NOTICE](./NOTICE).
 
 ## License
 

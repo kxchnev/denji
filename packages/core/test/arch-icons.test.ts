@@ -5,7 +5,6 @@ import { architecture } from "../src/model/arch-builder.js";
 import { layoutArchitecture } from "../src/layout/arch/index.js";
 import { renderArchitecture } from "../src/render/arch-svg.js";
 import {
-  ICONS,
   ICON_ALIASES,
   ICON_NAMES,
   ICONSET_VERSION,
@@ -16,6 +15,14 @@ import {
   suggestIcon,
 } from "../src/model/icon.js";
 import { POPULAR_ICONS } from "../src/model/icon.popular.js";
+import { loadIcons } from "../src/assets-node.js";
+import { registeredIcons } from "../src/resources.js";
+
+// The artwork is an asset now, not an import: a bundle that only checks a document
+// has no business carrying 4.8 MB of path data. Tests are one of the products that
+// *does* draw, so they load it like the rest of them.
+loadIcons();
+const ICONS = registeredIcons();
 import type { ArchDiagram, Container, Shape } from "../src/model/arch.js";
 
 function shape(d: ArchDiagram, id: string): Shape {

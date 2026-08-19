@@ -11,3 +11,18 @@ without a network call. The marks themselves remain the trademarks of their
 respective owners, and their inclusion here implies no affiliation with or
 endorsement by those owners. Amazon, AWS, Azure and Oracle asked Simple Icons to
 drop their marks, so those are not carried at all.
+
+This product also bundles the Inter typeface (https://rsms.me/inter/), which is
+released under the SIL Open Font License 1.1 — the licence text travels with it,
+in assets/OFL.txt:
+
+    https://github.com/rsms/inter
+
+The font ships because a rasterizer that draws with whatever the machine happens
+to have installed produces a different picture per machine, and the promise here
+is the opposite: the same diagram, the same pixels, from the CLI, the editor and
+the browser alike.
+
+The rasterizer itself is resvg (https://github.com/linebender/resvg), used as the
+WebAssembly build published as @resvg/resvg-wasm and licensed under the MPL 2.0.
+It is a dependency rather than a copy, so its source and licence come with it.

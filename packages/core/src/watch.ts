@@ -16,6 +16,7 @@ import { parseArchitecture } from "./dsl/arch-parse.js";
 import { DiagramParseError } from "./dsl/error.js";
 import { layoutArchitecture } from "./layout/arch/index.js";
 import { renderArchitecture } from "./render/arch-svg.js";
+import { registeredFonts } from "./resources.js";
 import type { ThemeName } from "./model/arch.js";
 
 /** Editors write, rename and chmod in a burst; one render per burst is enough. */
@@ -54,11 +55,60 @@ function render(file: string, theme: ThemeName | undefined): Payload {
   }
 }
 
-const PAGE = `<!doctype html>
+/**
+ * The subsets of the shipped face, as this server will hand them out.
+ *
+ * Taken from the registry rather than from disk: the CLI has already put the
+ * bytes there, and a preview that fetched its own copy could differ from the one
+ * the export embeds. Empty when nobody registered a font — the page then falls
+ * back to the system stack, which is what it always did.
+ */
+interface ServedFont {
+  url: string;
+  bytes: Uint8Array;
+  family: string;
+  unicodeRange?: string | undefined;
+}
+
+function servedFonts(): ServedFont[] {
+  const out: ServedFont[] = [];
+  for (const font of registeredFonts()) {
+    for (const web of font.web ?? []) {
+      out.push({
+        url: `/font/${out.length}.woff2`,
+        bytes: web.woff2,
+        family: font.family,
+        unicodeRange: web.unicodeRange,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * `@font-face` for the preview, for the same reason the docs site and the editor
+ * carry one: a rendered diagram asks for Inter first, and the export draws in
+ * Inter for certain. Without this the page shows one picture and `denji render`
+ * writes another — the labels differ, and that is the one thing this preview is
+ * for.
+ */
+const fontFaces = (fonts: readonly ServedFont[]): string =>
+  fonts
+    .map(
+      (f) =>
+        `  @font-face { font-family: '${f.family}'; font-style: normal; font-weight: 400; ` +
+        `font-display: swap; ` +
+        (f.unicodeRange ? `unicode-range: ${f.unicodeRange}; ` : "") +
+        `src: url(${f.url}) format('woff2'); }`,
+    )
+    .join("\n");
+
+const page = (faces: string): string => `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${NAME} preview</title>
 <style>
+${faces}
   :root { color-scheme: light dark; --bg: #f8fafc; --fg: #0f172a; --err-bg: #fef2f2; --err-fg: #b91c1c; --err-bd: #fecaca; }
   @media (prefers-color-scheme: dark) {
     :root { --bg: #0b1120; --fg: #e2e8f0; --err-bg: #2a1215; --err-fg: #fca5a5; --err-bd: #7f1d1d; }
@@ -114,6 +164,8 @@ export interface WatchOptions {
 export async function watchDiagram(input: string, opts: WatchOptions): Promise<void> {
   const file = resolve(input);
   const clients = new Set<ServerResponse>();
+  const fonts = servedFonts();
+  const PAGE = page(fontFaces(fonts));
   let latest = render(file, opts.theme);
 
   const push = (): void => {
@@ -151,6 +203,17 @@ export async function watchDiagram(input: string, opts: WatchOptions): Promise<v
       clients.add(res);
       res.write(`data: ${JSON.stringify(latest)}\n\n`);
       req.on("close", () => clients.delete(res));
+      return;
+    }
+    const font = fonts.find((f) => f.url === req.url);
+    if (font) {
+      // Immutable: the file cannot change while this process is alive, and a
+      // preview reloads on every save.
+      res.writeHead(200, {
+        "Content-Type": "font/woff2",
+        "Cache-Control": "public, max-age=31536000, immutable",
+      });
+      res.end(Buffer.from(font.bytes));
       return;
     }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });

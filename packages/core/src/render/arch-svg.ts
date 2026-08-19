@@ -43,8 +43,14 @@ import { linkChrome, resolveTheme, type Theme } from "./theme.js";
  * - `selector` — both palettes, switched by an ancestor selector (`.dark` by
  *   default). For a host page that resolves the preference itself: a media
  *   query would ignore its theme toggle and fight the class.
+ * - `plain` — one palette, written out as literals with no custom properties at
+ *   all. For a rasterizer: resvg drops a declaration whose value it cannot parse,
+ *   **fallback and all**, so a `var(--x, #eef2ff)` leaves it with no colour rather
+ *   than with the fallback the name promises. Measured, not assumed — the whole
+ *   drawing came out black. Nothing else may use this mode: the variables are how
+ *   a preview switches palette without re-rendering.
  */
-export type ThemeMode = "fixed" | "auto" | "selector";
+export type ThemeMode = "fixed" | "auto" | "selector" | "plain";
 
 export interface ArchRenderOptions {
   padding?: number;
@@ -101,8 +107,11 @@ const CLASS: Record<Part, string> = {
 /** Render a laid-out architecture diagram (every node has a rect) to SVG. */
 export function renderArchitecture(diagram: ArchDiagram, opts: ArchRenderOptions = {}): string {
   // The document is authored intent: an explicit @theme names one palette, so
-  // there is no second one to switch to.
-  const mode: ThemeMode = diagram.theme ? "fixed" : (opts.themeMode ?? "fixed");
+  // there is no second one to switch to. `plain` survives it — it is not a second
+  // palette, it is the same one said without variables, and only a rasterizer
+  // asks for it.
+  const mode: ThemeMode =
+    opts.themeMode === "plain" ? "plain" : diagram.theme ? "fixed" : (opts.themeMode ?? "fixed");
   const theme = resolveTheme(diagram.theme ?? opts.theme ?? "light");
   const darkTheme = resolveTheme(opts.darkTheme ?? "dark");
 
@@ -115,7 +124,7 @@ export function renderArchitecture(diagram: ArchDiagram, opts: ArchRenderOptions
   const { width, height } = bounds(diagram, padding);
 
   const sheet = diagram.styles ?? {};
-  const styled = new StyleModel(theme, sheet, opts.background, diagram.icons);
+  const styled = new StyleModel(theme, sheet, opts.background, diagram.icons, mode === "plain");
 
   const body: string[] = [];
   body.push(`<rect class="denji-bg" width="${width}" height="${height}"/>`);
@@ -203,6 +212,8 @@ class StyleModel {
     private readonly sheet: Record<string, StyleProps>,
     private readonly background: string | undefined,
     private readonly icons: Record<string, Icon> | undefined,
+    /** No custom properties anywhere, not even in an attribute. See ThemeMode. */
+    private readonly plain: boolean = false,
   ) {}
 
   /** Resolve a name against the document's icons, then the bundled ones. */
@@ -260,9 +271,12 @@ class StyleModel {
    * the path that references it — so each distinct edge colour needs its own.
    */
   arrowMarker(refs: string[] | undefined, own: StyleProps | undefined): number {
-    const color = this.fromTheme("stroke", "edge", refs, own)
-      ? cssVar("edge", "stroke", this.theme.slots.edge.stroke)
-      : String(this.resolved("edge", refs, own).stroke);
+    // An attribute, not a rule, so `plain` has to reach here too: a marker whose
+    // fill resvg cannot parse comes out as a black arrowhead on every connector.
+    const color =
+      this.fromTheme("stroke", "edge", refs, own) && !this.plain
+        ? cssVar("edge", "stroke", this.theme.slots.edge.stroke)
+        : String(this.resolved("edge", refs, own).stroke);
     let i = this.arrowColors.indexOf(color);
     if (i < 0) i = this.arrowColors.push(color) - 1;
     return i;
@@ -277,11 +291,18 @@ class StyleModel {
     background: string | undefined;
   }): string {
     const rules: string[] = [];
+    // In `plain` mode there are no variables to read through: every value below
+    // is written out. `paint` is the one place that decides which it is.
+    const plain = o.mode === "plain";
+    const paint = (name: string, literal: string): string =>
+      plain ? literal : `var(--denji-${name},${literal})`;
 
     // The palette lives in custom properties scoped to this one diagram, so
     // `auto` only has to restate the variables — every rule below reads through
     // them and stays as it is.
-    rules.push(`${o.scope}{${vars(o.theme, o.background, this.usedIcons, this.usedLinks)}}`);
+    if (!plain) {
+      rules.push(`${o.scope}{${vars(o.theme, o.background, this.usedIcons, this.usedLinks)}}`);
+    }
     if (o.mode === "auto") {
       rules.push(
         `@media(prefers-color-scheme:dark){${o.scope}{${vars(o.darkTheme, o.background, this.usedIcons, this.usedLinks)}}}`,
@@ -295,7 +316,7 @@ class StyleModel {
       );
     }
 
-    rules.push(`${o.scope} .denji-bg{fill:var(--denji-bg,${o.background ?? o.theme.background})}`);
+    rules.push(`${o.scope} .denji-bg{fill:${paint("bg", o.background ?? o.theme.background)}}`);
 
     // The button's chrome is fixed, not styleable — see LinkChrome. Literal
     // fallbacks for the same reason as everywhere else: librsvg ignores custom
@@ -306,10 +327,10 @@ class StyleModel {
       rules.push(
         `${o.scope} .denji-lk{cursor:pointer}`,
         `${o.scope} .denji-lk-p{${guard(
-          `fill:var(--denji-link-fill,${c.fill});stroke:var(--denji-link-stroke,${c.stroke});stroke-width:1`,
+          `fill:${paint("link-fill", c.fill)};stroke:${paint("link-stroke", c.stroke)};stroke-width:1`,
         )}}`,
         `${o.scope} .denji-lk-i{${guard(
-          `fill:none;stroke:var(--denji-link-glyph,${c.glyph});stroke-width:2;stroke-linecap:round;stroke-linejoin:round`,
+          `fill:none;stroke:${paint("link-glyph", c.glyph)};stroke-width:2;stroke-linecap:round;stroke-linejoin:round`,
         )}}`,
       );
     }
@@ -323,13 +344,14 @@ class StyleModel {
       // fallback, so a hardcoded light hex would leave dark PNGs unreadable.
       const literal = (o.theme.dark && icon.darkColor) || icon.color;
       rules.push(
-        `${o.scope} .denji-icon-${name}{${guard(`fill:var(--denji-icon-${name},${literal})`)}}`,
+        `${o.scope} .denji-icon-${name}{${guard(`fill:${paint(`icon-${name}`, literal)}`)}}`,
       );
     }
 
-    // 1. Theme, read through the variables declared above.
+    // 1. Theme, read through the variables declared above — or, in `plain` mode,
+    // written out like every other layer.
     for (const slot of STYLE_SLOTS) {
-      rules.push(...ruleset(`${o.scope} .denji-${slot}`, o.theme.slots[slot], slot, true));
+      rules.push(...ruleset(`${o.scope} .denji-${slot}`, o.theme.slots[slot], slot, !plain));
     }
     // 2. Per-kind selectors from the document.
     for (const slot of STYLE_SLOTS) {
@@ -479,12 +501,32 @@ function guard(css: string): string {
 
 /* ------------------------------------------------------------------ shapes */
 
+/**
+ * One arrowhead per colour, twice: pointing forward and pointing back.
+ *
+ * `orient="auto-start-reverse"` is the tidy way to say this — one marker that
+ * flips itself when used as a `marker-start` — and it is SVG 2, which resvg (the
+ * rasterizer every export goes through) does not implement. It does not fail
+ * loudly either: the marker is drawn unrotated, so every arrowhead in a PNG
+ * pointed to the right regardless of where its line went.
+ *
+ * So the reversal is drawn rather than declared: the same triangle mirrored, with
+ * `refX` mirrored to match, and plain `orient="auto"` on both. That is SVG 1.1,
+ * which everything understands.
+ */
 function defs(prefix: string, styled: StyleModel): string {
+  const marker = (id: string, refX: number, d: string, color: string): string =>
+    `<marker id="${id}" viewBox="0 0 10 10" refX="${refX}" refY="5" markerWidth="7" markerHeight="7" orient="auto">` +
+    `<path d="${d}" fill="${color}"/></marker>`;
   const markers = styled.arrowColors
     .map(
       (color, i) =>
-        `<marker id="${prefix}-a${i}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
-        `<path d="M0,0 L10,5 L0,10 z" fill="${color}"/></marker>`,
+        // `-a` ends a line: the tip is at x=10, and refX stops a pixel short so
+        // the line's own cap does not poke through it.
+        marker(`${prefix}-a${i}`, 9, "M0,0 L10,5 L0,10 z", color) +
+        // `-s` starts one: the same shape mirrored, so it points back along the
+        // path rather than forward down it.
+        marker(`${prefix}-s${i}`, 1, "M10,0 L0,5 L10,10 z", color),
     )
     .join("");
   return `<defs>${markers}</defs>`;
@@ -846,7 +888,7 @@ function renderConnection(c: Connection, index: number, styled: StyleModel): str
       `${round(c.curve.c2.x)} ${round(c.curve.c2.y)} ${round(b.x)} ${round(b.y)}`
     : polyline(c.path, c.radius ?? 0);
   const dashed = c.style === "dashed" ? " denji-dashed" : "";
-  const start = c.fromArrow ? ` marker-start="url(#{{ID}}-a${marker})"` : "";
+  const start = c.fromArrow ? ` marker-start="url(#{{ID}}-s${marker})"` : "";
   const end = c.toArrow ? ` marker-end="url(#{{ID}}-a${marker})"` : "";
 
   let out = `<g class="denji-e ${cls}${dashed}">`;

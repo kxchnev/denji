@@ -1,5 +1,6 @@
 /**
- * Regenerates `src/model/icon.data.ts` from the `simple-icons` package.
+ * Regenerates `assets/icons.json`, `assets/icons.popular.json` and
+ * `src/model/icon.names.ts` from the `simple-icons` package.
  *
  *   npm run -w packages/core icons
  *
@@ -16,7 +17,8 @@
  * `openjdk` stands in for Java, and `googlecloud` is there.
  */
 import { createRequire } from "node:module";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as simpleIcons from "simple-icons";
 
@@ -242,13 +244,33 @@ export const ICONS: Record<string, Icon> = ${embed(icons)};
 
 const dir = new URL("../src/model/", import.meta.url);
 writeFileSync(fileURLToPath(new URL("icon.names.ts", dir)), names);
-const target = fileURLToPath(new URL("icon.data.ts", dir));
-writeFileSync(target, data);
+
+/**
+ * The artwork goes out **twice**, and on purpose.
+ *
+ * As a module (`src/model/icon.data.ts`) because that is the only form a browser
+ * can have at import time: `resolveIcon` is synchronous, so a bundle that draws a
+ * mark has to carry it. The package entry registers it for everyone, which is
+ * what keeps `import { toSvg } from "@kxchnev/denji"` drawing logos the way it
+ * always did — see the note on compatibility in `src/index.ts`.
+ *
+ * As a file (`assets/icons.json`) because that is the only form a *product* can
+ * load once and share: the CLI reads it off disk without paying for it in
+ * `denji check`, and anything that fetches it keeps its own bundle small. Both
+ * roads end in the same registry.
+ */
+const asset = fileURLToPath(new URL("../assets/icons.json", import.meta.url));
+mkdirSync(dirname(asset), { recursive: true });
+const json = JSON.stringify(icons);
+writeFileSync(asset, json);
+writeFileSync(fileURLToPath(new URL("icon.data.ts", dir)), data);
+
 if (shadowed.length > 0) {
   console.log(`shorthands dropped, the set now has marks of its own: ${shadowed.join(", ")}`);
 }
 console.log(
   `wrote ${Object.keys(icons).length} icons and ${Object.keys(sorted).length} aliases ` +
     `from simple-icons ${version} ` +
-    `(${(data.length / 1e6).toFixed(1)} MB of paths, ${Math.round(names.length / 1e3)} KB of names)`,
+    `(${(json.length / 1e6).toFixed(1)} MB of paths, as assets/icons.json and as ` +
+    `src/model/icon.data.ts, ${Math.round(names.length / 1e3)} KB of names)`,
 );
